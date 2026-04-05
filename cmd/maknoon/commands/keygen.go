@@ -12,38 +12,49 @@ import (
 
 func KeygenCmd() *cobra.Command {
 	var output string
+	var noPassword bool
 
 	cmd := &cobra.Command{
 		Use:   "keygen",
 		Short: "Generate a Post-Quantum (ML-KEM/Kyber1024) keypair",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			fmt.Print("Enter passphrase to protect your private key (leave empty for no protection): ")
-			password, err := term.ReadPassword(int(os.Stdin.Fd()))
-			fmt.Println()
-			if err != nil {
-				return err
-			}
-			defer func() {
-				for i := range password {
-					password[i] = 0
-				}
-			}()
+			var password []byte
+			var err error
 
-			if len(password) > 0 {
-				fmt.Print("Confirm passphrase: ")
-				confirm, err := term.ReadPassword(int(os.Stdin.Fd()))
+			if !noPassword {
+				fmt.Print("Enter passphrase to protect your private key (leave empty for no protection): ")
+				password, err = term.ReadPassword(int(os.Stdin.Fd()))
 				fmt.Println()
 				if err != nil {
 					return err
 				}
+
+				if len(password) > 0 {
+					fmt.Print("Confirm passphrase: ")
+					confirm, err := term.ReadPassword(int(os.Stdin.Fd()))
+					fmt.Println()
+					if err != nil {
+						return err
+					}
+					defer func() {
+						for i := range confirm {
+							confirm[i] = 0
+						}
+					}()
+					if string(password) != string(confirm) {
+						return fmt.Errorf("passphrases do not match")
+					}
+				}
+			} else {
+				fmt.Println("Generating unprotected keypair (Automation Mode)...")
+			}
+
+			if len(password) > 0 {
 				defer func() {
-					for i := range confirm {
-						confirm[i] = 0
+					for i := range password {
+						password[i] = 0
 					}
 				}()
-				if string(password) != string(confirm) {
-					return fmt.Errorf("passphrases do not match")
-				}
 			}
 
 			fmt.Println("Generating bleeding-edge Post-Quantum keypair (Kyber1024)...")
@@ -98,5 +109,6 @@ func KeygenCmd() *cobra.Command {
 	}
 
 	cmd.Flags().StringVarP(&output, "output", "o", "", "Base name for the keys (e.g., 'id_maknoon')")
+	cmd.Flags().BoolVarP(&noPassword, "no-password", "n", false, "Generate an unprotected private key (suitable for automation)")
 	return cmd
 }
