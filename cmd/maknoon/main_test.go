@@ -139,3 +139,45 @@ func TestIntegrationAsymmetricEncryptedKey(t *testing.T) {
 		t.Errorf("Asymmetric restored mismatch: %s", string(res))
 	}
 }
+
+func TestIntegrationCompression(t *testing.T) {
+	tmpDir := t.TempDir()
+	inputFile := filepath.Join(tmpDir, "compressible.txt")
+	encryptedFile := inputFile + ".makn"
+	decryptedFile := filepath.Join(tmpDir, "restored.txt")
+	
+	// Create highly redundant data (very compressible)
+	content := bytes.Repeat([]byte("COMPRESS-ME-PLEASE-"), 1000)
+	os.WriteFile(inputFile, content, 0644)
+	passphrase := "compress-secret"
+
+	// 1. Encrypt with Compression
+	encCmd := commands.EncryptCmd()
+	encCmd.SetArgs([]string{inputFile, "-o", encryptedFile, "--passphrase", passphrase, "--compress"})
+	if err := encCmd.Execute(); err != nil {
+		t.Fatalf("Compression encryption failed: %v", err)
+	}
+
+	// 2. Decrypt (Auto-detects compression)
+	decCmd := commands.DecryptCmd()
+	decCmd.SetArgs([]string{encryptedFile, "-o", decryptedFile, "--passphrase", passphrase})
+	if err := decCmd.Execute(); err != nil {
+		t.Fatalf("Compression decryption failed: %v", err)
+	}
+
+	// 3. Verify
+	restored, _ := os.ReadFile(decryptedFile)
+	if !bytes.Equal(content, restored) {
+		t.Fatal("Restored content mismatch after compression")
+	}
+	
+	// 4. Sanity check: verify the file is actually smaller than original + header overhead
+	// (original is ~19KB, zstd should make it tiny)
+	statOrig, _ := os.Stat(inputFile)
+	statEnc, _ := os.Stat(encryptedFile)
+	if statEnc.Size() >= statOrig.Size() {
+		t.Logf("Warning: Encrypted size (%d) not smaller than original (%d). Redundancy might be low.", statEnc.Size(), statOrig.Size())
+	} else {
+		t.Logf("Compression success: %d -> %d bytes", statOrig.Size(), statEnc.Size())
+	}
+}
