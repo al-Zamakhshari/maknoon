@@ -41,11 +41,11 @@ func VaultCmd() *cobra.Command {
 // openVault opens the vault DB and derives the master key.
 func openVault() (*bbolt.DB, []byte, error) {
 	home, _ := os.UserHomeDir()
-	vaultDir := filepath.Join(home, ".maknoon")
+	vaultDir := filepath.Join(home, ".maknoon", "vaults")
 	os.MkdirAll(vaultDir, 0700)
 
 	dbPath := vaultName
-	// If it's just a name (no path separators), put it in the default directory
+	// If it's just a name (no path separators), put it in the vaults directory
 	if !strings.Contains(vaultName, string(os.PathSeparator)) {
 		dbPath = filepath.Join(vaultDir, vaultName+".db")
 	}

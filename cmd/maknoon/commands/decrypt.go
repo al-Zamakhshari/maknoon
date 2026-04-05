@@ -78,8 +78,8 @@ func DecryptCmd() *cobra.Command {
 					}
 					_, dErr = crypto.DecryptStream(io.TeeReader(in, bar), pw, password)
 				} else if magic == crypto.MagicHeaderAsym {
-					resolvedKeyPath := resolveKeyPath(keyPath)
-					privKeyBytes, err := os.ReadFile(resolvedKeyPath)
+					resolvedPath := resolveKeyPath(keyPath)
+					privKeyBytes, err := os.ReadFile(resolvedPath)
 					if err != nil {
 						pw.CloseWithError(err)
 						return
@@ -98,12 +98,14 @@ func DecryptCmd() *cobra.Command {
 						}
 						var unlockedKey bytes.Buffer
 						if _, err := crypto.DecryptStream(bytes.NewReader(privKeyBytes), &unlockedKey, privKeyPassword); err != nil {
-							pw.CloseWithError(err)
+							pw.CloseWithError(fmt.Errorf("failed to unlock private key: %w", err))
 							return
 						}
 						privKeyBytes = unlockedKey.Bytes()
 					}
 					_, dErr = crypto.DecryptStreamWithPrivateKey(io.TeeReader(in, bar), pw, privKeyBytes)
+				} else {
+					dErr = fmt.Errorf("unsupported or invalid maknoon file header: %s", magic)
 				}
 				pw.CloseWithError(dErr)
 			}()
@@ -135,7 +137,8 @@ func DecryptCmd() *cobra.Command {
 						os.MkdirAll(target, 0755)
 					case tar.TypeReg:
 						os.MkdirAll(filepath.Dir(target), 0755)
-						f, _ := os.OpenFile(target, os.O_CREATE|os.O_RDWR|os.O_TRUNC, os.FileMode(h.Mode))
+						f, err := os.OpenFile(target, os.O_CREATE|os.O_RDWR|os.O_TRUNC, os.FileMode(h.Mode))
+						if err != nil { return err }
 						io.Copy(f, tr)
 						f.Close()
 					}
@@ -150,7 +153,8 @@ func DecryptCmd() *cobra.Command {
 						outPath = inputFile + ".dec"
 					}
 				}
-				out, _ := os.Create(outPath)
+				out, err := os.Create(outPath)
+				if err != nil { return err }
 				defer out.Close()
 				io.Copy(out, decryptedReader)
 			}

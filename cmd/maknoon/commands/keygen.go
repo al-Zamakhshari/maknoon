@@ -88,12 +88,12 @@ func KeygenCmd() *cobra.Command {
 
 			// Handle Default Path logic
 			home, _ := os.UserHomeDir()
-			maknoonDir := filepath.Join(home, ".maknoon")
-			os.MkdirAll(maknoonDir, 0700)
+			keysDir := filepath.Join(home, ".maknoon", "keys")
+			os.MkdirAll(keysDir, 0700)
 
 			var privFile, pubFile string
 			if output == "" {
-				privFile = filepath.Join(maknoonDir, "id_maknoon")
+				privFile = filepath.Join(keysDir, "id_maknoon")
 				pubFile = privFile + ".pub"
 			} else {
 				// If user provided a name/path, use it directly
