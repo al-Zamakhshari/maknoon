@@ -18,6 +18,7 @@ import (
 func DecryptCmd() *cobra.Command {
 	var output string
 	var keyPath string
+	var passphrase string
 
 	cmd := &cobra.Command{
 		Use:   "decrypt [file]",
@@ -106,13 +107,24 @@ func DecryptCmd() *cobra.Command {
 				}
 			}
 
+			// Determine passphrase
+			var password []byte
+			if passphrase != "" {
+				password = []byte(passphrase)
+			} else if envPass := os.Getenv("MAKNOON_PASSPHRASE"); envPass != "" {
+				password = []byte(envPass)
+			}
+
 			magic := string(header)
 			switch magic {
 			case crypto.MagicHeader:
-				fmt.Print("Enter passphrase: ")
-				password, err := term.ReadPassword(int(os.Stdin.Fd()))
-				fmt.Println()
-				if err != nil { return err }
+				if len(password) == 0 {
+					fmt.Print("Enter passphrase: ")
+					p, err := term.ReadPassword(int(os.Stdin.Fd()))
+					fmt.Println()
+					if err != nil { return err }
+					password = p
+				}
 				defer func() {
 					for i := range password { password[i] = 0 }
 				}()
@@ -142,15 +154,21 @@ func DecryptCmd() *cobra.Command {
 				}()
 
 				if len(privKeyBytes) > 4 && string(privKeyBytes[:4]) == crypto.MagicHeader {
-					fmt.Print("Enter passphrase to unlock your private key: ")
-					privKeyPass, err := term.ReadPassword(int(os.Stdin.Fd()))
-					fmt.Println()
-					if err != nil { return err }
+					// For private key unlocking, we use the same password logic
+					privKeyPassword := password
+					if len(privKeyPassword) == 0 {
+						fmt.Print("Enter passphrase to unlock your private key: ")
+						p, err := term.ReadPassword(int(os.Stdin.Fd()))
+						fmt.Println()
+						if err != nil { return err }
+						privKeyPassword = p
+					}
 					defer func() {
-						for i := range privKeyPass { privKeyPass[i] = 0 }
+						for i := range privKeyPassword { privKeyPassword[i] = 0 }
 					}()
+					
 					var unlockedKey bytes.Buffer
-					if _, err := crypto.DecryptStream(bytes.NewReader(privKeyBytes), &unlockedKey, privKeyPass); err != nil {
+					if _, err := crypto.DecryptStream(bytes.NewReader(privKeyBytes), &unlockedKey, privKeyPassword); err != nil {
 						return fmt.Errorf("failed to unlock private key: %w", err)
 					}
 					privKeyBytes = unlockedKey.Bytes()
@@ -178,5 +196,6 @@ func DecryptCmd() *cobra.Command {
 
 	cmd.Flags().StringVarP(&output, "output", "o", "", "Output file path")
 	cmd.Flags().StringVarP(&keyPath, "key", "k", "", "Path to your private key for asymmetric decryption")
+	cmd.Flags().StringVarP(&passphrase, "passphrase", "s", "", "Passphrase for decryption (Avoid for security!)")
 	return cmd
 }

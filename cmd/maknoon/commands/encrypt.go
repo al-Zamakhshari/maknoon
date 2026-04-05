@@ -16,6 +16,7 @@ import (
 func EncryptCmd() *cobra.Command {
 	var output string
 	var pubKeyPath string
+	var passphrase string
 
 	cmd := &cobra.Command{
 		Use:   "encrypt [file/dir]",
@@ -118,32 +119,51 @@ func EncryptCmd() *cobra.Command {
 				}
 			} else {
 				// Symmetric Mode (Passphrase)
-				fmt.Print("Enter passphrase: ")
-				password, err := term.ReadPassword(int(os.Stdin.Fd()))
-				fmt.Println()
-				if err != nil {
-					return err
+				var password []byte
+				
+				// 1. Check Flag
+				if passphrase != "" {
+					password = []byte(passphrase)
 				}
+				
+				// 2. Check Environment Variable
+				if len(password) == 0 {
+					if envPass := os.Getenv("MAKNOON_PASSPHRASE"); envPass != "" {
+						password = []byte(envPass)
+					}
+				}
+
+				// 3. Fallback to Interactive
+				if len(password) == 0 {
+					fmt.Print("Enter passphrase: ")
+					p, err := term.ReadPassword(int(os.Stdin.Fd()))
+					fmt.Println()
+					if err != nil {
+						return err
+					}
+					password = p
+
+					fmt.Print("Confirm passphrase: ")
+					confirm, err := term.ReadPassword(int(os.Stdin.Fd()))
+					fmt.Println()
+					if err != nil {
+						return err
+					}
+					defer func() {
+						for i := range confirm {
+							confirm[i] = 0
+						}
+					}()
+					if string(password) != string(confirm) {
+						return fmt.Errorf("passphrases do not match")
+					}
+				}
+
 				defer func() {
 					for i := range password {
 						password[i] = 0
 					}
 				}()
-
-				fmt.Print("Confirm passphrase: ")
-				confirm, err := term.ReadPassword(int(os.Stdin.Fd()))
-				fmt.Println()
-				if err != nil {
-					return err
-				}
-				defer func() {
-					for i := range confirm {
-						confirm[i] = 0
-					}
-				}()
-				if string(password) != string(confirm) {
-					return fmt.Errorf("passphrases do not match")
-				}
 
 				fmt.Printf("Encrypting '%s' using passphrase...\n", inputPath)
 
@@ -160,5 +180,6 @@ func EncryptCmd() *cobra.Command {
 
 	cmd.Flags().StringVarP(&output, "output", "o", "", "Output file path (default is input.makn)")
 	cmd.Flags().StringVarP(&pubKeyPath, "pubkey", "p", "", "Path to the recipient's public key for asymmetric encryption")
+	cmd.Flags().StringVarP(&passphrase, "passphrase", "s", "", "Passphrase for symmetric encryption (Avoid for security!)")
 	return cmd
 }
