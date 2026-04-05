@@ -12,19 +12,6 @@ import (
 	"golang.org/x/crypto/chacha20poly1305"
 )
 
-const (
-	ChunkSize       = 64 * 1024 // 64KB for streaming large files securely
-	MagicHeader     = "MAKN"    // Symmetrical (Password)
-	MagicHeaderAsym = "MAKA"    // Asymmetrical (Public Key)
-	Version         = byte(1)
-	SaltSize        = 32
-
-	// Flags (Bitmask)
-	FlagNone     = byte(0)
-	FlagArchive  = 1 << 0 // 0x01
-	FlagCompress = 1 << 1 // 0x02
-)
-
 // EncryptStream symmetrically encrypts data from r to w using a passphrase.
 func EncryptStream(r io.Reader, w io.Writer, password []byte, flags byte) error {
 	// 1. Generate random Salt for Argon2id

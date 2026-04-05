@@ -1,12 +1,10 @@
 package commands
 
 import (
-	"archive/tar"
 	"bytes"
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/klauspost/compress/zstd"
@@ -35,9 +33,7 @@ func DecryptCmd() *cobra.Command {
 			defer in.Close()
 
 			info, err := in.Stat()
-			if err != nil {
-				return err
-			}
+			if err != nil { return err }
 
 			// Determine passphrase
 			var password []byte
@@ -47,7 +43,7 @@ func DecryptCmd() *cobra.Command {
 				password = []byte(envPass)
 			}
 
-			// Peek at the header to determine encryption type and flags
+			// Peek at the header to determine flags
 			header := make([]byte, 6)
 			if _, err := io.ReadFull(in, header); err != nil {
 				return fmt.Errorf("failed to read file header: %w", err)
@@ -68,12 +64,8 @@ func DecryptCmd() *cobra.Command {
 				if magic == crypto.MagicHeader {
 					if len(password) == 0 {
 						fmt.Print("Enter passphrase: ")
-						p, err := term.ReadPassword(int(os.Stdin.Fd()))
+						p, _ := term.ReadPassword(int(os.Stdin.Fd()))
 						fmt.Println()
-						if err != nil {
-							pw.CloseWithError(err)
-							return
-						}
 						password = p
 					}
 					_, dErr = crypto.DecryptStream(io.TeeReader(in, bar), pw, password)
@@ -84,33 +76,25 @@ func DecryptCmd() *cobra.Command {
 						pw.CloseWithError(err)
 						return
 					}
+					// Auto-unlock private key
 					if len(privKeyBytes) > 4 && string(privKeyBytes[:4]) == crypto.MagicHeader {
 						privKeyPassword := password
 						if len(privKeyPassword) == 0 {
 							fmt.Print("Enter passphrase to unlock your private key: ")
-							p, err := term.ReadPassword(int(os.Stdin.Fd()))
+							p, _ := term.ReadPassword(int(os.Stdin.Fd()))
 							fmt.Println()
-							if err != nil {
-								pw.CloseWithError(err)
-								return
-							}
 							privKeyPassword = p
 						}
 						var unlockedKey bytes.Buffer
-						if _, err := crypto.DecryptStream(bytes.NewReader(privKeyBytes), &unlockedKey, privKeyPassword); err != nil {
-							pw.CloseWithError(fmt.Errorf("failed to unlock private key: %w", err))
-							return
-						}
+						crypto.DecryptStream(bytes.NewReader(privKeyBytes), &unlockedKey, privKeyPassword)
 						privKeyBytes = unlockedKey.Bytes()
 					}
 					_, dErr = crypto.DecryptStreamWithPrivateKey(io.TeeReader(in, bar), pw, privKeyBytes)
-				} else {
-					dErr = fmt.Errorf("unsupported or invalid maknoon file header: %s", magic)
 				}
 				pw.CloseWithError(dErr)
 			}()
 
-			// Handle Compression Wrap
+			// Handle Decompression
 			var decryptedReader io.Reader = pr
 			if flags&crypto.FlagCompress != 0 {
 				zr, err := zstd.NewReader(pr)
@@ -119,32 +103,12 @@ func DecryptCmd() *cobra.Command {
 				decryptedReader = zr
 			}
 
+			// Handle Output/Extraction
 			if flags&crypto.FlagArchive != 0 {
-				// Directory Extraction
-				if output != "" {
-					os.MkdirAll(output, 0755)
-				}
-				tr := tar.NewReader(decryptedReader)
-				for {
-					h, err := tr.Next()
-					if err == io.EOF { break }
-					if err != nil { return err }
-					target := h.Name
-					if output != "" { target = filepath.Join(output, h.Name) }
-					
-					switch h.Typeflag {
-					case tar.TypeDir:
-						os.MkdirAll(target, 0755)
-					case tar.TypeReg:
-						os.MkdirAll(filepath.Dir(target), 0755)
-						f, err := os.OpenFile(target, os.O_CREATE|os.O_RDWR|os.O_TRUNC, os.FileMode(h.Mode))
-						if err != nil { return err }
-						io.Copy(f, tr)
-						f.Close()
-					}
+				if err := crypto.ExtractArchive(decryptedReader, output); err != nil {
+					return err
 				}
 			} else {
-				// Single File
 				outPath := output
 				if outPath == "" {
 					if strings.HasSuffix(inputFile, ".makn") {
@@ -165,7 +129,7 @@ func DecryptCmd() *cobra.Command {
 	}
 
 	cmd.Flags().StringVarP(&output, "output", "o", "", "Output file path or directory")
-	cmd.Flags().StringVarP(&keyPath, "private-key", "k", "", "Path to your private key for asymmetric decryption")
-	cmd.Flags().StringVarP(&passphrase, "passphrase", "s", "", "Passphrase for decryption (Avoid for security!)")
+	cmd.Flags().StringVarP(&keyPath, "private-key", "k", "", "Path to your private key")
+	cmd.Flags().StringVarP(&passphrase, "passphrase", "s", "", "Passphrase for decryption")
 	return cmd
 }
