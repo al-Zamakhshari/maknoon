@@ -27,9 +27,13 @@ archives:
       {{- .Version }}_
       {{- .Os }}_
       {{- .Arch }}
+    files:
+      - maknoon.1
     format_overrides:
-      - goos: windows
-        format: zip
+...
+    install: |
+      bin.install "maknoon"
+      man1.install "maknoon.1"
 
 checksum:
   name_template: 'checksums.txt'

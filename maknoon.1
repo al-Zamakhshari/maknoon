@@ -1,0 +1,59 @@
+.TH MAKNOON 1 "April 2026" "1.0.0" "Maknoon Manual"
+.SH NAME
+maknoon \- Versatile, ultra-efficient Post-Quantum CLI encryption tool.
+.SH SYNOPSIS
+.B maknoon
+[\fIcommand\fR] [\fIflags\fR]
+.SH DESCRIPTION
+Maknoon (مكنون) is a high-performance encryption tool designed for a post-quantum world. 
+It utilizes ML-KEM (Kyber) for encryption, ML-DSA (Dilithium) for signatures, and XChaCha20-Poly1305 for streaming data integrity.
+.SH COMMANDS
+.TP
+.B keygen
+Generate a full Post-Quantum identity (Encryption + Signing keys).
+.TP
+.B encrypt [file/dir]
+Encrypt a file or directory. Supports --compress and --public-key.
+.TP
+.B decrypt [file]
+Decrypt and restore data. Automatically detects archive and compression status.
+.TP
+.B sign [file]
+Generate a detached Post-Quantum signature for a file.
+.TP
+.B verify [file]
+Cryptographically verify a file's integrity and origin.
+.TP
+.B vault
+Manage a secure, encrypted password database.
+.TP
+.B gen
+Generate high-entropy secure passwords or passphrases.
+.SH OPTIONS
+.TP
+.B \-p, \-\-public-key
+Path to a recipient's public key (.kem.pub or .sig.pub).
+.TP
+.B \-k, \-\-private-key
+Path to your private key (.kem.key or .sig.key).
+.TP
+.B \-s, \-\-passphrase
+Provide a passphrase non-interactively.
+.TP
+.B \-c, \-\-compress
+Enable Zstd compression before encryption.
+.SH FILES
+.TP
+.I ~/.maknoon/keys/
+Default directory for storing cryptographic identities.
+.TP
+.I ~/.maknoon/vaults/
+Default directory for password databases.
+.SH ENVIRONMENT
+.TP
+.B MAKNOON_PASSPHRASE
+A passphrase used to unlock keys and vaults non-interactively.
+.SH AUTHOR
+Ahmed Abdelaal
+.SH SEE ALSO
+https://github.com/a-khallaf/maknoon
