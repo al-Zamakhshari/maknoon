@@ -1,4 +1,4 @@
-module github.com/username/maknoon
+module github.com/a-khallaf/maknoon
 
 go 1.26.1
 

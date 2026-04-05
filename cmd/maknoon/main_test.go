@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/username/maknoon/cmd/maknoon/commands"
+	"github.com/a-khallaf/maknoon/cmd/maknoon/commands"
 )
 
 func TestIntegrationSymmetricPassphraseFlag(t *testing.T) {

@@ -1,5 +1,9 @@
 # Maknoon (مكنون) 🛡️
 
+[![Release](https://img.shields.io/github/v/release/a-khallaf/maknoon)](https://github.com/a-khallaf/maknoon/releases)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Go Report Card](https://goreportcard.com/badge/github.com/a-khallaf/maknoon)](https://goreportcard.com/report/github.com/a-khallaf/maknoon)
+
 **Maknoon** (Arabic: مكنون) translates to *the hidden*, *the concealed*, or *that which is carefully preserved*. 
 
 Maknoon is a versatile, ultra-efficient CLI encryption tool designed for a post-quantum world. It combines bleeding-edge cryptographic standards with a high-performance streaming architecture to protect your files and directories with absolute care.
@@ -31,8 +35,13 @@ Maknoon is a versatile, ultra-efficient CLI encryption tool designed for a post-
 
 ### Installation
 
-Requires Go 1.21+
+**Using Homebrew (macOS/Linux):**
+```bash
+brew install a-khallaf/tap/maknoon
+```
 
+**From Source:**
+Requires Go 1.21+
 ```bash
 git clone https://github.com/a-khallaf/maknoon.git
 cd maknoon
@@ -107,4 +116,4 @@ go test -v ./...
 ---
 
 ## 📜 License
-This project is licensed under the MIT License.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.

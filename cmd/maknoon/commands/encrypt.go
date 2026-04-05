@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
-	"github.com/username/maknoon/pkg/crypto"
+	"github.com/a-khallaf/maknoon/pkg/crypto"
 	"golang.org/x/term"
 )
 

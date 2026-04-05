@@ -6,7 +6,7 @@ import (
 	"math/big"
 
 	"github.com/spf13/cobra"
-	"github.com/username/maknoon/pkg/crypto"
+	"github.com/a-khallaf/maknoon/pkg/crypto"
 )
 
 const (

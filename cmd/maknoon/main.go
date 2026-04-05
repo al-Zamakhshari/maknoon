@@ -4,7 +4,7 @@ import (
 	"os"
 	
 	"github.com/spf13/cobra"
-	"github.com/username/maknoon/cmd/maknoon/commands"
+	"github.com/a-khallaf/maknoon/cmd/maknoon/commands"
 )
 
 func main() {
