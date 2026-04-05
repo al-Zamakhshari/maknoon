@@ -14,6 +14,20 @@ import (
 	"golang.org/x/term"
 )
 
+// resolveKeyPath checks if a key exists locally, and if not, looks in ~/.maknoon
+func resolveKeyPath(path string) string {
+	if _, err := os.Stat(path); err == nil {
+		return path
+	}
+	// Check in ~/.maknoon
+	home, _ := os.UserHomeDir()
+	maknoonPath := filepath.Join(home, ".maknoon", path)
+	if _, err := os.Stat(maknoonPath); err == nil {
+		return maknoonPath
+	}
+	return path // Fallback to original
+}
+
 func EncryptCmd() *cobra.Command {
 	var output string
 	var pubKeyPath string
@@ -132,9 +146,10 @@ func EncryptCmd() *cobra.Command {
 			bar := progressbar.DefaultBytes(totalSize, "preserving")
 			var encErr error
 			if pubKeyPath != "" {
-				pubKeyBytes, err := os.ReadFile(pubKeyPath)
+				resolvedPath := resolveKeyPath(pubKeyPath)
+				pubKeyBytes, err := os.ReadFile(resolvedPath)
 				if err != nil { return fmt.Errorf("failed to read public key: %w", err) }
-				fmt.Printf("Encrypting '%s' using public key '%s'...\n", inputPath, pubKeyPath)
+				fmt.Printf("Encrypting '%s' using public key '%s'...\n", inputPath, resolvedPath)
 				encErr = crypto.EncryptStreamWithPublicKey(io.TeeReader(finalReader, bar), out, pubKeyBytes, flags)
 			} else {
 				fmt.Printf("Encrypting '%s' using passphrase...\n", inputPath)

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/spf13/cobra"
 	"github.com/username/maknoon/pkg/crypto"
@@ -85,6 +86,21 @@ func KeygenCmd() *cobra.Command {
 				}
 			}()
 
+			// Handle Default Path logic
+			home, _ := os.UserHomeDir()
+			maknoonDir := filepath.Join(home, ".maknoon")
+			os.MkdirAll(maknoonDir, 0700)
+
+			var privFile, pubFile string
+			if output == "" {
+				privFile = filepath.Join(maknoonDir, "id_maknoon")
+				pubFile = privFile + ".pub"
+			} else {
+				// If user provided a name/path, use it directly
+				privFile = output
+				pubFile = output + ".pub"
+			}
+
 			// If password provided, encrypt the private key
 			var finalPriv []byte = priv
 			if len(password) > 0 {
@@ -98,13 +114,6 @@ func KeygenCmd() *cobra.Command {
 						finalPriv[i] = 0
 					}
 				}()
-			}
-
-			pubFile := output + ".pub"
-			privFile := output
-			if output == "" {
-				pubFile = "maknoon.pub"
-				privFile = "maknoon.key"
 			}
 
 			// Write Private Key (Carefully preserved)

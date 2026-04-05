@@ -68,23 +68,39 @@ func DecryptCmd() *cobra.Command {
 				if magic == crypto.MagicHeader {
 					if len(password) == 0 {
 						fmt.Print("Enter passphrase: ")
-						p, _ := term.ReadPassword(int(os.Stdin.Fd()))
+						p, err := term.ReadPassword(int(os.Stdin.Fd()))
 						fmt.Println()
+						if err != nil {
+							pw.CloseWithError(err)
+							return
+						}
 						password = p
 					}
 					_, dErr = crypto.DecryptStream(io.TeeReader(in, bar), pw, password)
 				} else if magic == crypto.MagicHeaderAsym {
-					privKeyBytes, _ := os.ReadFile(keyPath)
+					resolvedKeyPath := resolveKeyPath(keyPath)
+					privKeyBytes, err := os.ReadFile(resolvedKeyPath)
+					if err != nil {
+						pw.CloseWithError(err)
+						return
+					}
 					if len(privKeyBytes) > 4 && string(privKeyBytes[:4]) == crypto.MagicHeader {
 						privKeyPassword := password
 						if len(privKeyPassword) == 0 {
 							fmt.Print("Enter passphrase to unlock your private key: ")
-							p, _ := term.ReadPassword(int(os.Stdin.Fd()))
+							p, err := term.ReadPassword(int(os.Stdin.Fd()))
 							fmt.Println()
+							if err != nil {
+								pw.CloseWithError(err)
+								return
+							}
 							privKeyPassword = p
 						}
 						var unlockedKey bytes.Buffer
-						crypto.DecryptStream(bytes.NewReader(privKeyBytes), &unlockedKey, privKeyPassword)
+						if _, err := crypto.DecryptStream(bytes.NewReader(privKeyBytes), &unlockedKey, privKeyPassword); err != nil {
+							pw.CloseWithError(err)
+							return
+						}
 						privKeyBytes = unlockedKey.Bytes()
 					}
 					_, dErr = crypto.DecryptStreamWithPrivateKey(io.TeeReader(in, bar), pw, privKeyBytes)
