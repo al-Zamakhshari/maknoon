@@ -30,6 +30,4 @@ jobs:
           version: latest
           args: release --clean
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # You will need to add a CUSTOM_GITHUB_TOKEN secret if you want to 
-          # push to a separate homebrew-tap repository.
+          GITHUB_TOKEN: ${{ secrets.GORELEASER_TOKEN }}
