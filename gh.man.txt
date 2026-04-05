@@ -1,0 +1,182 @@
+GH(1)                          GitHub CLI manual                         GH(1)
+
+
+
+NNAAMMEE
+       gh - GitHub CLI
+
+
+
+SSYYNNOOPPSSIISS
+       gghh <<ccoommmmaanndd>> <<ssuubbccoommmmaanndd>> [[ffllaaggss]]
+
+
+
+DDEESSCCRRIIPPTTIIOONN
+       Work seamlessly with GitHub from the command line.
+
+
+
+CCOORREE CCOOMMMMAANNDDSS
+       gghh--aauutthh((11))
+              Authenticate gh and git with GitHub
+
+
+       gghh--bbrroowwssee((11))
+              Open repositories, issues, pull requests, and more in the
+              browser
+
+
+       gghh--ccooddeessppaaccee((11))
+              Connect to and manage codespaces
+
+
+       gghh--ggiisstt((11))
+              Manage gists
+
+
+       gghh--iissssuuee((11))
+              Manage issues
+
+
+       gghh--oorrgg((11))
+              Manage organizations
+
+
+       gghh--pprr((11))
+              Manage pull requests
+
+
+       gghh--pprroojjeecctt((11))
+              Work with GitHub Projects.
+
+
+       gghh--rreelleeaassee((11))
+              Manage releases
+
+
+       gghh--rreeppoo((11))
+              Manage repositories
+
+
+
+GGIITTHHUUBB AACCTTIIOONNSS CCOOMMMMAANNDDSS
+       gghh--ccaacchhee((11))
+              Manage GitHub Actions caches
+
+
+       gghh--rruunn((11))
+              View details about workflow runs
+
+
+       gghh--wwoorrkkffllooww((11))
+              View details about GitHub Actions workflows
+
+
+
+AADDDDIITTIIOONNAALL CCOOMMMMAANNDDSS
+       gghh--aaggeenntt--ttaasskk((11))
+              Work with agent tasks (preview)
+
+
+       gghh--aalliiaass((11))
+              Create command shortcuts
+
+
+       gghh--aappii((11))
+              Make an authenticated GitHub API request
+
+
+       gghh--aatttteessttaattiioonn((11))
+              Work with artifact attestations
+
+
+       gghh--ccoommpplleettiioonn((11))
+              Generate shell completion scripts
+
+
+       gghh--ccoonnffiigg((11))
+              Manage configuration for gh
+
+
+       gghh--ccooppiilloott((11))
+              Run the GitHub Copilot CLI (preview)
+
+
+       gghh--eexxtteennssiioonn((11))
+              Manage gh extensions
+
+
+       gghh--ggppgg--kkeeyy((11))
+              Manage GPG keys
+
+
+       gghh--llaabbeell((11))
+              Manage labels
+
+
+       gghh--lliicceennsseess((11))
+              View third-party license information
+
+
+       gghh--pprreevviieeww((11))
+              Execute previews for gh features
+
+
+       gghh--rruulleesseett((11))
+              View info about repo rulesets
+
+
+       gghh--sseeaarrcchh((11))
+              Search for repositories, issues, and pull requests
+
+
+       gghh--sseeccrreett((11))
+              Manage GitHub secrets
+
+
+       gghh--sssshh--kkeeyy((11))
+              Manage SSH keys
+
+
+       gghh--ssttaattuuss((11))
+              Print information about relevant issues, pull requests, and
+              notifications across repositories
+
+
+       gghh--vvaarriiaabbllee((11))
+              Manage GitHub Actions variables
+
+
+
+OOPPTTIIOONNSS
+       ----vveerrssiioonn
+              Show gh version
+
+
+
+EEXXIITT CCOODDEESS
+       0: Successful execution
+
+
+       1: Error
+
+
+       2: Command canceled
+
+
+       4: Authentication required
+
+
+       NOTE: Specific commands may have additional exit codes. Refer to the
+       command's help for more information.
+
+
+
+EEXXAAMMPPLLEE
+       $ gh issue create
+       $ gh repo clone cli/cli
+       $ gh pr checkout 321
+
+
+GitHub CLI 2.89.0                  Mar 2026                              GH(1)

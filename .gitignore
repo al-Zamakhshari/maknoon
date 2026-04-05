@@ -1,0 +1,21 @@
+# Binaries
+/maknoon
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test Files & Large Files
+LargeFile.mp4*
+*.makn
+*.restored
+test_key*
+
+# Keys (Never commit these!)
+id_ahmed*
+maknoon.key
+maknoon.pub
+
+# OS specific
+.DS_Store
