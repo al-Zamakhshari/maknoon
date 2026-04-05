@@ -50,31 +50,25 @@ func EncryptCmd() *cobra.Command {
 			var totalSize int64
 
 			if stat.IsDir() {
-				// Archive Mode: Calculate total size for progress bar
-				err = filepath.Walk(inputPath, func(_ string, info os.FileInfo, err error) error {
-					if err != nil { return err }
-					if !info.IsDir() {
-						totalSize += info.Size()
-					}
-					return nil
-				})
-				if err != nil {
-					return fmt.Errorf("failed to calculate directory size: %w", err)
-				}
+				// Archive Mode: Set totalSize to -1 because tar headers add unpredictable overhead
+				totalSize = -1
 
 				// Create a pipe to stream tar data
 				pr, pw := io.Pipe()
 				reader = pr
 				go func() {
 					tw := tar.NewWriter(pw)
+					// Determine the base directory to preserve the input folder name
+					baseDir := filepath.Dir(filepath.Clean(inputPath))
+					
 					err := filepath.Walk(inputPath, func(path string, info os.FileInfo, err error) error {
 						if err != nil { return err }
 						
-						header, err := tar.FileInfoHeader(info, info.Name())
+						// Ensure the name in the tar is relative to baseDir
+						rel, err := filepath.Rel(baseDir, path)
 						if err != nil { return err }
-						
-						// Ensure the name in the tar is relative to the input folder
-						rel, err := filepath.Rel(filepath.Dir(inputPath), path)
+
+						header, err := tar.FileInfoHeader(info, "")
 						if err != nil { return err }
 						header.Name = rel
 

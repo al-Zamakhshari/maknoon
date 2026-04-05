@@ -13,6 +13,7 @@ import (
 func KeygenCmd() *cobra.Command {
 	var output string
 	var noPassword bool
+	var passphrase string
 
 	cmd := &cobra.Command{
 		Use:   "keygen",
@@ -22,27 +23,43 @@ func KeygenCmd() *cobra.Command {
 			var err error
 
 			if !noPassword {
-				fmt.Print("Enter passphrase to protect your private key (leave empty for no protection): ")
-				password, err = term.ReadPassword(int(os.Stdin.Fd()))
-				fmt.Println()
-				if err != nil {
-					return err
+				// 1. Check Flag
+				if passphrase != "" {
+					password = []byte(passphrase)
+				}
+				
+				// 2. Check Environment Variable
+				if len(password) == 0 {
+					if envPass := os.Getenv("MAKNOON_PASSPHRASE"); envPass != "" {
+						password = []byte(envPass)
+					}
 				}
 
-				if len(password) > 0 {
-					fmt.Print("Confirm passphrase: ")
-					confirm, err := term.ReadPassword(int(os.Stdin.Fd()))
+				// 3. Fallback to Interactive
+				if len(password) == 0 {
+					fmt.Print("Enter passphrase to protect your private key (leave empty for no protection): ")
+					p, err := term.ReadPassword(int(os.Stdin.Fd()))
 					fmt.Println()
 					if err != nil {
 						return err
 					}
-					defer func() {
-						for i := range confirm {
-							confirm[i] = 0
+					password = p
+
+					if len(password) > 0 {
+						fmt.Print("Confirm passphrase: ")
+						confirm, err := term.ReadPassword(int(os.Stdin.Fd()))
+						fmt.Println()
+						if err != nil {
+							return err
 						}
-					}()
-					if string(password) != string(confirm) {
-						return fmt.Errorf("passphrases do not match")
+						defer func() {
+							for i := range confirm {
+								confirm[i] = 0
+							}
+						}()
+						if string(password) != string(confirm) {
+							return fmt.Errorf("passphrases do not match")
+						}
 					}
 				}
 			} else {
@@ -110,5 +127,6 @@ func KeygenCmd() *cobra.Command {
 
 	cmd.Flags().StringVarP(&output, "output", "o", "", "Base name for the keys (e.g., 'id_maknoon')")
 	cmd.Flags().BoolVarP(&noPassword, "no-password", "n", false, "Generate an unprotected private key (suitable for automation)")
+	cmd.Flags().StringVarP(&passphrase, "passphrase", "s", "", "Passphrase to protect the key (Avoid for security!)")
 	return cmd
 }
