@@ -61,7 +61,7 @@ func KeygenCmd() *cobra.Command {
 			var finalPriv []byte = priv
 			if len(password) > 0 {
 				var b bytes.Buffer
-				if err := crypto.EncryptStream(bytes.NewReader(priv), &b, password); err != nil {
+				if err := crypto.EncryptStream(bytes.NewReader(priv), &b, password, crypto.FlagFile); err != nil {
 					return fmt.Errorf("failed to encrypt private key: %w", err)
 				}
 				finalPriv = b.Bytes()

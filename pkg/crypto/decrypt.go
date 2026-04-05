@@ -13,22 +13,23 @@ import (
 )
 
 // DecryptStream decrypts data from r to w using a passphrase.
-func DecryptStream(r io.Reader, w io.Writer, password []byte) error {
+func DecryptStream(r io.Reader, w io.Writer, password []byte) (byte, error) {
 	// 1. Read Header
-	header := make([]byte, 4+1+SaltSize+24)
+	header := make([]byte, 4+1+1+SaltSize+24)
 	if _, err := io.ReadFull(r, header); err != nil {
-		return err
+		return 0, err
 	}
 
 	if string(header[:4]) != MagicHeader {
-		return errors.New("invalid file format: missing MAKN magic header")
+		return 0, errors.New("invalid file format: missing MAKN magic header")
 	}
 	if header[4] != Version {
-		return errors.New("unsupported maknoon version")
+		return 0, errors.New("unsupported maknoon version")
 	}
+	flags := header[5]
 
-	salt := header[5 : 5+SaltSize]
-	baseNonce := header[5+SaltSize:]
+	salt := header[6 : 6+SaltSize]
+	baseNonce := header[6+SaltSize:]
 
 	// 2. Derive Key
 	key := argon2.IDKey(password, salt, 3, 64*1024, 4, chacha20poly1305.KeySize)
@@ -41,49 +42,50 @@ func DecryptStream(r io.Reader, w io.Writer, password []byte) error {
 	// 3. Setup AEAD
 	aead, err := chacha20poly1305.NewX(key)
 	if err != nil {
-		return err
+		return 0, err
 	}
 
 	// 4. Stream Decrypt Chunks
-	return streamDecrypt(r, w, aead, baseNonce)
+	return flags, streamDecrypt(r, w, aead, baseNonce)
 }
 
 // DecryptStreamWithPrivateKey decrypts data from r to w using a Post-Quantum Private Key (Kyber1024).
-func DecryptStreamWithPrivateKey(r io.Reader, w io.Writer, privKeyBytes []byte) error {
+func DecryptStreamWithPrivateKey(r io.Reader, w io.Writer, privKeyBytes []byte) (byte, error) {
 	// 1. Read Header (Fixed part)
-	fixedHeader := make([]byte, 4+1)
+	fixedHeader := make([]byte, 4+1+1)
 	if _, err := io.ReadFull(r, fixedHeader); err != nil {
-		return err
+		return 0, err
 	}
 
 	if string(fixedHeader[:4]) != MagicHeaderAsym {
-		return errors.New("invalid file format: missing MAKA magic header")
+		return 0, errors.New("invalid file format: missing MAKA magic header")
 	}
 	if fixedHeader[4] != Version {
-		return errors.New("unsupported maknoon version")
+		return 0, errors.New("unsupported maknoon version")
 	}
+	flags := fixedHeader[5]
 
 	// 2. Read KEM Ciphertext
 	scheme := kyber1024.Scheme()
 	ct := make([]byte, scheme.CiphertextSize())
 	if _, err := io.ReadFull(r, ct); err != nil {
-		return err
+		return 0, err
 	}
 
 	// 3. Read Base Nonce
 	baseNonce := make([]byte, chacha20poly1305.NonceSizeX)
 	if _, err := io.ReadFull(r, baseNonce); err != nil {
-		return err
+		return 0, err
 	}
 
 	// 4. Decapsulate Shared Secret
 	privKey, err := scheme.UnmarshalBinaryPrivateKey(privKeyBytes)
 	if err != nil {
-		return fmt.Errorf("invalid private key: %w", err)
+		return 0, fmt.Errorf("invalid private key: %w", err)
 	}
 	ss, err := scheme.Decapsulate(privKey, ct)
 	if err != nil {
-		return fmt.Errorf("decapsulation failed: %w", err)
+		return 0, fmt.Errorf("decapsulation failed: %w", err)
 	}
 	defer func() {
 		for i := range ss {
@@ -94,11 +96,11 @@ func DecryptStreamWithPrivateKey(r io.Reader, w io.Writer, privKeyBytes []byte) 
 	// 5. Setup AEAD
 	aead, err := chacha20poly1305.NewX(ss)
 	if err != nil {
-		return err
+		return 0, err
 	}
 
 	// 6. Stream Decrypt Chunks
-	return streamDecrypt(r, w, aead, baseNonce)
+	return flags, streamDecrypt(r, w, aead, baseNonce)
 }
 
 func streamDecrypt(r io.Reader, w io.Writer, aead cipher.AEAD, baseNonce []byte) error {

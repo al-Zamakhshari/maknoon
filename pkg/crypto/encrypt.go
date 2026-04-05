@@ -18,11 +18,14 @@ const (
 	MagicHeaderAsym = "MAKA"    // Asymmetrical (Public Key)
 	Version         = byte(1)
 	SaltSize        = 32
+
+	// Flags
+	FlagFile    = byte(0)
+	FlagArchive = byte(1)
 )
 
 // EncryptStream symmetrically encrypts data from r to w using a passphrase.
-// It maintains a low memory footprint regardless of file size (e.g., 100GB).
-func EncryptStream(r io.Reader, w io.Writer, password []byte) error {
+func EncryptStream(r io.Reader, w io.Writer, password []byte, flags byte) error {
 	// 1. Generate random Salt for Argon2id
 	salt := make([]byte, SaltSize)
 	if _, err := io.ReadFull(rand.Reader, salt); err != nil {
@@ -47,11 +50,11 @@ func EncryptStream(r io.Reader, w io.Writer, password []byte) error {
 		return err
 	}
 
-	// 4. Write Header: Magic (4) | Version (1) | Salt (32) | BaseNonce (24)
+	// 4. Write Header: Magic (4) | Version (1) | Flags (1) | Salt (32) | BaseNonce (24)
 	if _, err := w.Write([]byte(MagicHeader)); err != nil {
 		return err
 	}
-	if _, err := w.Write([]byte{Version}); err != nil {
+	if _, err := w.Write([]byte{Version, flags}); err != nil {
 		return err
 	}
 	if _, err := w.Write(salt); err != nil {
@@ -66,7 +69,7 @@ func EncryptStream(r io.Reader, w io.Writer, password []byte) error {
 }
 
 // EncryptStreamWithPublicKey encrypts data from r to w using a Post-Quantum Public Key (Kyber1024).
-func EncryptStreamWithPublicKey(r io.Reader, w io.Writer, pubKeyBytes []byte) error {
+func EncryptStreamWithPublicKey(r io.Reader, w io.Writer, pubKeyBytes []byte, flags byte) error {
 	// 1. Unpack Public Key
 	scheme := kyber1024.Scheme()
 	pubKey, err := scheme.UnmarshalBinaryPublicKey(pubKeyBytes)
@@ -95,11 +98,11 @@ func EncryptStreamWithPublicKey(r io.Reader, w io.Writer, pubKeyBytes []byte) er
 		return err
 	}
 
-	// 4. Write Header: Magic (4) | Version (1) | KEM Ciphertext (1568) | BaseNonce (24)
+	// 4. Write Header: Magic (4) | Version (1) | Flags (1) | KEM Ciphertext (1568) | BaseNonce (24)
 	if _, err := w.Write([]byte(MagicHeaderAsym)); err != nil {
 		return err
 	}
-	if _, err := w.Write([]byte{Version}); err != nil {
+	if _, err := w.Write([]byte{Version, flags}); err != nil {
 		return err
 	}
 	if _, err := w.Write(ct); err != nil {
