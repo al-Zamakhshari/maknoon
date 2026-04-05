@@ -121,7 +121,7 @@ func streamEncrypt(r io.Reader, w io.Writer, aead cipher.AEAD, baseNonce []byte)
 			}
 
 			ciphertext := aead.Seal(nil, nonce, buf[:n], nil)
-			
+
 			lenBuf := make([]byte, 4)
 			binary.LittleEndian.PutUint32(lenBuf, uint32(len(ciphertext)))
 			if _, wErr := w.Write(lenBuf); wErr != nil {
@@ -132,7 +132,7 @@ func streamEncrypt(r io.Reader, w io.Writer, aead cipher.AEAD, baseNonce []byte)
 			}
 			chunkIndex++
 		}
-		
+
 		if err == io.EOF {
 			break
 		}

@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/spf13/cobra"
 	"github.com/a-khallaf/maknoon/pkg/crypto"
+	"github.com/spf13/cobra"
 )
 
 func VerifyCmd() *cobra.Command {
@@ -19,17 +19,23 @@ func VerifyCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			filePath := args[0]
 			data, err := os.ReadFile(filePath)
-			if err != nil { return err }
+			if err != nil {
+				return err
+			}
 
 			if signaturePath == "" {
 				signaturePath = filePath + ".sig"
 			}
 			sigBytes, err := os.ReadFile(signaturePath)
-			if err != nil { return fmt.Errorf("signature file not found: %w", err) }
+			if err != nil {
+				return fmt.Errorf("signature file not found: %w", err)
+			}
 
-			resolvedPath := resolveKeyPath(pubKeyPath)
+			resolvedPath := crypto.ResolveKeyPath(pubKeyPath)
 			pubKeyBytes, err := os.ReadFile(resolvedPath)
-			if err != nil { return fmt.Errorf("failed to read public key: %w", err) }
+			if err != nil {
+				return fmt.Errorf("failed to read public key: %w", err)
+			}
 
 			valid := crypto.VerifySignature(data, sigBytes, pubKeyBytes)
 			if valid {

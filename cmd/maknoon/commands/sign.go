@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/spf13/cobra"
 	"github.com/a-khallaf/maknoon/pkg/crypto"
+	"github.com/spf13/cobra"
 )
 
 func SignCmd() *cobra.Command {
@@ -20,15 +20,19 @@ func SignCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			filePath := args[0]
 			data, err := os.ReadFile(filePath)
-			if err != nil { return err }
+			if err != nil {
+				return err
+			}
 
-			resolvedPath := resolveKeyPath(sigKeyPath)
+			resolvedPath := crypto.ResolveKeyPath(sigKeyPath)
 			if resolvedPath == "" {
 				return fmt.Errorf("signing key required (use --private-key)")
 			}
 
 			keyBytes, err := os.ReadFile(resolvedPath)
-			if err != nil { return err }
+			if err != nil {
+				return err
+			}
 
 			// Unlock logic
 			if len(keyBytes) > 4 && string(keyBytes[:4]) == crypto.MagicHeader {
@@ -41,19 +45,23 @@ func SignCmd() *cobra.Command {
 				if len(password) == 0 {
 					return fmt.Errorf("private key is encrypted; provide passphrase via --passphrase or MAKNOON_PASSPHRASE")
 				}
-				
+
 				var unlockedKey bytes.Buffer
 				if _, err := crypto.DecryptStream(bytes.NewReader(keyBytes), &unlockedKey, password); err != nil {
 					return fmt.Errorf("failed to unlock signing key: %w", err)
 				}
 				keyBytes = unlockedKey.Bytes()
 				defer func() {
-					for i := range keyBytes { keyBytes[i] = 0 }
+					for i := range keyBytes {
+						keyBytes[i] = 0
+					}
 				}()
 			}
 
 			sig, err := crypto.SignData(data, keyBytes)
-			if err != nil { return err }
+			if err != nil {
+				return err
+			}
 
 			sigFile := filePath + ".sig"
 			if err := os.WriteFile(sigFile, sig, 0644); err != nil {

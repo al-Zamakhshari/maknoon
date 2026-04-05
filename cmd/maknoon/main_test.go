@@ -46,11 +46,11 @@ func TestIntegrationDirectoryArchive(t *testing.T) {
 	tmpDir := t.TempDir()
 	srcDir := filepath.Join(tmpDir, "source")
 	os.Mkdir(srcDir, 0755)
-	
+
 	file1 := filepath.Join(srcDir, "a.txt")
 	file2 := filepath.Join(srcDir, "sub/b.txt")
 	os.MkdirAll(filepath.Dir(file2), 0755)
-	
+
 	os.WriteFile(file1, []byte("file a"), 0644)
 	os.WriteFile(file2, []byte("file b"), 0644)
 
@@ -75,7 +75,9 @@ func TestIntegrationDirectoryArchive(t *testing.T) {
 	// DEBUG: List all files extracted
 	t.Log("Listing all files in destDir:")
 	filepath.Walk(destDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil { return err }
+		if err != nil {
+			return err
+		}
 		rel, _ := filepath.Rel(destDir, path)
 		t.Logf("  - %s (Dir: %v, Mode: %v)", rel, info.IsDir(), info.Mode())
 		return nil
@@ -105,13 +107,13 @@ func TestIntegrationAsymmetricEncryptedKey(t *testing.T) {
 	tmpDir := t.TempDir()
 	keyBase := filepath.Join(tmpDir, "id_test")
 	passphrase := "key-lock-123"
-	
+
 	// 1. Keygen with password
 	genCmd := commands.KeygenCmd()
 	genCmd.SetArgs([]string{"-o", keyBase, "--passphrase", passphrase})
 	os.Setenv("MAKNOON_PASSPHRASE", passphrase)
 	defer os.Unsetenv("MAKNOON_PASSPHRASE")
-	
+
 	if err := genCmd.Execute(); err != nil {
 		t.Fatalf("Keygen integration failed: %v", err)
 	}
@@ -120,7 +122,7 @@ func TestIntegrationAsymmetricEncryptedKey(t *testing.T) {
 	inputFile := filepath.Join(tmpDir, "data.txt")
 	os.WriteFile(inputFile, []byte("PQ Security"), 0644)
 	encFile := inputFile + ".makn"
-	
+
 	encCmd := commands.EncryptCmd()
 	encCmd.SetArgs([]string{inputFile, "-o", encFile, "--public-key", keyBase + ".kem.pub"})
 	if err := encCmd.Execute(); err != nil {
@@ -146,7 +148,7 @@ func TestIntegrationCompression(t *testing.T) {
 	inputFile := filepath.Join(tmpDir, "compressible.txt")
 	encryptedFile := inputFile + ".makn"
 	decryptedFile := filepath.Join(tmpDir, "restored.txt")
-	
+
 	// Create highly redundant data (very compressible)
 	content := bytes.Repeat([]byte("COMPRESS-ME-PLEASE-"), 1000)
 	os.WriteFile(inputFile, content, 0644)
@@ -171,7 +173,7 @@ func TestIntegrationCompression(t *testing.T) {
 	if !bytes.Equal(content, restored) {
 		t.Fatal("Restored content mismatch after compression")
 	}
-	
+
 	// 4. Sanity check
 	statOrig, _ := os.Stat(inputFile)
 	statEnc, _ := os.Stat(encryptedFile)
@@ -199,7 +201,7 @@ func TestIntegrationVaultAutomation(t *testing.T) {
 	// 2. Get
 	getCmd := commands.VaultCmd()
 	getCmd.SetArgs([]string{"--vault", vName, "--passphrase", passphrase, "get", service})
-	
+
 	old := os.Stdout
 	r, w, _ := os.Pipe()
 	os.Stdout = w
@@ -224,7 +226,7 @@ func TestIntegrationSignVerify(t *testing.T) {
 
 	inputFile := filepath.Join(tmpDir, "message.txt")
 	os.WriteFile(inputFile, []byte("PQ Authentication"), 0644)
-	
+
 	signCmd := commands.SignCmd()
 	signCmd.SetArgs([]string{inputFile, "--private-key", keyBase + ".sig.key"})
 	signCmd.Execute()
@@ -238,11 +240,11 @@ func TestIntegrationSignVerify(t *testing.T) {
 
 func TestIntegrationFullFeatureStress(t *testing.T) {
 	tmpDir := t.TempDir()
-	
+
 	srcDir := filepath.Join(tmpDir, "complex_source")
 	os.MkdirAll(filepath.Join(srcDir, "sub"), 0755)
 	os.WriteFile(filepath.Join(srcDir, "data.bin"), bytes.Repeat([]byte{0x42}, 100000), 0644)
-	
+
 	keyBase := filepath.Join(tmpDir, "id_complex")
 	genCmd := commands.KeygenCmd()
 	genCmd.SetArgs([]string{"-o", keyBase, "--no-password"})

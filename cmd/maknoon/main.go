@@ -2,9 +2,9 @@ package main
 
 import (
 	"os"
-	
-	"github.com/spf13/cobra"
+
 	"github.com/a-khallaf/maknoon/cmd/maknoon/commands"
+	"github.com/spf13/cobra"
 )
 
 func main() {

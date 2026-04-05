@@ -35,7 +35,7 @@ func GetDefaultVaultPath() string {
 func EnsureMaknoonDirs() error {
 	home, _ := os.UserHomeDir()
 	base := filepath.Join(home, MaknoonDir)
-	
+
 	dirs := []string{
 		filepath.Join(base, KeysDir),
 		filepath.Join(base, VaultsDir),

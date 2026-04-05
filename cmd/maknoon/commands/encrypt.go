@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/spf13/cobra"
 	"github.com/a-khallaf/maknoon/pkg/crypto"
+	"github.com/spf13/cobra"
 	"golang.org/x/term"
 )
 
@@ -21,7 +21,7 @@ func EncryptCmd() *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			inputPath := args[0]
-			
+
 			stat, err := os.Stat(inputPath)
 			if err != nil {
 				return fmt.Errorf("failed to access input path: %w", err)
@@ -44,9 +44,11 @@ func EncryptCmd() *cobra.Command {
 
 			// Resolve Public Key if provided
 			if pubKeyPath != "" {
-				resolvedPath := resolveKeyPath(pubKeyPath)
+				resolvedPath := crypto.ResolveKeyPath(pubKeyPath)
 				pk, err := os.ReadFile(resolvedPath)
-				if err != nil { return err }
+				if err != nil {
+					return err
+				}
 				opts.PublicKey = pk
 			} else {
 				// Handle Passphrase
@@ -58,18 +60,22 @@ func EncryptCmd() *cobra.Command {
 					fmt.Print("Enter passphrase: ")
 					p, err := term.ReadPassword(int(os.Stdin.Fd()))
 					fmt.Println()
-					if err != nil { return err }
+					if err != nil {
+						return err
+					}
 					opts.Passphrase = p
 				}
 			}
 
 			// Clean RAM on exit
 			defer func() {
-				if len(opts.Passphrase) > 0 { crypto.SafeClear(opts.Passphrase) }
+				if len(opts.Passphrase) > 0 {
+					crypto.SafeClear(opts.Passphrase)
+				}
 			}()
 
 			fmt.Printf("Protecting '%s'...\n", inputPath)
-			
+
 			return crypto.Protect(inputPath, out, opts)
 		},
 	}

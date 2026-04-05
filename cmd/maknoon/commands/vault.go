@@ -9,8 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/spf13/cobra"
 	"github.com/a-khallaf/maknoon/pkg/crypto"
+	"github.com/spf13/cobra"
 	"go.etcd.io/bbolt"
 	"golang.org/x/term"
 )
@@ -42,7 +42,7 @@ func VaultCmd() *cobra.Command {
 
 func openVault() (*bbolt.DB, []byte, error) {
 	crypto.EnsureMaknoonDirs()
-	
+
 	dbPath := vaultName
 	if !strings.Contains(vaultName, string(os.PathSeparator)) {
 		home, _ := os.UserHomeDir()
@@ -50,7 +50,9 @@ func openVault() (*bbolt.DB, []byte, error) {
 	}
 
 	db, err := bbolt.Open(dbPath, 0600, nil)
-	if err != nil { return nil, nil, err }
+	if err != nil {
+		return nil, nil, err
+	}
 
 	var salt []byte
 	db.Update(func(tx *bbolt.Tx) error {
@@ -86,8 +88,8 @@ func openVault() (*bbolt.DB, []byte, error) {
 func vaultSetCmd() *cobra.Command {
 	var user, note string
 	cmd := &cobra.Command{
-		Use:   "set [service] [password]",
-		Args:  cobra.RangeArgs(1, 2),
+		Use:  "set [service] [password]",
+		Args: cobra.RangeArgs(1, 2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			service := args[0]
 			var password string
@@ -101,7 +103,9 @@ func vaultSetCmd() *cobra.Command {
 			}
 
 			db, key, err := openVault()
-			if err != nil { return err }
+			if err != nil {
+				return err
+			}
 			defer db.Close()
 			defer crypto.SafeClear(key)
 
@@ -121,12 +125,14 @@ func vaultSetCmd() *cobra.Command {
 
 func vaultGetCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "get [service]",
-		Args:  cobra.ExactArgs(1),
+		Use:  "get [service]",
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			service := args[0]
 			db, key, err := openVault()
-			if err != nil { return err }
+			if err != nil {
+				return err
+			}
 			defer db.Close()
 			defer crypto.SafeClear(key)
 
@@ -137,9 +143,13 @@ func vaultGetCmd() *cobra.Command {
 				return nil
 			})
 
-			if ciphertext == nil { return fmt.Errorf("service not found") }
+			if ciphertext == nil {
+				return fmt.Errorf("service not found")
+			}
 			entry, err := crypto.OpenEntry(ciphertext, key)
-			if err != nil { return err }
+			if err != nil {
+				return err
+			}
 
 			fmt.Printf("Service:  %s\nUsername: %s\nPassword: %s\n", entry.Service, entry.Username, entry.Password)
 			return nil
@@ -149,17 +159,21 @@ func vaultGetCmd() *cobra.Command {
 
 func vaultListCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "list",
+		Use: "list",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			db, key, err := openVault()
-			if err != nil { return err }
+			if err != nil {
+				return err
+			}
 			defer db.Close()
 			defer crypto.SafeClear(key)
 
 			return db.View(func(tx *bbolt.Tx) error {
 				return tx.Bucket([]byte(vaultBucket)).ForEach(func(k, v []byte) error {
 					entry, err := crypto.OpenEntry(v, key)
-					if err == nil { fmt.Printf(" - %s (%s)\n", entry.Service, entry.Username) }
+					if err == nil {
+						fmt.Printf(" - %s (%s)\n", entry.Service, entry.Username)
+					}
 					return nil
 				})
 			})
