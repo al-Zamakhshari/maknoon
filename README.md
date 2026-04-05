@@ -67,7 +67,7 @@ Generate a Kyber1024 keypair. By default, your private key is protected with an 
 
 **Asymmetric (Public Key) Mode:**
 ```bash
-./maknoon encrypt massive_data.iso --pubkey id_identity.pub
+./maknoon encrypt massive_data.iso --public-key id_identity.pub
 ```
 
 ### 3. Decryption

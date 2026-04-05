@@ -148,7 +148,7 @@ func EncryptCmd() *cobra.Command {
 	}
 
 	cmd.Flags().StringVarP(&output, "output", "o", "", "Output file path (default is input.makn)")
-	cmd.Flags().StringVarP(&pubKeyPath, "pubkey", "p", "", "Path to the recipient's public key for asymmetric encryption")
+	cmd.Flags().StringVarP(&pubKeyPath, "public-key", "p", "", "Path to the recipient's public key for asymmetric encryption")
 	cmd.Flags().StringVarP(&passphrase, "passphrase", "s", "", "Passphrase for symmetric encryption (Avoid for security!)")
 	cmd.Flags().BoolVarP(&compress, "compress", "c", false, "Enable Zstd compression before encryption")
 	return cmd

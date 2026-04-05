@@ -145,7 +145,7 @@ func DecryptCmd() *cobra.Command {
 	}
 
 	cmd.Flags().StringVarP(&output, "output", "o", "", "Output file path or directory")
-	cmd.Flags().StringVarP(&keyPath, "key", "k", "", "Path to your private key for asymmetric decryption")
+	cmd.Flags().StringVarP(&keyPath, "private-key", "k", "", "Path to your private key for asymmetric decryption")
 	cmd.Flags().StringVarP(&passphrase, "passphrase", "s", "", "Passphrase for decryption (Avoid for security!)")
 	return cmd
 }

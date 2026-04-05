@@ -121,7 +121,7 @@ func TestIntegrationAsymmetricEncryptedKey(t *testing.T) {
 	encFile := inputFile + ".makn"
 	
 	encCmd := commands.EncryptCmd()
-	encCmd.SetArgs([]string{inputFile, "-o", encFile, "--pubkey", keyBase + ".pub"})
+	encCmd.SetArgs([]string{inputFile, "-o", encFile, "--public-key", keyBase + ".pub"})
 	if err := encCmd.Execute(); err != nil {
 		t.Fatalf("Asymmetric encryption failed: %v", err)
 	}
@@ -129,7 +129,7 @@ func TestIntegrationAsymmetricEncryptedKey(t *testing.T) {
 	// 3. Decrypt using Protected Private Key (automatically uses MAKNOON_PASSPHRASE)
 	restoredFile := filepath.Join(tmpDir, "data.restored.txt")
 	decCmd := commands.DecryptCmd()
-	decCmd.SetArgs([]string{encFile, "-o", restoredFile, "--key", keyBase})
+	decCmd.SetArgs([]string{encFile, "-o", restoredFile, "--private-key", keyBase})
 	if err := decCmd.Execute(); err != nil {
 		t.Fatalf("Asymmetric decryption failed: %v", err)
 	}
