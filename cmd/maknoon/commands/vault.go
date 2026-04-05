@@ -21,11 +21,15 @@ const (
 	saltKey     = "salt"
 )
 
+var vaultName string
+
 func VaultCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "vault",
-		Short: "Manage a secure password vault",
+		Short: "Manage secure password vaults",
 	}
+
+	cmd.PersistentFlags().StringVarP(&vaultName, "vault", "v", "default", "Name or full path of the vault to use")
 
 	cmd.AddCommand(vaultSetCmd())
 	cmd.AddCommand(vaultGetCmd())
@@ -39,7 +43,12 @@ func openVault() (*bbolt.DB, []byte, error) {
 	home, _ := os.UserHomeDir()
 	vaultDir := filepath.Join(home, ".maknoon")
 	os.MkdirAll(vaultDir, 0700)
-	dbPath := filepath.Join(vaultDir, "vault.db")
+
+	dbPath := vaultName
+	// If it's just a name (no path separators), put it in the default directory
+	if !strings.Contains(vaultName, string(os.PathSeparator)) {
+		dbPath = filepath.Join(vaultDir, vaultName+".db")
+	}
 
 	db, err := bbolt.Open(dbPath, 0600, nil)
 	if err != nil {
