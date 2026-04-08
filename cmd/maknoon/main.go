@@ -21,6 +21,7 @@ func main() {
 	rootCmd.AddCommand(commands.VaultCmd())
 	rootCmd.AddCommand(commands.SignCmd())
 	rootCmd.AddCommand(commands.VerifyCmd())
+	rootCmd.AddCommand(commands.AiCmd())
 
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
