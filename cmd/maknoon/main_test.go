@@ -238,6 +238,53 @@ func TestIntegrationSignVerify(t *testing.T) {
 	}
 }
 
+func TestIntegrationPipesAndEnv(t *testing.T) {
+	tmpDir := t.TempDir()
+	content := "Pipe integration test data"
+	passphrase := "pipe-secret-123"
+
+	// 1. Test Encrypt from Stdin to File
+	encCmd := commands.EncryptCmd()
+	encFile := filepath.Join(tmpDir, "pipe.makn")
+	encCmd.SetArgs([]string{"-", "-o", encFile, "-s", passphrase, "--quiet"})
+
+	// Mock stdin
+	oldStdin := os.Stdin
+	r, w, _ := os.Pipe()
+	os.Stdin = r
+	w.Write([]byte(content))
+	w.Close()
+
+	if err := encCmd.Execute(); err != nil {
+		os.Stdin = oldStdin
+		t.Fatalf("Pipe encryption failed: %v", err)
+	}
+	os.Stdin = oldStdin
+
+	// 2. Test Decrypt from File to Stdout
+	decCmd := commands.DecryptCmd()
+	decCmd.SetArgs([]string{encFile, "-o", "-", "-s", passphrase, "--quiet"})
+
+	// Mock stdout
+	oldStdout := os.Stdout
+	rOut, wOut, _ := os.Pipe()
+	os.Stdout = wOut
+
+	if err := decCmd.Execute(); err != nil {
+		wOut.Close()
+		os.Stdout = oldStdout
+		t.Fatalf("Pipe decryption failed: %v", err)
+	}
+	wOut.Close()
+	os.Stdout = oldStdout
+
+	var buf bytes.Buffer
+	io.Copy(&buf, rOut)
+	if buf.String() != content {
+		t.Errorf("Pipe output mismatch. Got: %s, Want: %s", buf.String(), content)
+	}
+}
+
 func TestIntegrationFullFeatureStress(t *testing.T) {
 	tmpDir := t.TempDir()
 

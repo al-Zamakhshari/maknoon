@@ -118,14 +118,21 @@ No filenames or internal directory structures are leaked in the encrypted header
 
 ## 🤖 Automation & CI/CD
 
-Maknoon is designed for headless environments. You can bypass interactive prompts using flags or environment variables.
+Maknoon is designed for headless environments. You can bypass interactive prompts using flags, environment variables, or standard pipes.
 
 ```bash
 # Set passphrase for automation
 export MAKNOON_PASSPHRASE="your-secret-key"
 
-# Encrypt a directory with compression for CI/CD artifacts
-./maknoon encrypt ./deploy_artifacts --compress --output build.makn
+# Use environment variables for keys
+export MAKNOON_PUBLIC_KEY="/path/to/key.kem.pub"
+export MAKNOON_PRIVATE_KEY="/path/to/key.kem.key"
+
+# Pipe data directly into Maknoon (Standard I/O support)
+echo "Secret data" | ./maknoon encrypt - -o secret.makn --quiet
+
+# Decrypt directly to stdout
+./maknoon decrypt secret.makn -o - --quiet
 ```
 
 ---
