@@ -12,6 +12,7 @@ type CryptoProfile interface {
 
 	// KDF & Symmetric Encryption
 	SaltSize() int
+	NonceSize() int
 	DeriveKey(passphrase, salt []byte) []byte
 	NewAEAD(key []byte) (cipher.AEAD, error)
 

@@ -7,8 +7,6 @@ import (
 	"io"
 	"runtime"
 	"sync"
-
-	"golang.org/x/crypto/chacha20poly1305"
 )
 
 
@@ -35,7 +33,7 @@ func DecryptStream(r io.Reader, w io.Writer, password []byte, concurrency int) (
 	if _, err := io.ReadFull(r, salt); err != nil {
 		return 0, err
 	}
-	baseNonce := make([]byte, chacha20poly1305.NonceSizeX)
+	baseNonce := make([]byte, profile.NonceSize())
 	if _, err := io.ReadFull(r, baseNonce); err != nil {
 		return 0, err
 	}
@@ -83,7 +81,7 @@ func DecryptStreamWithPrivateKey(r io.Reader, w io.Writer, privKeyBytes []byte, 
 	}
 
 	// 3. Read Base Nonce
-	baseNonce := make([]byte, chacha20poly1305.NonceSizeX)
+	baseNonce := make([]byte, profile.NonceSize())
 	if _, err := io.ReadFull(r, baseNonce); err != nil {
 		return 0, err
 	}
@@ -160,8 +158,11 @@ func decryptionWorker(wg *sync.WaitGroup, jobs <-chan decryptJob, results chan<-
 		copy(nonce, baseNonce)
 		counterBytes := make([]byte, 8)
 		binary.LittleEndian.PutUint64(counterBytes, job.index)
+		
+		// XOR counter into the last 8 bytes of the nonce
+		offset := len(nonce) - 8
 		for i := 0; i < 8; i++ {
-			nonce[16+i] ^= counterBytes[i]
+			nonce[offset+i] ^= counterBytes[i]
 		}
 
 		plaintext, err := aead.Open(nil, nonce, job.data, nil)
@@ -266,8 +267,10 @@ func streamDecryptSequential(r io.Reader, w io.Writer, aead cipher.AEAD, baseNon
 		copy(nonce, baseNonce)
 		counterBytes := make([]byte, 8)
 		binary.LittleEndian.PutUint64(counterBytes, chunkIndex)
+		// XOR counter into the last 8 bytes of the nonce
+		offset := len(nonce) - 8
 		for i := 0; i < 8; i++ {
-			nonce[16+i] ^= counterBytes[i]
+			nonce[offset+i] ^= counterBytes[i]
 		}
 
 		plaintext, err := aead.Open(nil, nonce, ciphertext, nil)

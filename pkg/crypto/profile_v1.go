@@ -22,6 +22,8 @@ func (p *ProfileV1) ID() byte { return 1 }
 
 func (p *ProfileV1) SaltSize() int { return 32 }
 
+func (p *ProfileV1) NonceSize() int { return 24 }
+
 func (p *ProfileV1) DeriveKey(passphrase, salt []byte) []byte {
 	return argon2.IDKey(passphrase, salt, 3, 64*1024, 4, chacha20poly1305.KeySize)
 }

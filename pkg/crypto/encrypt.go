@@ -152,8 +152,10 @@ func encryptionWorker(wg *sync.WaitGroup, jobs <-chan encryptJob, results chan<-
 		copy(nonce, baseNonce)
 		counterBytes := make([]byte, 8)
 		binary.LittleEndian.PutUint64(counterBytes, job.index)
+		// XOR counter into the last 8 bytes of the nonce
+		offset := len(nonce) - 8
 		for i := 0; i < 8; i++ {
-			nonce[16+i] ^= counterBytes[i]
+			nonce[offset+i] ^= counterBytes[i]
 		}
 
 		ciphertext := aead.Seal(nil, nonce, job.data, nil)
@@ -241,8 +243,11 @@ func streamEncryptSequential(r io.Reader, w io.Writer, aead cipher.AEAD, baseNon
 			copy(nonce, baseNonce)
 			counterBytes := make([]byte, 8)
 			binary.LittleEndian.PutUint64(counterBytes, chunkIndex)
+			
+			// XOR counter into the last 8 bytes of the nonce
+			offset := len(nonce) - 8
 			for i := 0; i < 8; i++ {
-				nonce[16+i] ^= counterBytes[i]
+				nonce[offset+i] ^= counterBytes[i]
 			}
 
 			ciphertext := aead.Seal(nil, nonce, buf[:n], nil)
