@@ -32,7 +32,7 @@ func VerifyCmd() *cobra.Command {
 				return fmt.Errorf("signature file not found: %w", err)
 			}
 
-			resolvedPath := crypto.ResolveKeyPath(pubKeyPath)
+			resolvedPath := crypto.ResolveKeyPath(pubKeyPath, "MAKNOON_PUBLIC_KEY")
 			pubKeyBytes, err := os.ReadFile(resolvedPath)
 			if err != nil {
 				return fmt.Errorf("failed to read public key: %w", err)

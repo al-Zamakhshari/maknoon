@@ -2,6 +2,7 @@ package commands
 
 import (
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/a-khallaf/maknoon/pkg/crypto"
@@ -17,6 +18,7 @@ func EncryptCmd() *cobra.Command {
 	var passphrase string
 	var compress bool
 	var concurrency int
+	var quiet bool
 
 	cmd := &cobra.Command{
 		Use:   "encrypt [file/dir]",
@@ -24,43 +26,77 @@ func EncryptCmd() *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
 			inputPath := args[0]
+			var input io.Reader
+			var inputName string
+			var totalSize int64 = -1
+			isDir := false
 
-			stat, err := os.Stat(inputPath)
-			if err != nil {
-				return fmt.Errorf("failed to access input path: %w", err)
+			if inputPath == "-" {
+				input = os.Stdin
+				inputName = "stdin"
+			} else {
+				stat, err := os.Stat(inputPath)
+				if err != nil {
+					return fmt.Errorf("failed to access input path: %w", err)
+				}
+				isDir = stat.IsDir()
+				if isDir {
+					totalSize = 0 // progressbar doesn't like -1 with DefaultBytes
+				} else {
+					totalSize = stat.Size()
+				}
+				inputName = inputPath
+				// Protect will open the file if input is nil
 			}
 
 			outPath := output
-			if outPath == "" {
-				outPath = inputPath + ".makn"
+			var out io.Writer
+			if outPath == "-" {
+				out = os.Stdout
+				quiet = true // Force quiet mode if writing to stdout
+			} else {
+				if outPath == "" {
+					if inputPath == "-" {
+						return fmt.Errorf("output path required when reading from stdin (use -o)")
+					}
+					outPath = inputPath + ".makn"
+				}
+				f, err := os.Create(outPath)
+				if err != nil {
+					return fmt.Errorf("failed to create output file: %w", err)
+				}
+				defer f.Close()
+				out = f
 			}
-			out, err := os.Create(outPath)
-			if err != nil {
-				return fmt.Errorf("failed to create output file: %w", err)
-			}
-			defer out.Close()
 
 			opts := crypto.Options{
 				Compress:    compress,
-				IsArchive:   stat.IsDir(),
+				IsArchive:   isDir,
 				Concurrency: concurrency,
 			}
 
-			// Resolve Public Key if provided
-			if pubKeyPath != "" {
-				resolvedPath := crypto.ResolveKeyPath(pubKeyPath)
+			// Resolve Public Key if provided or in env
+			resolvedPath := crypto.ResolveKeyPath(pubKeyPath, "MAKNOON_PUBLIC_KEY")
+			if resolvedPath != "" {
 				pk, err := os.ReadFile(resolvedPath)
-				if err != nil {
+				if err != nil && pubKeyPath != "" {
 					return err
 				}
-				opts.PublicKey = pk
-			} else {
+				if err == nil {
+					opts.PublicKey = pk
+				}
+			}
+
+			if len(opts.PublicKey) == 0 {
 				// Handle Passphrase
 				if passphrase != "" {
 					opts.Passphrase = []byte(passphrase)
 				} else if env := os.Getenv("MAKNOON_PASSPHRASE"); env != "" {
 					opts.Passphrase = []byte(env)
 				} else {
+					if inputPath == "-" {
+						return fmt.Errorf("passphrase required via MAKNOON_PASSPHRASE or -s when reading from stdin")
+					}
 					fmt.Print("Enter passphrase: ")
 					p, err := term.ReadPassword(int(os.Stdin.Fd()))
 					fmt.Println()
@@ -85,24 +121,23 @@ func EncryptCmd() *cobra.Command {
 				}
 			}()
 
-			fmt.Printf("Protecting '%s'...\n", inputPath)
-
-			// Progress wrapping (tracking the INPUT size is always accurate)
-			totalSize := stat.Size()
-			if stat.IsDir() {
-				totalSize = -1
+			if !quiet && totalSize > 0 {
+				fmt.Printf("Protecting '%s'...\n", inputName)
+				bar := progressbar.DefaultBytes(totalSize, "preserving")
+				opts.ProgressReader = bar
+			} else if !quiet {
+				fmt.Printf("Protecting '%s'...\n", inputName)
 			}
-			bar := progressbar.DefaultBytes(totalSize, "preserving")
-			opts.ProgressReader = bar
 
-			return crypto.Protect(inputPath, out, opts)
+			return crypto.Protect(inputName, input, out, opts)
 		},
 	}
 
-	cmd.Flags().StringVarP(&output, "output", "o", "", "Output file path")
+	cmd.Flags().StringVarP(&output, "output", "o", "", "Output file path (use - for stdout)")
 	cmd.Flags().StringVarP(&pubKeyPath, "public-key", "p", "", "Path to the recipient's public key")
 	cmd.Flags().StringVarP(&passphrase, "passphrase", "s", "", "Passphrase for symmetric encryption")
 	cmd.Flags().BoolVarP(&compress, "compress", "c", false, "Enable Zstd compression")
 	cmd.Flags().IntVarP(&concurrency, "concurrency", "j", 0, "Number of parallel workers (0 for auto)")
+	cmd.Flags().BoolVarP(&quiet, "quiet", "q", false, "Suppress progress bars and informational messages")
 	return cmd
 }

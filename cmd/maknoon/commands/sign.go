@@ -25,9 +25,9 @@ func SignCmd() *cobra.Command {
 				return err
 			}
 
-			resolvedPath := crypto.ResolveKeyPath(sigKeyPath)
+			resolvedPath := crypto.ResolveKeyPath(sigKeyPath, "MAKNOON_PRIVATE_KEY")
 			if resolvedPath == "" {
-				return fmt.Errorf("signing key required (use --private-key)")
+				return fmt.Errorf("signing key required (use --private-key or MAKNOON_PRIVATE_KEY)")
 			}
 
 			keyBytes, err := os.ReadFile(resolvedPath)

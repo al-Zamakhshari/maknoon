@@ -21,9 +21,9 @@ type Options struct {
 	ProgressReader io.Reader // Optional reader to track progress
 }
 
-// Protect handles the full encryption pipeline for a file or directory.
-func Protect(inputPath string, w io.Writer, opts Options) error {
-	var sourceReader io.Reader
+// Protect handles the full encryption pipeline for a source (file, directory, or reader).
+func Protect(inputName string, r io.Reader, w io.Writer, opts Options) error {
+	var sourceReader io.Reader = r
 	var flags byte
 
 	if opts.IsArchive {
@@ -32,8 +32,9 @@ func Protect(inputPath string, w io.Writer, opts Options) error {
 		sourceReader = pr
 		go func() {
 			tw := tar.NewWriter(pw)
-			baseDir := filepath.Dir(filepath.Clean(inputPath))
-			err := filepath.Walk(inputPath, func(path string, info os.FileInfo, err error) error {
+			// For archives, we still need to walk the inputName if it's a directory
+			baseDir := filepath.Dir(filepath.Clean(inputName))
+			err := filepath.Walk(inputName, func(path string, info os.FileInfo, err error) error {
 				if err != nil {
 					return err
 				}
@@ -63,8 +64,8 @@ func Protect(inputPath string, w io.Writer, opts Options) error {
 			tw.Close()
 			pw.CloseWithError(err)
 		}()
-	} else {
-		f, err := os.Open(inputPath)
+	} else if sourceReader == nil {
+		f, err := os.Open(inputName)
 		if err != nil {
 			return err
 		}

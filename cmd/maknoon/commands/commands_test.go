@@ -68,13 +68,13 @@ func TestResolveKeyPath(t *testing.T) {
 	tmpFile, _ := os.CreateTemp("", "testkey")
 	defer os.Remove(tmpFile.Name())
 
-	resolved := resolveKeyPath(tmpFile.Name())
+	resolved := resolveKeyPath(tmpFile.Name(), "")
 	if resolved != tmpFile.Name() {
 		t.Errorf("Expected %s, got %s", tmpFile.Name(), resolved)
 	}
 
 	// Test non-existing path fallback
-	resolved = resolveKeyPath("non-existent-key-file")
+	resolved = resolveKeyPath("non-existent-key-file", "")
 	if resolved != "non-existent-key-file" {
 		t.Errorf("Expected fallback to original, got %s", resolved)
 	}

@@ -44,7 +44,7 @@ func TestProtectExtractRoundTrip(t *testing.T) {
 		Passphrase: passphrase,
 		Compress:   true,
 	}
-	if err := Protect(inputFile, out, opts); err != nil {
+	if err := Protect(inputFile, nil, out, opts); err != nil {
 		t.Fatalf("Protect failed: %v", err)
 	}
 	out.Close()
@@ -77,7 +77,7 @@ func TestProtectExtractRoundTrip(t *testing.T) {
 		IsArchive:  true,
 		Compress:   false,
 	}
-	if err := Protect(srcDir, outArch, optsArch); err != nil {
+	if err := Protect(srcDir, nil, outArch, optsArch); err != nil {
 		t.Fatalf("Protect archive failed: %v", err)
 	}
 	outArch.Close()
@@ -129,14 +129,14 @@ func TestResolveKeyPath(t *testing.T) {
 	testFile := filepath.Join(tmpDir, "test.key")
 	os.WriteFile(testFile, []byte("key"), 0644)
 
-	resolved := ResolveKeyPath(testFile)
+	resolved := ResolveKeyPath(testFile, "")
 	if resolved != testFile {
 		t.Errorf("Expected %s, got %s", testFile, resolved)
 	}
 
 	// Non-existent path should return as is
 	nonExistent := "non-existent.key"
-	resolved = ResolveKeyPath(nonExistent)
+	resolved = ResolveKeyPath(nonExistent, "")
 	if resolved != nonExistent {
 		t.Errorf("Expected %s, got %s", nonExistent, resolved)
 	}

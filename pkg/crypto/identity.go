@@ -14,18 +14,33 @@ const (
 	VaultsDir = "vaults"
 )
 
-// ResolveKeyPath checks if a key exists locally, and if not, looks in ~/.maknoon/keys/
-func ResolveKeyPath(path string) string {
-	if _, err := os.Stat(path); err == nil {
-		return path
+// ResolveKeyPath checks if a key exists locally, in ~/.maknoon/keys/, or in environment variables.
+func ResolveKeyPath(path string, envVar string) string {
+	// 1. Check if provided path is actually a path to a file
+	if path != "" {
+		if _, err := os.Stat(path); err == nil {
+			return path
+		}
+		// 2. Check in ~/.maknoon/keys/
+		home, _ := os.UserHomeDir()
+		maknoonPath := filepath.Join(home, MaknoonDir, KeysDir, path)
+		if _, err := os.Stat(maknoonPath); err == nil {
+			return maknoonPath
+		}
 	}
-	// Check in ~/.maknoon/keys/
-	home, _ := os.UserHomeDir()
-	maknoonPath := filepath.Join(home, MaknoonDir, KeysDir, path)
-	if _, err := os.Stat(maknoonPath); err == nil {
-		return maknoonPath
+
+	// 3. If path is empty or not found, check environment variable
+	if envVar != "" {
+		if env := os.Getenv(envVar); env != "" {
+			// If it's a path, return it. If it's the key content itself, we might need to handle it.
+			// For now, assume it's a path.
+			if _, err := os.Stat(env); err == nil {
+				return env
+			}
+		}
 	}
-	return path // Fallback to original
+
+	return path // Fallback
 }
 
 // GetDefaultVaultPath returns the path to the default vault file.
