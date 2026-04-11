@@ -19,6 +19,8 @@ func KeygenCmd() *cobra.Command {
 	var noPassword bool
 	var passphrase string
 	var useFido2 bool
+	var profile int
+	var profileFile string
 
 	cmd := &cobra.Command{
 		Use:   "keygen",
@@ -27,6 +29,22 @@ func KeygenCmd() *cobra.Command {
 			var fido2Meta *crypto.Fido2Metadata
 			var password []byte
 			var err error
+
+			if profileFile != "" {
+				raw, err := os.ReadFile(profileFile)
+				if err != nil {
+					return fmt.Errorf("failed to read profile file: %w", err)
+				}
+				var dp crypto.DynamicProfile
+				if err := json.Unmarshal(raw, &dp); err != nil {
+					return fmt.Errorf("invalid profile format: %w", err)
+				}
+				if err := dp.Validate(); err != nil {
+					return fmt.Errorf("invalid profile parameters: %w", err)
+				}
+				crypto.RegisterProfile(&dp)
+				profile = int(dp.ID())
+			}
 
 			if useFido2 {
 				meta, secret, err := crypto.Fido2Enroll("maknoon.io", "keygen-user")
@@ -58,7 +76,7 @@ func KeygenCmd() *cobra.Command {
 			}()
 
 			basePath, baseName := resolveBaseKeyPath(output)
-			if err := writeIdentityKeys(basePath, baseName, kemPub, kemPriv, sigPub, sigPriv, password); err != nil {
+			if err := writeIdentityKeys(basePath, baseName, kemPub, kemPriv, sigPub, sigPriv, password, byte(profile)); err != nil {
 				return err
 			}
 
@@ -74,6 +92,8 @@ func KeygenCmd() *cobra.Command {
 	cmd.Flags().BoolVarP(&noPassword, "no-password", "n", false, "Generate unprotected keys (automation mode)")
 	cmd.Flags().StringVarP(&passphrase, "passphrase", "s", "", "Passphrase to protect the keys")
 	cmd.Flags().BoolVarP(&useFido2, "fido2", "f", false, "Use FIDO2 security key to protect the private keys")
+	cmd.Flags().IntVar(&profile, "profile", 0, "Cryptographic profile ID to protect the keys")
+	cmd.Flags().StringVar(&profileFile, "profile-file", "", "Path to a custom profile JSON file to protect the keys")
 	return cmd
 }
 
@@ -125,12 +145,12 @@ func resolveBaseKeyPath(output string) (string, string) {
 	return basePath, baseName
 }
 
-func writeIdentityKeys(basePath, baseName string, kemPub, kemPriv, sigPub, sigPriv, password []byte) error {
+func writeIdentityKeys(basePath, baseName string, kemPub, kemPriv, sigPub, sigPriv, password []byte, profileID byte) error {
 	writeKey := func(path string, data []byte, isPrivate bool) error {
 		finalData := data
 		if isPrivate && len(password) > 0 {
 			var b bytes.Buffer
-			if err := crypto.EncryptStream(bytes.NewReader(data), &b, password, crypto.FlagNone, 1, 0); err != nil {
+			if err := crypto.EncryptStream(bytes.NewReader(data), &b, password, crypto.FlagNone, 1, profileID); err != nil {
 				return err
 			}
 			finalData = b.Bytes()

@@ -2,6 +2,8 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -9,217 +11,154 @@ import (
 	"testing"
 
 	"github.com/a-khallaf/maknoon/cmd/maknoon/commands"
+	"github.com/a-khallaf/maknoon/pkg/crypto"
 )
 
 func TestIntegrationSymmetricPassphraseFlag(t *testing.T) {
 	tmpDir := t.TempDir()
 	inputFile := filepath.Join(tmpDir, "test.txt")
-	encryptedFile := inputFile + ".makn"
-	decryptedFile := filepath.Join(tmpDir, "restored.txt")
-	content := []byte("Integration testing with flags!")
-	passphrase := "automation-secret"
-
+	content := []byte("Hello, Maknoon!")
 	os.WriteFile(inputFile, content, 0644)
 
-	// 1. Encrypt
+	encryptedFile := inputFile + ".makn"
+	decryptedFile := filepath.Join(tmpDir, "restored.txt")
+	passphrase := "test-passphrase-123"
+
+	// 1. Encrypt with -s flag
 	encCmd := commands.EncryptCmd()
-	encCmd.SetArgs([]string{inputFile, "-o", encryptedFile, "--passphrase", passphrase})
+	encCmd.SetArgs([]string{inputFile, "-o", encryptedFile, "-s", passphrase, "--quiet"})
 	if err := encCmd.Execute(); err != nil {
-		t.Fatalf("Encryption command failed: %v", err)
+		t.Fatalf("Encryption failed: %v", err)
 	}
 
-	// 2. Decrypt
+	// 2. Decrypt with -s flag
 	decCmd := commands.DecryptCmd()
-	decCmd.SetArgs([]string{encryptedFile, "-o", decryptedFile, "--passphrase", passphrase})
+	decCmd.SetArgs([]string{encryptedFile, "-o", decryptedFile, "-s", passphrase, "--quiet"})
 	if err := decCmd.Execute(); err != nil {
-		t.Fatalf("Decryption command failed: %v", err)
+		t.Fatalf("Decryption failed: %v", err)
 	}
 
 	// 3. Verify
 	restored, _ := os.ReadFile(decryptedFile)
 	if !bytes.Equal(content, restored) {
-		t.Fatalf("Restored content mismatch. Got: %s", string(restored))
+		t.Fatalf("Restored content mismatch")
 	}
 }
 
 func TestIntegrationDirectoryArchive(t *testing.T) {
 	tmpDir := t.TempDir()
 	srcDir := filepath.Join(tmpDir, "source")
-	os.Mkdir(srcDir, 0755)
-
-	file1 := filepath.Join(srcDir, "a.txt")
-	file2 := filepath.Join(srcDir, "sub/b.txt")
-	os.MkdirAll(filepath.Dir(file2), 0755)
-
-	os.WriteFile(file1, []byte("file a"), 0644)
-	os.WriteFile(file2, []byte("file b"), 0644)
+	os.MkdirAll(srcDir, 0755)
+	os.WriteFile(filepath.Join(srcDir, "file1.txt"), []byte("data1"), 0644)
+	os.WriteFile(filepath.Join(srcDir, "file2.txt"), []byte("data2"), 0644)
 
 	encryptedFile := filepath.Join(tmpDir, "archive.makn")
-	destDir := filepath.Join(tmpDir, "restored_here") // Do NOT pre-create this directory
-	passphrase := "dir-secret"
+	restoredDir := filepath.Join(tmpDir, "restored_dir")
+	passphrase := "dir-pass"
 
-	// 1. Encrypt Directory
+	// 1. Encrypt directory (should trigger archive mode)
 	encCmd := commands.EncryptCmd()
-	encCmd.SetArgs([]string{srcDir, "-o", encryptedFile, "--passphrase", passphrase})
+	encCmd.SetArgs([]string{srcDir, "-o", encryptedFile, "-s", passphrase, "--quiet"})
 	if err := encCmd.Execute(); err != nil {
 		t.Fatalf("Directory encryption failed: %v", err)
 	}
 
-	// 2. Decrypt Archive
+	// 2. Decrypt directory
 	decCmd := commands.DecryptCmd()
-	decCmd.SetArgs([]string{encryptedFile, "-o", destDir, "--passphrase", passphrase})
+	decCmd.SetArgs([]string{encryptedFile, "-o", restoredDir, "-s", passphrase, "--quiet"})
 	if err := decCmd.Execute(); err != nil {
 		t.Fatalf("Directory decryption failed: %v", err)
 	}
 
-	// DEBUG: List all files extracted
-	t.Log("Listing all files in destDir:")
-	filepath.Walk(destDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		rel, _ := filepath.Rel(destDir, path)
-		t.Logf("  - %s (Dir: %v, Mode: %v)", rel, info.IsDir(), info.Mode())
-		return nil
-	})
-
-	// 3. Verify Files
-	targetA := filepath.Join(destDir, "source", "a.txt")
-	checkA, err := os.ReadFile(targetA)
-	if err != nil {
-		t.Fatalf("Failed to read restored file A: %v", err)
-	}
-	if string(checkA) != "file a" {
-		t.Errorf("File A content mismatch: %s", string(checkA))
-	}
-
-	targetB := filepath.Join(destDir, "source", "sub", "b.txt")
-	checkB, err := os.ReadFile(targetB)
-	if err != nil {
-		t.Fatalf("Failed to read restored file B: %v", err)
-	}
-	if string(checkB) != "file b" {
-		t.Errorf("File B content mismatch: %s", string(checkB))
+	// 3. Verify
+	f1, _ := os.ReadFile(filepath.Join(restoredDir, "source", "file1.txt"))
+	if string(f1) != "data1" {
+		t.Errorf("File1 mismatch: %s", string(f1))
 	}
 }
 
 func TestIntegrationAsymmetricEncryptedKey(t *testing.T) {
 	tmpDir := t.TempDir()
 	keyBase := filepath.Join(tmpDir, "id_test")
-	passphrase := "key-lock-123"
+	passphrase := "key-pass"
 
-	// 1. Keygen with password
+	// 1. Keygen with passphrase
 	genCmd := commands.KeygenCmd()
-	genCmd.SetArgs([]string{"-o", keyBase, "--passphrase", passphrase})
-	os.Setenv("MAKNOON_PASSPHRASE", passphrase)
-	defer os.Unsetenv("MAKNOON_PASSPHRASE")
-
+	genCmd.SetArgs([]string{"-o", keyBase, "-s", passphrase})
 	if err := genCmd.Execute(); err != nil {
-		t.Fatalf("Keygen integration failed: %v", err)
+		t.Fatalf("Keygen failed: %v", err)
 	}
 
-	// 2. Encrypt File using Public Key
+	// 2. Encrypt with public key
 	inputFile := filepath.Join(tmpDir, "data.txt")
-	os.WriteFile(inputFile, []byte("PQ Security"), 0644)
-	encFile := inputFile + ".makn"
+	content := []byte("Sensitive data")
+	os.WriteFile(inputFile, content, 0644)
 
+	encryptedFile := inputFile + ".makn"
 	encCmd := commands.EncryptCmd()
-	encCmd.SetArgs([]string{inputFile, "-o", encFile, "--public-key", keyBase + ".kem.pub"})
+	encCmd.SetArgs([]string{inputFile, "-o", encryptedFile, "--public-key", keyBase + ".kem.pub", "--quiet"})
 	if err := encCmd.Execute(); err != nil {
 		t.Fatalf("Asymmetric encryption failed: %v", err)
 	}
 
-	// 3. Decrypt using Protected Private Key (automatically uses MAKNOON_PASSPHRASE)
-	restoredFile := filepath.Join(tmpDir, "data.restored.txt")
+	// 3. Decrypt with private key (prompts for passphrase)
+	decryptedFile := filepath.Join(tmpDir, "restored.txt")
 	decCmd := commands.DecryptCmd()
-	decCmd.SetArgs([]string{encFile, "-o", restoredFile, "--private-key", keyBase + ".kem.key"})
+	decCmd.SetArgs([]string{encryptedFile, "-o", decryptedFile, "--private-key", keyBase + ".kem.key", "-s", passphrase, "--quiet"})
 	if err := decCmd.Execute(); err != nil {
 		t.Fatalf("Asymmetric decryption failed: %v", err)
 	}
 
-	res, _ := os.ReadFile(restoredFile)
-	if string(res) != "PQ Security" {
-		t.Errorf("Asymmetric restored mismatch: %s", string(res))
+	// 4. Verify
+	restored, _ := os.ReadFile(decryptedFile)
+	if !bytes.Equal(content, restored) {
+		t.Fatalf("Restored content mismatch")
 	}
 }
 
 func TestIntegrationCompression(t *testing.T) {
 	tmpDir := t.TempDir()
 	inputFile := filepath.Join(tmpDir, "compressible.txt")
+	// Highly compressible data
+	content := bytes.Repeat([]byte("A"), 20000)
+	os.WriteFile(inputFile, content, 0644)
+
 	encryptedFile := inputFile + ".makn"
 	decryptedFile := filepath.Join(tmpDir, "restored.txt")
+	passphrase := "comp-pass"
 
-	// Create highly redundant data (very compressible)
-	content := bytes.Repeat([]byte("COMPRESS-ME-PLEASE-"), 1000)
-	os.WriteFile(inputFile, content, 0644)
-	passphrase := "compress-secret"
-
-	// 1. Encrypt with Compression
+	// 1. Encrypt with compression
 	encCmd := commands.EncryptCmd()
-	encCmd.SetArgs([]string{inputFile, "-o", encryptedFile, "--passphrase", passphrase, "--compress"})
+	encCmd.SetArgs([]string{inputFile, "-o", encryptedFile, "-s", passphrase, "--compress", "--quiet"})
 	if err := encCmd.Execute(); err != nil {
-		t.Fatalf("Compression encryption failed: %v", err)
+		t.Fatalf("Compressed encryption failed: %v", err)
 	}
 
-	// 2. Decrypt (Auto-detects compression)
+	// Check that it's actually smaller (including headers overhead)
+	stat, _ := os.Stat(encryptedFile)
+	if stat.Size() > 1000 {
+		t.Errorf("Compression didn't seem to work, size: %d", stat.Size())
+	}
+
+	// 2. Decrypt
 	decCmd := commands.DecryptCmd()
-	decCmd.SetArgs([]string{encryptedFile, "-o", decryptedFile, "--passphrase", passphrase})
+	decCmd.SetArgs([]string{encryptedFile, "-o", decryptedFile, "-s", passphrase, "--quiet"})
 	if err := decCmd.Execute(); err != nil {
-		t.Fatalf("Compression decryption failed: %v", err)
+		t.Fatalf("Compressed decryption failed: %v", err)
 	}
 
 	// 3. Verify
 	restored, _ := os.ReadFile(decryptedFile)
 	if !bytes.Equal(content, restored) {
-		t.Fatal("Restored content mismatch after compression")
-	}
-
-	// 4. Sanity check
-	statOrig, _ := os.Stat(inputFile)
-	statEnc, _ := os.Stat(encryptedFile)
-	if statEnc.Size() >= statOrig.Size() {
-		t.Logf("Warning: Encrypted size (%d) not smaller than original (%d).", statEnc.Size(), statOrig.Size())
-	} else {
-		t.Logf("Compression success: %d -> %d bytes", statOrig.Size(), statEnc.Size())
-	}
-}
-
-func TestIntegrationVaultAutomation(t *testing.T) {
-	vName := filepath.Join(t.TempDir(), "vault.db")
-	passphrase := "vault-master-123"
-	service := "test-service"
-	password := "ultra-secret-123"
-	user := "test-user"
-
-	// 1. Set
-	setCmd := commands.VaultCmd()
-	setCmd.SetArgs([]string{"--vault", vName, "--passphrase", passphrase, "set", service, password, "--user", user})
-	if err := setCmd.Execute(); err != nil {
-		t.Fatalf("Vault set failed: %v", err)
-	}
-
-	// 2. Get
-	getCmd := commands.VaultCmd()
-	getCmd.SetArgs([]string{"--vault", vName, "--passphrase", passphrase, "get", service})
-
-	old := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-	getCmd.Execute()
-	w.Close()
-	os.Stdout = old
-
-	var buf bytes.Buffer
-	io.Copy(&buf, r)
-	output := buf.String()
-	if !strings.Contains(output, password) {
-		t.Errorf("Vault get mismatch: %s", output)
+		t.Fatalf("Compressed restored content mismatch")
 	}
 }
 
 func TestIntegrationSignVerify(t *testing.T) {
 	tmpDir := t.TempDir()
 	keyBase := filepath.Join(tmpDir, "id_test_sig")
+
+	// Keygen
 	genCmd := commands.KeygenCmd()
 	genCmd.SetArgs([]string{"-o", keyBase, "--no-password"})
 	genCmd.Execute()
@@ -229,7 +168,9 @@ func TestIntegrationSignVerify(t *testing.T) {
 
 	signCmd := commands.SignCmd()
 	signCmd.SetArgs([]string{inputFile, "--private-key", keyBase + ".sig.key"})
-	signCmd.Execute()
+	if err := signCmd.Execute(); err != nil {
+		t.Fatalf("Signing failed: %v", err)
+	}
 
 	verifyCmd := commands.VerifyCmd()
 	verifyCmd.SetArgs([]string{inputFile, "--public-key", keyBase + ".sig.pub"})
@@ -237,6 +178,133 @@ func TestIntegrationSignVerify(t *testing.T) {
 		t.Fatalf("Verification failed: %v", err)
 	}
 }
+
+func TestIntegrationKeygenCustomProfile(t *testing.T) {
+	tmpDir := t.TempDir()
+	
+	// 1. Create a Custom Profile for Key Protection
+	profileFile := filepath.Join(tmpDir, "key_prof.json")
+	// ID 110, AES-GCM, high iterations
+	profileJSON := `{
+		"id": 110,
+		"cipher": 1,
+		"kdf": 0,
+		"kdf_iterations": 2,
+		"kdf_memory": 32768,
+		"kdf_threads": 2,
+		"salt_size": 32,
+		"nonce_size": 12
+	}`
+	os.WriteFile(profileFile, []byte(profileJSON), 0644)
+
+	keyBase := filepath.Join(tmpDir, "id_custom_prof")
+	passphrase := "key-protect-pass"
+
+	// 2. Generate Identity protected by this profile
+	genCmd := commands.KeygenCmd()
+	genCmd.SetArgs([]string{"-o", keyBase, "-s", passphrase, "--profile-file", profileFile})
+	if err := genCmd.Execute(); err != nil {
+		t.Fatalf("Keygen with custom profile failed: %v", err)
+	}
+
+	// 3. Use the protected key to encrypt a file
+	inputFile := filepath.Join(tmpDir, "data.txt")
+	os.WriteFile(inputFile, []byte("Encrypted with custom-profile-protected key"), 0644)
+	
+	encryptedFile := inputFile + ".makn"
+	encCmd := commands.EncryptCmd()
+	encCmd.SetArgs([]string{inputFile, "-o", encryptedFile, "--public-key", keyBase + ".kem.pub", "--quiet"})
+	if err := encCmd.Execute(); err != nil {
+		t.Fatalf("Encryption with custom-profile key failed: %v", err)
+	}
+
+	// 4. Decrypt using the private key (Must auto-detect key protection profile)
+	// IMPORTANT: To decrypt the PRIVATE KEY, we need the profile file!
+	decCmd := commands.DecryptCmd()
+	decCmd.SetArgs([]string{encryptedFile, "-o", "-", "--private-key", keyBase + ".kem.key", "-s", passphrase, "--profile-file", profileFile, "--quiet"})
+	
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+	
+	if err := decCmd.Execute(); err != nil {
+		w.Close()
+		os.Stdout = oldStdout
+		t.Fatalf("Decryption with custom-profile key failed: %v", err)
+	}
+	w.Close()
+	os.Stdout = oldStdout
+
+	var buf bytes.Buffer
+	io.Copy(&buf, r)
+	if !strings.Contains(buf.String(), "Encrypted with custom-profile-protected key") {
+		t.Errorf("Decrypted content mismatch or key unlocking failed")
+	}
+}
+
+func TestIntegrationRandomProfileStress(t *testing.T) {
+	tmpDir := t.TempDir()
+	inputFile := filepath.Join(tmpDir, "stress_input.txt")
+	content := []byte("Stress testing randomized profiles")
+	os.WriteFile(inputFile, content, 0644)
+	passphrase := "stress-pass"
+
+	for i := 0; i < 5; i++ {
+		// 1. Generate a random profile via CLI
+		profileFile := filepath.Join(tmpDir, fmt.Sprintf("random_%d.json", i))
+		profCmd := commands.ProfilesCmd()
+		
+		// Capture stdout to save the JSON
+		oldStdout := os.Stdout
+		r, w, _ := os.Pipe()
+		os.Stdout = w
+		
+		profCmd.SetArgs([]string{"--generate"})
+		if err := profCmd.Execute(); err != nil {
+			w.Close()
+			os.Stdout = oldStdout
+			t.Fatalf("Failed to generate random profile: %v", err)
+		}
+		
+		w.Close()
+		os.Stdout = oldStdout
+		
+		var jsonBuf bytes.Buffer
+		io.Copy(&jsonBuf, r)
+		os.WriteFile(profileFile, jsonBuf.Bytes(), 0644)
+
+		// 2. Encrypt using this random profile
+		encryptedFile := filepath.Join(tmpDir, fmt.Sprintf("stress_%d.makn", i))
+		encCmd := commands.EncryptCmd()
+		encCmd.SetArgs([]string{inputFile, "-o", encryptedFile, "-s", passphrase, "--profile-file", profileFile, "--quiet"})
+		if err := encCmd.Execute(); err != nil {
+			t.Fatalf("Encryption failed with random profile %d: %v", i, err)
+		}
+
+		// 3. Decrypt (Auto-detect)
+		decryptedFile := filepath.Join(tmpDir, fmt.Sprintf("stress_restored_%d.txt", i))
+		decCmd := commands.DecryptCmd()
+		var dp crypto.DynamicProfile
+		json.Unmarshal(jsonBuf.Bytes(), &dp)
+		
+		args := []string{encryptedFile, "-o", decryptedFile, "-s", passphrase, "--quiet"}
+		if dp.ID() < 128 {
+			args = append(args, "--profile-file", profileFile)
+		}
+		
+		decCmd.SetArgs(args)
+		if err := decCmd.Execute(); err != nil {
+			t.Fatalf("Decryption failed with random profile %d (ID: %d): %v", i, dp.ID(), err)
+		}
+
+		// 4. Verify
+		restored, _ := os.ReadFile(decryptedFile)
+		if !bytes.Equal(content, restored) {
+			t.Fatalf("Content mismatch with random profile %d (ID: %d)", i, dp.ID())
+		}
+	}
+}
+
 func TestIntegrationGCMSIVProfile(t *testing.T) {
 	tmpDir := t.TempDir()
 

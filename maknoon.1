@@ -12,7 +12,7 @@ The tool is built with a 64KB chunk-based streaming architecture, ensuring a con
 .SH COMMANDS
 .TP
 .B keygen
-Generate a full Post-Quantum identity (Encryption + Signing keys). Keys are protected by an Argon2id-derived master key.
+Generate a full Post-Quantum identity (Encryption + Signing keys). Keys are protected by an Argon2id-derived master key. Supports \-\-profile and \-\-profile-file to customize the protection suite.
 .TP
 .B encrypt [file/dir]
 Encrypt a file or directory. If a directory is provided, it is streamed through a TAR encoder and encrypted on-the-fly. Supports \-\-compress (Zstd) and \-\-public-key (ML-KEM).
