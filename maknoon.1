@@ -8,7 +8,7 @@ maknoon \- Versatile, ultra-efficient Post-Quantum CLI encryption tool.
 Maknoon (مكنون) is a high-performance encryption tool designed for a post-quantum world. 
 It utilizes ML-KEM (Kyber1024) for encryption, ML-DSA (Dilithium87) for signatures, and XChaCha20-Poly1305 for streaming data integrity.
 .PP
-The tool is built with a 64KB chunk-based streaming architecture, ensuring a constant memory footprint regardless of file size. It strictly adheres to memory hygiene by explicitly zeroing out sensitive data immediately after use.
+The tool is built with a 64KB chunk-based streaming architecture, ensuring a constant memory footprint regardless of file size. It features multi-core parallelism for high-speed processing and supports hardware-backed security keys (FIDO2) via a 100% Pure Go implementation. It strictly adheres to memory hygiene by explicitly zeroing out sensitive data immediately after use.
 .SH COMMANDS
 .TP
 .B keygen
@@ -47,6 +47,12 @@ Enable Zstd compression before encryption.
 .TP
 .B \-o, \-\-output
 Specify the output file path or directory.
+.TP
+.B \-j, \-\-concurrency
+Specify the number of parallel workers for chunk processing (0 for auto-scale, 1 for sequential).
+.TP
+.B \-f, \-\-fido2
+Use a FIDO2 hardware security key (e.g., YubiKey) for authentication and key derivation.
 .SH SECURITY RATIONALE
 .TP
 .B XChaCha20-Poly1305

@@ -16,6 +16,8 @@ Maknoon is a versatile, ultra-efficient CLI encryption tool designed for a post-
 4.  **Authenticated Encryption (XChaCha20-Poly1305):** We chose XChaCha20-Poly1305 over AES-GCM for its superior performance in software-only environments and its resilience against nonce-misuse (due to its 192-bit extended nonce). Every chunk is independently authenticated, ensuring that any bit of corruption is detected immediately.
 5.  **Transparent Directory Support:** Maknoon treats directories as first-class citizens. By integrating a **streaming TAR encoder** into the cryptographic pipeline, it encrypts entire directory trees on-the-fly without creating intermediate unencrypted temporary files.
 6.  **High-Speed Compression:** Optional **Zstd** integration provides industry-leading compression ratios and speeds, perfectly suited for the streaming nature of the tool.
+7.  **Multi-Core Parallelism:** Maknoon can parallelize chunk encryption and decryption across all available CPU cores using a high-performance worker pool, significantly reducing processing time for massive files without compromising data order.
+8.  **Hardware-Backed Security (CGO-Free):** Maknoon supports FIDO2 security keys (like YubiKey) for hardware-backed master keys. Our implementation is **100% Pure Go**, ensuring seamless portability without external C dependencies.
 
 ---
 
@@ -55,6 +57,9 @@ Generate a full Post-Quantum identity (Encryption + Signing keys). By default, t
 ```bash
 # Generates id_identity.kem.{key,pub} and id_identity.sig.{key,pub}
 ./maknoon keygen -o id_identity
+
+# Protect your identity with a physical security key (YubiKey)
+./maknoon keygen --fido2 -o secure_id
 ```
 
 ### 2. Encryption & Signing
@@ -62,7 +67,8 @@ Generate a full Post-Quantum identity (Encryption + Signing keys). By default, t
 **Symmetric Mode (Passphrase):**
 Uses Argon2id for key derivation and XChaCha20-Poly1305 for encryption.
 ```bash
-./maknoon encrypt sensitive_report.pdf
+# Parallelize across all cores for maximum speed
+./maknoon encrypt sensitive_report.pdf --concurrency 0
 ```
 
 **Asymmetric Mode (Public Key):**
@@ -82,10 +88,12 @@ Provides non-repudiation using ML-DSA-87 (Dilithium).
 ```
 
 ### 3. Password Vault
-Securely store and retrieve credentials in a quantum-resistant database. The vault itself is protected by an Argon2id-derived master key.
+Securely store and retrieve credentials in a quantum-resistant database. The vault itself is protected by an Argon2id-derived master key or a hardware secret.
 
 ```bash
-./maknoon vault set github.com --user myname
+# Tie your vault to your physical YubiKey
+./maknoon vault --fido2 set github.com --user myname
+
 ./maknoon vault get github.com
 ./maknoon vault list
 ```
