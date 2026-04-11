@@ -13,15 +13,23 @@ import (
 // ProfilesCmd returns the cobra command for listing or generating cryptographic profiles.
 func ProfilesCmd() *cobra.Command {
 	var generate bool
+	var secret bool
 
 	cmd := &cobra.Command{
 		Use:   "profiles",
 		Short: "List built-in profiles or generate a random custom profile",
 		Run: func(_ *cobra.Command, _ []string) {
 			if generate {
-				// Random ID between 128 and 255 for portability by default
-				r, _ := rand.Int(rand.Reader, big.NewInt(128))
-				id := 128 + byte(r.Uint64())
+				var id byte
+				if secret {
+					// Secret ID between 3 and 127
+					r, _ := rand.Int(rand.Reader, big.NewInt(125))
+					id = 3 + byte(r.Uint64())
+				} else {
+					// Portable ID between 128 and 255
+					r, _ := rand.Int(rand.Reader, big.NewInt(128))
+					id = 128 + byte(r.Uint64())
+				}
 
 				dp := crypto.GenerateRandomProfile(id)
 				raw, _ := json.MarshalIndent(dp, "", "  ")
@@ -62,5 +70,6 @@ func ProfilesCmd() *cobra.Command {
 	}
 
 	cmd.Flags().BoolVarP(&generate, "generate", "g", false, "Generate a random secure custom profile JSON")
+	cmd.Flags().BoolVar(&secret, "secret", false, "Generate a 'Secret' profile (ID < 128) instead of a 'Portable' one")
 	return cmd
 }
