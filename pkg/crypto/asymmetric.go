@@ -1,3 +1,5 @@
+// Package crypto provides the core cryptographic primitives and streaming
+// encryption logic for Maknoon.
 package crypto
 
 import (

@@ -135,21 +135,7 @@ func streamEncrypt(r io.Reader, w io.Writer, aead cipher.AEAD, baseNonce []byte,
 	// Workers
 	for i := 0; i < concurrency; i++ {
 		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for job := range jobs {
-				nonce := make([]byte, aead.NonceSize())
-				copy(nonce, baseNonce)
-				counterBytes := make([]byte, 8)
-				binary.LittleEndian.PutUint64(counterBytes, job.index)
-				for i := 0; i < 8; i++ {
-					nonce[16+i] ^= counterBytes[i]
-				}
-
-				ciphertext := aead.Seal(nil, nonce, job.data, nil)
-				results <- encryptResult{index: job.index, data: ciphertext}
-			}
-		}()
+		go encryptionWorker(&wg, jobs, results, aead, baseNonce)
 	}
 
 	// Closer
@@ -160,27 +146,49 @@ func streamEncrypt(r io.Reader, w io.Writer, aead cipher.AEAD, baseNonce []byte,
 
 	// Reader
 	errChan := make(chan error, 1)
-	go func() {
-		defer close(jobs)
-		chunkIndex := uint64(0)
-		for {
-			buf := make([]byte, ChunkSize)
-			n, err := r.Read(buf)
-			if n > 0 {
-				jobs <- encryptJob{index: chunkIndex, data: buf[:n]}
-				chunkIndex++
-			}
-			if err == io.EOF {
-				break
-			}
-			if err != nil {
-				errChan <- err
-				return
-			}
-		}
-	}()
+	go encryptionReader(r, jobs, errChan)
 
 	// Writer (Sequencer)
+	return encryptionSequencer(w, results, errChan)
+}
+
+func encryptionWorker(wg *sync.WaitGroup, jobs <-chan encryptJob, results chan<- encryptResult, aead cipher.AEAD, baseNonce []byte) {
+	defer wg.Done()
+	for job := range jobs {
+		nonce := make([]byte, aead.NonceSize())
+		copy(nonce, baseNonce)
+		counterBytes := make([]byte, 8)
+		binary.LittleEndian.PutUint64(counterBytes, job.index)
+		for i := 0; i < 8; i++ {
+			nonce[16+i] ^= counterBytes[i]
+		}
+
+		ciphertext := aead.Seal(nil, nonce, job.data, nil)
+		results <- encryptResult{index: job.index, data: ciphertext}
+	}
+}
+
+func encryptionReader(r io.Reader, jobs chan<- encryptJob, errChan chan<- error) {
+	defer close(jobs)
+	chunkIndex := uint64(0)
+	for {
+		buf := make([]byte, ChunkSize)
+		n, err := r.Read(buf)
+		if n > 0 {
+			jobs <- encryptJob{index: chunkIndex, data: buf[:n]}
+			chunkIndex++
+		}
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			errChan <- err
+			return
+		}
+	}
+}
+
+func encryptionSequencer(w io.Writer, results <-chan encryptResult, errChan <-chan error) error {
 	nextIndex := uint64(0)
 	pending := make(map[uint64][]byte)
 	for {
@@ -206,12 +214,7 @@ func streamEncrypt(r io.Reader, w io.Writer, aead cipher.AEAD, baseNonce []byte,
 					break
 				}
 
-				lenBuf := make([]byte, 4)
-				binary.LittleEndian.PutUint32(lenBuf, uint32(len(data)))
-				if _, err := w.Write(lenBuf); err != nil {
-					return err
-				}
-				if _, err := w.Write(data); err != nil {
+				if err := writeChunk(w, data); err != nil {
 					return err
 				}
 
@@ -220,6 +223,18 @@ func streamEncrypt(r io.Reader, w io.Writer, aead cipher.AEAD, baseNonce []byte,
 			}
 		}
 	}
+}
+
+func writeChunk(w io.Writer, data []byte) error {
+	lenBuf := make([]byte, 4)
+	binary.LittleEndian.PutUint32(lenBuf, uint32(len(data)))
+	if _, err := w.Write(lenBuf); err != nil {
+		return err
+	}
+	if _, err := w.Write(data); err != nil {
+		return err
+	}
+	return nil
 }
 
 func streamEncryptSequential(r io.Reader, w io.Writer, aead cipher.AEAD, baseNonce []byte) error {
@@ -239,13 +254,8 @@ func streamEncryptSequential(r io.Reader, w io.Writer, aead cipher.AEAD, baseNon
 
 			ciphertext := aead.Seal(nil, nonce, buf[:n], nil)
 
-			lenBuf := make([]byte, 4)
-			binary.LittleEndian.PutUint32(lenBuf, uint32(len(ciphertext)))
-			if _, wErr := w.Write(lenBuf); wErr != nil {
-				return wErr
-			}
-			if _, wErr := w.Write(ciphertext); wErr != nil {
-				return wErr
+			if err := writeChunk(w, ciphertext); err != nil {
+				return err
 			}
 			chunkIndex++
 		}

@@ -12,11 +12,11 @@ import (
 
 // MockAuthenticator implements the Authenticator interface for testing.
 type MockAuthenticator struct {
-	InfoFunc                   func() *ctap2.AuthenticatorGetInfoResponse
-	MakeCredentialFunc         func(pinUvAuthToken []byte, clientData []byte, rp webauthn.PublicKeyCredentialRpEntity, user webauthn.PublicKeyCredentialUserEntity, pubKeyCredParams []webauthn.PublicKeyCredentialParameters, excludeList []webauthn.PublicKeyCredentialDescriptor, extInputs *webauthn.CreateAuthenticationExtensionsClientInputs, options map[ctap2.Option]bool, enterpriseAttestation uint, attestationFormatsPreference []webauthn.AttestationStatementFormatIdentifier) (*ctap2.AuthenticatorMakeCredentialResponse, error)
-	GetAssertionFunc           func(pinUvAuthToken []byte, rpID string, clientData []byte, allowList []webauthn.PublicKeyCredentialDescriptor, extInputs *webauthn.GetAuthenticationExtensionsClientInputs, options map[ctap2.Option]bool) iter.Seq2[*ctap2.AuthenticatorGetAssertionResponse, error]
+	InfoFunc                      func() *ctap2.AuthenticatorGetInfoResponse
+	MakeCredentialFunc            func(pinUvAuthToken []byte, clientData []byte, rp webauthn.PublicKeyCredentialRpEntity, user webauthn.PublicKeyCredentialUserEntity, pubKeyCredParams []webauthn.PublicKeyCredentialParameters, excludeList []webauthn.PublicKeyCredentialDescriptor, extInputs *webauthn.CreateAuthenticationExtensionsClientInputs, options map[ctap2.Option]bool, enterpriseAttestation uint, attestationFormatsPreference []webauthn.AttestationStatementFormatIdentifier) (*ctap2.AuthenticatorMakeCredentialResponse, error)
+	GetAssertionFunc              func(pinUvAuthToken []byte, rpID string, clientData []byte, allowList []webauthn.PublicKeyCredentialDescriptor, extInputs *webauthn.GetAuthenticationExtensionsClientInputs, options map[ctap2.Option]bool) iter.Seq2[*ctap2.AuthenticatorGetAssertionResponse, error]
 	GetPinUvAuthTokenUsingPINFunc func(pin string, permissions ctap2.Permission, rpID string) ([]byte, error)
-	CloseFunc                  func() error
+	CloseFunc                     func() error
 }
 
 func (m *MockAuthenticator) Info() *ctap2.AuthenticatorGetInfoResponse {

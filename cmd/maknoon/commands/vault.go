@@ -27,6 +27,7 @@ var vaultName string
 var vaultPassphrase string
 var useFido2 bool
 
+// VaultCmd returns the cobra command for managing secure vaults.
 func VaultCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "vault",
@@ -126,7 +127,7 @@ func vaultSetCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:  "set [service] [password]",
 		Args: cobra.RangeArgs(1, 2),
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(_ *cobra.Command, args []string) error {
 			service := args[0]
 			var password string
 			if len(args) > 1 {
@@ -163,7 +164,7 @@ func vaultGetCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:  "get [service]",
 		Args: cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(_ *cobra.Command, args []string) error {
 			service := args[0]
 			db, key, err := openVault()
 			if err != nil {
@@ -196,7 +197,7 @@ func vaultGetCmd() *cobra.Command {
 func vaultListCmd() *cobra.Command {
 	return &cobra.Command{
 		Use: "list",
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(_ *cobra.Command, _ []string) error {
 			db, key, err := openVault()
 			if err != nil {
 				return err
@@ -205,7 +206,7 @@ func vaultListCmd() *cobra.Command {
 			defer crypto.SafeClear(key)
 
 			return db.View(func(tx *bbolt.Tx) error {
-				return tx.Bucket([]byte(vaultBucket)).ForEach(func(k, v []byte) error {
+				return tx.Bucket([]byte(vaultBucket)).ForEach(func(_ []byte, v []byte) error {
 					entry, err := crypto.OpenEntry(v, key)
 					if err == nil {
 						fmt.Printf(" - %s (%s)\n", entry.Service, entry.Username)

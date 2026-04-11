@@ -151,7 +151,7 @@ func TestGetDefaultVaultPath(t *testing.T) {
 
 func TestVaultErrors(t *testing.T) {
 	masterKey := make([]byte, 32)
-	
+
 	// Test OpenEntry with invalid ciphertext
 	if _, err := OpenEntry([]byte("short"), masterKey); err == nil {
 		t.Error("Expected error for short ciphertext in OpenEntry")
@@ -205,14 +205,16 @@ func TestStreamErrors(t *testing.T) {
 }
 
 type errorReader struct{ err error }
+
 func (r *errorReader) Read(p []byte) (n int, err error) { return 0, r.err }
 
 type errorWriter struct{ err error }
+
 func (w *errorWriter) Write(p []byte) (n int, err error) { return 0, w.err }
 
 func TestDecryptStreamErrors(t *testing.T) {
 	password := []byte("pass")
-	
+
 	// 1. Valid file but truncated
 	var encrypted bytes.Buffer
 	EncryptStream(bytes.NewReader([]byte("some data")), &encrypted, password, FlagNone, 1)
@@ -228,7 +230,7 @@ func TestDecryptStreamErrors(t *testing.T) {
 	// Find where payload starts (Header: 4+1+1+32+24 = 62 bytes)
 	// Let's just mess with it.
 	if len(corrupted) > 70 {
-		corrupted[65] = 0xFF 
+		corrupted[65] = 0xFF
 		corrupted[66] = 0xFF
 	}
 	if _, err := DecryptStream(bytes.NewReader(corrupted), &out, password, 1); err == nil {

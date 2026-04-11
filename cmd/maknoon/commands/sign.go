@@ -9,15 +9,16 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// SignCmd returns the cobra command for signing files.
 func SignCmd() *cobra.Command {
 	var sigKeyPath string
 	var passphrase string
 
 	cmd := &cobra.Command{
 		Use:   "sign [file]",
-		Short: "Sign a file using a Post-Quantum (ML-DSA) private key",
+		Short: "Sign a file using an ML-DSA private key",
 		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(_ *cobra.Command, args []string) error {
 			filePath := args[0]
 			data, err := os.ReadFile(filePath)
 			if err != nil {

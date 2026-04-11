@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"math/big"
 
-	"github.com/spf13/cobra"
 	"github.com/a-khallaf/maknoon/pkg/crypto"
+	"github.com/spf13/cobra"
 )
 
 const (
@@ -16,6 +16,7 @@ const (
 	symbols      = "!@#$%^&*()-_=+[]{}|;:,.<>?"
 )
 
+// GenCmd returns the cobra command for generating secure passwords.
 func GenCmd() *cobra.Command {
 	var length int
 	var noSymbols bool
@@ -25,7 +26,7 @@ func GenCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "gen",
 		Short: "Generate a high-entropy secure password or passphrase",
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(_ *cobra.Command, _ []string) error {
 			if words > 0 {
 				// Passphrase Mode
 				var passphrase []string
@@ -45,12 +46,11 @@ func GenCmd() *cobra.Command {
 					}
 				}
 				fmt.Println(result)
-				
+
 				// Clear the slice from memory
 				for i := range passphrase {
 					passphrase[i] = ""
 				}
-				passphrase = nil
 				return nil
 			}
 
@@ -86,6 +86,6 @@ func GenCmd() *cobra.Command {
 	cmd.Flags().BoolVarP(&noSymbols, "no-symbols", "n", false, "Exclude symbols from the password (random string mode)")
 	cmd.Flags().IntVarP(&words, "words", "w", 0, "Number of words for a passphrase (e.g. 4 for 'detect-logic-future-ocean')")
 	cmd.Flags().StringVarP(&separator, "separator", "p", "-", "Separator between words in a passphrase")
-	
+
 	return cmd
 }

@@ -10,6 +10,7 @@ import (
 	"golang.org/x/term"
 )
 
+// EncryptCmd returns the cobra command for encrypting files and directories.
 func EncryptCmd() *cobra.Command {
 	var output string
 	var pubKeyPath string
@@ -21,9 +22,9 @@ func EncryptCmd() *cobra.Command {
 		Use:   "encrypt [file/dir]",
 		Short: "Encrypt a file or directory symmetrically or asymmetrically",
 		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(_ *cobra.Command, args []string) error {
 			inputPath := args[0]
-			
+
 			stat, err := os.Stat(inputPath)
 			if err != nil {
 				return fmt.Errorf("failed to access input path: %w", err)
@@ -49,7 +50,9 @@ func EncryptCmd() *cobra.Command {
 			if pubKeyPath != "" {
 				resolvedPath := crypto.ResolveKeyPath(pubKeyPath)
 				pk, err := os.ReadFile(resolvedPath)
-				if err != nil { return err }
+				if err != nil {
+					return err
+				}
 				opts.PublicKey = pk
 			} else {
 				// Handle Passphrase
@@ -61,7 +64,9 @@ func EncryptCmd() *cobra.Command {
 					fmt.Print("Enter passphrase: ")
 					p, err := term.ReadPassword(int(os.Stdin.Fd()))
 					fmt.Println()
-					if err != nil { return err }
+					if err != nil {
+						return err
+					}
 					opts.Passphrase = p
 
 					fmt.Print("Confirm passphrase: ")
@@ -75,14 +80,18 @@ func EncryptCmd() *cobra.Command {
 
 			// Clean RAM on exit
 			defer func() {
-				if len(opts.Passphrase) > 0 { crypto.SafeClear(opts.Passphrase) }
+				if len(opts.Passphrase) > 0 {
+					crypto.SafeClear(opts.Passphrase)
+				}
 			}()
 
 			fmt.Printf("Protecting '%s'...\n", inputPath)
-			
+
 			// Progress wrapping (tracking the INPUT size is always accurate)
 			totalSize := stat.Size()
-			if stat.IsDir() { totalSize = -1 }
+			if stat.IsDir() {
+				totalSize = -1
+			}
 			bar := progressbar.DefaultBytes(totalSize, "preserving")
 			opts.ProgressReader = bar
 

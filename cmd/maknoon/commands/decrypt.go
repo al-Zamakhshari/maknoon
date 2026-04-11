@@ -8,13 +8,14 @@ import (
 	"os"
 	"strings"
 
+	"github.com/a-khallaf/maknoon/pkg/crypto"
 	"github.com/klauspost/compress/zstd"
 	"github.com/schollz/progressbar/v3"
 	"github.com/spf13/cobra"
-	"github.com/a-khallaf/maknoon/pkg/crypto"
 	"golang.org/x/term"
 )
 
+// DecryptCmd returns the cobra command for decrypting .makn files.
 func DecryptCmd() *cobra.Command {
 	var output string
 	var keyPath string
@@ -26,7 +27,7 @@ func DecryptCmd() *cobra.Command {
 		Use:   "decrypt [file]",
 		Short: "Decrypt a .makn file or directory",
 		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(_ *cobra.Command, args []string) error {
 			inputFile := args[0]
 			in, err := os.Open(inputFile)
 			if err != nil {
@@ -35,7 +36,9 @@ func DecryptCmd() *cobra.Command {
 			defer in.Close()
 
 			info, err := in.Stat()
-			if err != nil { return err }
+			if err != nil {
+				return err
+			}
 
 			// 1. Peek at the header to determine encryption type and flags
 			header := make([]byte, 6)
@@ -46,80 +49,21 @@ func DecryptCmd() *cobra.Command {
 
 			magic := string(header[:4])
 			flags := header[5]
-			
-			// 2. Handle Passphrase/Identity logic BEFORE initializing UI
-			var password []byte
-			if passphrase != "" {
-				password = []byte(passphrase)
-			} else if env := os.Getenv("MAKNOON_PASSPHRASE"); env != "" {
-				password = []byte(env)
-			}
 
-			var finalKey []byte
-			if magic == crypto.MagicHeader {
-				// Symmetric: handle FIDO2 if requested or metadata exists
-				// (For now, we only support FIDO2 for vaults and private keys)
-				if useFido2 {
-					return fmt.Errorf("FIDO2-backed symmetric encryption is currently only supported via the 'vault' command")
-				}
-
-				if len(password) == 0 {
-					fmt.Print("Enter passphrase: ")
-					p, err := term.ReadPassword(int(os.Stdin.Fd()))
-					fmt.Println()
-					if err != nil { return err }
-					password = p
-				}
-				finalKey = password
-			} else if magic == crypto.MagicHeaderAsym {
-				// Asymmetric: load and potentially unlock private key
-				resolvedPath := crypto.ResolveKeyPath(keyPath)
-				keyBytes, err := os.ReadFile(resolvedPath)
-				if err != nil { return fmt.Errorf("failed to read private key: %w", err) }
-
-				if len(keyBytes) > 4 && string(keyBytes[:4]) == crypto.MagicHeader {
-					// Check for companion FIDO2 file
-					// The key is usually id_name.kem.key, and fido2 is id_name.fido2
-					fido2Path := strings.TrimSuffix(resolvedPath, ".key")
-					fido2Path = strings.TrimSuffix(fido2Path, ".kem")
-					fido2Path = strings.TrimSuffix(fido2Path, ".sig")
-					fido2Path += ".fido2"
-
-					if _, err := os.Stat(fido2Path); err == nil {
-						raw, _ := os.ReadFile(fido2Path)
-						var meta crypto.Fido2Metadata
-						json.Unmarshal(raw, &meta)
-						
-						secret, err := crypto.Fido2Derive(meta.RPID, meta.CredentialID)
-						if err != nil { return err }
-						password = secret
-					}
-
-					// Unlock private key
-					if len(password) == 0 {
-						fmt.Print("Enter passphrase to unlock your private key: ")
-						p, err := term.ReadPassword(int(os.Stdin.Fd()))
-						fmt.Println()
-						if err != nil { return err }
-						password = p
-					}
-					var unlockedKey bytes.Buffer
-					// Use sequential decryption for private key unlocking as it's small and nested
-					if _, err := crypto.DecryptStream(bytes.NewReader(keyBytes), &unlockedKey, password, 1); err != nil {
-						return fmt.Errorf("failed to unlock private key: %w", err)
-					}
-					finalKey = unlockedKey.Bytes()
-				} else {
-					finalKey = keyBytes
-				}
-			} else {
-				return fmt.Errorf("unsupported or invalid maknoon file header: %s", magic)
+			// 2. Handle Passphrase/Identity logic
+			password, finalKey, err := resolveDecryptionKey(magic, passphrase, keyPath, useFido2)
+			if err != nil {
+				return err
 			}
 
 			// Clean RAM on exit
 			defer func() {
-				if len(password) > 0 { crypto.SafeClear(password) }
-				if magic == crypto.MagicHeaderAsym { crypto.SafeClear(finalKey) }
+				if len(password) > 0 {
+					crypto.SafeClear(password)
+				}
+				if magic == crypto.MagicHeaderAsym {
+					crypto.SafeClear(finalKey)
+				}
 			}()
 
 			// 3. Now that we have everything, initialize the Progress Bar and Pipe
@@ -151,11 +95,95 @@ func DecryptCmd() *cobra.Command {
 	return cmd
 }
 
+func resolveDecryptionKey(magic, manualPass, keyPath string, useFido2 bool) ([]byte, []byte, error) {
+	var password []byte
+	if manualPass != "" {
+		password = []byte(manualPass)
+	} else if env := os.Getenv("MAKNOON_PASSPHRASE"); env != "" {
+		password = []byte(env)
+	}
+
+	if magic == crypto.MagicHeader {
+		if useFido2 {
+			return nil, nil, fmt.Errorf("FIDO2-backed symmetric encryption is currently only supported via the 'vault' command")
+		}
+		if len(password) == 0 {
+			fmt.Print("Enter passphrase: ")
+			p, err := term.ReadPassword(int(os.Stdin.Fd()))
+			fmt.Println()
+			if err != nil {
+				return nil, nil, err
+			}
+			password = p
+		}
+		return password, password, nil
+	}
+
+	if magic == crypto.MagicHeaderAsym {
+		return resolveAsymmetricKey(password, keyPath)
+	}
+
+	return nil, nil, fmt.Errorf("unsupported or invalid maknoon file header: %s", magic)
+}
+
+func resolveAsymmetricKey(password []byte, keyPath string) ([]byte, []byte, error) {
+	resolvedPath := crypto.ResolveKeyPath(keyPath)
+	keyBytes, err := os.ReadFile(resolvedPath)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to read private key: %w", err)
+	}
+
+	if len(keyBytes) > 4 && string(keyBytes[:4]) == crypto.MagicHeader {
+		// Handle FIDO2 or Passphrase unlocking
+		password, err = unlockPrivateKey(password, resolvedPath, keyBytes)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		var unlockedKey bytes.Buffer
+		if _, err := crypto.DecryptStream(bytes.NewReader(keyBytes), &unlockedKey, password, 1); err != nil {
+			return nil, nil, fmt.Errorf("failed to unlock private key: %w", err)
+		}
+		return password, unlockedKey.Bytes(), nil
+	}
+
+	return password, keyBytes, nil
+}
+
+func unlockPrivateKey(password []byte, resolvedPath string, keyBytes []byte) ([]byte, error) {
+	// Check for companion FIDO2 file
+	fido2Path := strings.TrimSuffix(resolvedPath, ".key")
+	fido2Path = strings.TrimSuffix(fido2Path, ".kem")
+	fido2Path = strings.TrimSuffix(fido2Path, ".sig")
+	fido2Path += ".fido2"
+
+	if _, err := os.Stat(fido2Path); err == nil {
+		raw, _ := os.ReadFile(fido2Path)
+		var meta crypto.Fido2Metadata
+		json.Unmarshal(raw, &meta)
+
+		return crypto.Fido2Derive(meta.RPID, meta.CredentialID)
+	}
+
+	if len(password) == 0 {
+		fmt.Print("Enter passphrase to unlock your private key: ")
+		p, err := term.ReadPassword(int(os.Stdin.Fd()))
+		fmt.Println()
+		if err != nil {
+			return nil, err
+		}
+		password = p
+	}
+	return password, nil
+}
+
 func finalizeDecryption(pr io.Reader, flags byte, output, inputFile string) error {
-	var decryptedReader io.Reader = pr
+	decryptedReader := pr
 	if flags&crypto.FlagCompress != 0 {
 		zr, err := zstd.NewReader(pr)
-		if err != nil { return err }
+		if err != nil {
+			return err
+		}
 		defer zr.Close()
 		decryptedReader = zr
 	}
@@ -173,7 +201,9 @@ func finalizeDecryption(pr io.Reader, flags byte, output, inputFile string) erro
 		}
 	}
 	out, err := os.Create(outPath)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	defer out.Close()
 	_, err = io.Copy(out, decryptedReader)
 	return err

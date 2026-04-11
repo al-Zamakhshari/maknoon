@@ -8,11 +8,12 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/spf13/cobra"
 	"github.com/a-khallaf/maknoon/pkg/crypto"
+	"github.com/spf13/cobra"
 	"golang.org/x/term"
 )
 
+// KeygenCmd returns the cobra command for generating Post-Quantum identities.
 func KeygenCmd() *cobra.Command {
 	var output string
 	var noPassword bool
@@ -22,7 +23,7 @@ func KeygenCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "keygen",
 		Short: "Generate a Post-Quantum (KEM & SIG) identity",
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(_ *cobra.Command, _ []string) error {
 			var fido2Meta *crypto.Fido2Metadata
 			var password []byte
 			var err error
@@ -36,7 +37,9 @@ func KeygenCmd() *cobra.Command {
 				password = secret
 			} else {
 				password, err = getInitialPassphrase(noPassword, passphrase)
-				if err != nil { return err }
+				if err != nil {
+					return err
+				}
 			}
 
 			if len(password) > 0 {
@@ -45,8 +48,10 @@ func KeygenCmd() *cobra.Command {
 
 			fmt.Println("Generating bleeding-edge Post-Quantum identity (Kyber1024 + ML-DSA-87)...")
 			kemPub, kemPriv, sigPub, sigPriv, err := crypto.GeneratePQKeyPair()
-			if err != nil { return fmt.Errorf("failed to generate keypairs: %w", err) }
-			
+			if err != nil {
+				return fmt.Errorf("failed to generate keypairs: %w", err)
+			}
+
 			defer func() {
 				crypto.SafeClear(kemPriv)
 				crypto.SafeClear(sigPriv)
@@ -87,7 +92,9 @@ func getInitialPassphrase(noPassword bool, manual string) ([]byte, error) {
 	fmt.Print("Enter passphrase to protect your private keys: ")
 	p, err := term.ReadPassword(int(os.Stdin.Fd()))
 	fmt.Println()
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 
 	if len(p) > 0 {
 		fmt.Print("Confirm passphrase: ")
@@ -109,7 +116,7 @@ func resolveBaseKeyPath(output string) (string, string) {
 	if output != "" {
 		baseName = output
 	}
-	
+
 	basePath := filepath.Join(keysDir, baseName)
 	if output != "" && (filepath.IsAbs(output) || strings.Contains(output, string(os.PathSeparator))) {
 		basePath = output
@@ -129,14 +136,24 @@ func writeIdentityKeys(basePath, baseName string, kemPub, kemPriv, sigPub, sigPr
 			finalData = b.Bytes()
 		}
 		mode := os.FileMode(0644)
-		if isPrivate { mode = 0600 }
+		if isPrivate {
+			mode = 0600
+		}
 		return os.WriteFile(path, finalData, mode)
 	}
 
-	if err := writeKey(basePath+".kem.key", kemPriv, true); err != nil { return err }
-	if err := writeKey(basePath+".kem.pub", kemPub, false); err != nil { return err }
-	if err := writeKey(basePath+".sig.key", sigPriv, true); err != nil { return err }
-	if err := writeKey(basePath+".sig.pub", sigPub, false); err != nil { return err }
+	if err := writeKey(basePath+".kem.key", kemPriv, true); err != nil {
+		return err
+	}
+	if err := writeKey(basePath+".kem.pub", kemPub, false); err != nil {
+		return err
+	}
+	if err := writeKey(basePath+".sig.key", sigPriv, true); err != nil {
+		return err
+	}
+	if err := writeKey(basePath+".sig.pub", sigPub, false); err != nil {
+		return err
+	}
 
 	fmt.Printf("Success! Identity generated in %s\n", filepath.Dir(basePath))
 	fmt.Printf("  - Encryption Keys: %s.kem.{key,pub}\n", baseName)

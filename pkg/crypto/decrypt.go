@@ -132,25 +132,7 @@ func streamDecrypt(r io.Reader, w io.Writer, aead cipher.AEAD, baseNonce []byte,
 	// Workers
 	for i := 0; i < concurrency; i++ {
 		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for job := range jobs {
-				nonce := make([]byte, aead.NonceSize())
-				copy(nonce, baseNonce)
-				counterBytes := make([]byte, 8)
-				binary.LittleEndian.PutUint64(counterBytes, job.index)
-				for i := 0; i < 8; i++ {
-					nonce[16+i] ^= counterBytes[i]
-				}
-
-				plaintext, err := aead.Open(nil, nonce, job.data, nil)
-				if err != nil {
-					results <- decryptResult{err: errors.New("authentication failed: incorrect key or corrupted data")}
-					return
-				}
-				results <- decryptResult{index: job.index, data: plaintext}
-			}
-		}()
+		go decryptionWorker(&wg, jobs, results, aead, baseNonce)
 	}
 
 	// Closer
@@ -161,37 +143,63 @@ func streamDecrypt(r io.Reader, w io.Writer, aead cipher.AEAD, baseNonce []byte,
 
 	// Reader
 	errChan := make(chan error, 1)
-	go func() {
-		defer close(jobs)
-		chunkIndex := uint64(0)
-		lenBuf := make([]byte, 4)
-		for {
-			if _, err := io.ReadFull(r, lenBuf); err != nil {
-				if err == io.EOF {
-					break
-				}
-				errChan <- err
-				return
-			}
-
-			chunkLen := binary.LittleEndian.Uint32(lenBuf)
-			if chunkLen > uint32(ChunkSize+16) {
-				errChan <- errors.New("corrupted payload: chunk size exceeds maximum")
-				return
-			}
-
-			ciphertext := make([]byte, chunkLen)
-			if _, err := io.ReadFull(r, ciphertext); err != nil {
-				errChan <- err
-				return
-			}
-
-			jobs <- decryptJob{index: chunkIndex, data: ciphertext}
-			chunkIndex++
-		}
-	}()
+	go decryptionReader(r, jobs, errChan)
 
 	// Writer (Sequencer)
+	return decryptionSequencer(w, results, errChan)
+}
+
+func decryptionWorker(wg *sync.WaitGroup, jobs <-chan decryptJob, results chan<- decryptResult, aead cipher.AEAD, baseNonce []byte) {
+	defer wg.Done()
+	for job := range jobs {
+		nonce := make([]byte, aead.NonceSize())
+		copy(nonce, baseNonce)
+		counterBytes := make([]byte, 8)
+		binary.LittleEndian.PutUint64(counterBytes, job.index)
+		for i := 0; i < 8; i++ {
+			nonce[16+i] ^= counterBytes[i]
+		}
+
+		plaintext, err := aead.Open(nil, nonce, job.data, nil)
+		if err != nil {
+			results <- decryptResult{err: errors.New("authentication failed: incorrect key or corrupted data")}
+			return
+		}
+		results <- decryptResult{index: job.index, data: plaintext}
+	}
+}
+
+func decryptionReader(r io.Reader, jobs chan<- decryptJob, errChan chan<- error) {
+	defer close(jobs)
+	chunkIndex := uint64(0)
+	lenBuf := make([]byte, 4)
+	for {
+		if _, err := io.ReadFull(r, lenBuf); err != nil {
+			if err == io.EOF {
+				break
+			}
+			errChan <- err
+			return
+		}
+
+		chunkLen := binary.LittleEndian.Uint32(lenBuf)
+		if chunkLen > uint32(ChunkSize+16) {
+			errChan <- errors.New("corrupted payload: chunk size exceeds maximum")
+			return
+		}
+
+		ciphertext := make([]byte, chunkLen)
+		if _, err := io.ReadFull(r, ciphertext); err != nil {
+			errChan <- err
+			return
+		}
+
+		jobs <- decryptJob{index: chunkIndex, data: ciphertext}
+		chunkIndex++
+	}
+}
+
+func decryptionSequencer(w io.Writer, results <-chan decryptResult, errChan <-chan error) error {
 	nextIndex := uint64(0)
 	pending := make(map[uint64][]byte)
 	for {

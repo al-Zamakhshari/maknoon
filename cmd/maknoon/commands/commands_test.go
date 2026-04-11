@@ -67,7 +67,7 @@ func TestResolveKeyPath(t *testing.T) {
 	// Test existing path
 	tmpFile, _ := os.CreateTemp("", "testkey")
 	defer os.Remove(tmpFile.Name())
-	
+
 	resolved := resolveKeyPath(tmpFile.Name())
 	if resolved != tmpFile.Name() {
 		t.Errorf("Expected %s, got %s", tmpFile.Name(), resolved)
@@ -142,7 +142,7 @@ func TestVaultList(t *testing.T) {
 	if err := setCmd1.Execute(); err != nil {
 		t.Fatalf("Vault set 1 failed: %v", err)
 	}
-	
+
 	// Reset globals again just in case
 	vaultName = ""
 	vaultPassphrase = ""
@@ -175,7 +175,7 @@ func TestVaultList(t *testing.T) {
 
 func TestDecryptFailures(t *testing.T) {
 	tmpDir := t.TempDir()
-	
+
 	t.Run("File not found", func(t *testing.T) {
 		cmd := DecryptCmd()
 		cmd.SetArgs([]string{filepath.Join(tmpDir, "non-existent.makn")})
@@ -188,7 +188,7 @@ func TestDecryptFailures(t *testing.T) {
 		inputFile := filepath.Join(tmpDir, "secret.txt")
 		encFile := inputFile + ".makn"
 		os.WriteFile(inputFile, []byte("data"), 0644)
-		
+
 		enc := EncryptCmd()
 		enc.SetArgs([]string{inputFile, "-o", encFile, "-s", "correct"})
 		enc.Execute()
@@ -238,7 +238,7 @@ func TestEncryptDecryptSymmetric(t *testing.T) {
 func TestKeygenAndAsymmetric(t *testing.T) {
 	tmpDir := t.TempDir()
 	keyBase := filepath.Join(tmpDir, "id_test")
-	
+
 	// Keygen
 	keygenCmd := KeygenCmd()
 	keygenCmd.SetArgs([]string{"-o", keyBase, "--no-password"})
@@ -294,7 +294,7 @@ func TestKeygenWithEnvPassphrase(t *testing.T) {
 func TestSignVerify(t *testing.T) {
 	tmpDir := t.TempDir()
 	keyBase := filepath.Join(tmpDir, "sig_test")
-	
+
 	// Keygen
 	keygenCmd := KeygenCmd()
 	keygenCmd.SetArgs([]string{"-o", keyBase, "--no-password"})
@@ -303,7 +303,7 @@ func TestSignVerify(t *testing.T) {
 	// Sign
 	msgFile := filepath.Join(tmpDir, "message.txt")
 	os.WriteFile(msgFile, []byte("Authentic message"), 0644)
-	
+
 	signCmd := SignCmd()
 	signCmd.SetArgs([]string{msgFile, "--private-key", keyBase + ".sig.key"})
 	if err := signCmd.Execute(); err != nil {

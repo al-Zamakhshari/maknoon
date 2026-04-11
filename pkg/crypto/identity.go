@@ -6,9 +6,12 @@ import (
 )
 
 const (
+	// MaknoonDir is the default directory name for Maknoon data.
 	MaknoonDir = ".maknoon"
-	KeysDir    = "keys"
-	VaultsDir  = "vaults"
+	// KeysDir is the subdirectory for storing keys.
+	KeysDir = "keys"
+	// VaultsDir is the subdirectory for storing vaults.
+	VaultsDir = "vaults"
 )
 
 // ResolveKeyPath checks if a key exists locally, and if not, looks in ~/.maknoon/keys/

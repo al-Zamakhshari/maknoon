@@ -40,12 +40,12 @@ func TestIntegrationSecurityScenarios(t *testing.T) {
 	t.Run("Vault Service Collision", func(t *testing.T) {
 		vPath := filepath.Join(tmpDir, "collision.db")
 		pass := "pass"
-		
+
 		setCmd := VaultCmd()
 		// Set first secret
 		setCmd.SetArgs([]string{"--vault", vPath, "--passphrase", pass, "set", "service1", "secret1"})
 		setCmd.Execute()
-		
+
 		// Overwrite with second secret
 		setCmd.SetArgs([]string{"--vault", vPath, "--passphrase", pass, "set", "service1", "secret2"})
 		setCmd.Execute()
@@ -55,7 +55,7 @@ func TestIntegrationSecurityScenarios(t *testing.T) {
 		output := captureOutput(func() {
 			getCmd.Execute()
 		})
-		
+
 		if !strings.Contains(output, "secret2") {
 			t.Errorf("Vault collision handling failed. Expected secret2, got: %s", output)
 		}
@@ -65,7 +65,7 @@ func TestIntegrationSecurityScenarios(t *testing.T) {
 		// Create a malicious archive in memory
 		var buf bytes.Buffer
 		tw := tar.NewWriter(&buf)
-		
+
 		// Malicious entry attempting to escape output directory
 		header := &tar.Header{
 			Name: "../outside.txt",
@@ -106,7 +106,7 @@ func TestIntegrationLargeFileConcurrency(t *testing.T) {
 	inputFile := filepath.Join(tmpDir, "large.bin")
 	encFile := inputFile + ".makn"
 	decFile := inputFile + ".dec"
-	
+
 	// Create a 10MB file (enough to have many 64KB chunks)
 	data := make([]byte, 10*1024*1024)
 	for i := range data {

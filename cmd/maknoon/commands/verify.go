@@ -8,15 +8,16 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// VerifyCmd returns the cobra command for verifying digital signatures.
 func VerifyCmd() *cobra.Command {
 	var pubKeyPath string
 	var signaturePath string
 
 	cmd := &cobra.Command{
 		Use:   "verify [file]",
-		Short: "Verify a file's Post-Quantum (ML-DSA) signature",
+		Short: "Verify a file's integrity and signature",
 		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(_ *cobra.Command, args []string) error {
 			filePath := args[0]
 			data, err := os.ReadFile(filePath)
 			if err != nil {

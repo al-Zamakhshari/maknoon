@@ -50,7 +50,7 @@ func TestResequencingChaos(t *testing.T) {
 	// Since we can't easily force the worker pool to be out-of-order without mocks,
 	// we will rely on the fact that with high concurrency and many small chunks,
 	// natural scheduling will likely cause some reordering.
-	
+
 	password := []byte("chaos-password")
 	chunkCount := 100
 	dataSize := chunkCount * ChunkSize
