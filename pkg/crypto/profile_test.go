@@ -24,7 +24,7 @@ func (p *MockProfileV2) NonceSize() int { return 12 }
 
 func TestProfileV2RoundTrip(t *testing.T) {
 	RegisterProfile(&MockProfileV2{})
-	profile, _ := GetProfile(2)
+	profile, _ := GetProfile(2, nil)
 
 	data := []byte("Testing with 12-byte nonce profile")
 	passphrase := []byte("test-pass")
@@ -97,7 +97,7 @@ func TestProfileAsymmetricRoundTrip(t *testing.T) {
 func TestProfileRegistry(t *testing.T) {
 	RegisterProfile(&MockProfileV2{})
 
-	p1, err := GetProfile(1)
+	p1, err := GetProfile(1, nil)
 	if err != nil {
 		t.Fatalf("Failed to get profile 1: %v", err)
 	}
@@ -105,7 +105,7 @@ func TestProfileRegistry(t *testing.T) {
 		t.Errorf("Expected ID 1, got %d", p1.ID())
 	}
 
-	p2, err := GetProfile(2)
+	p2, err := GetProfile(2, nil)
 	if err != nil {
 		t.Fatalf("Failed to get profile 2: %v", err)
 	}
@@ -113,7 +113,7 @@ func TestProfileRegistry(t *testing.T) {
 		t.Errorf("Expected ID 2, got %d", p2.ID())
 	}
 
-	_, err = GetProfile(99)
+	_, err = GetProfile(99, nil)
 	if err == nil {
 		t.Error("Expected error for non-existent profile ID 99")
 	}

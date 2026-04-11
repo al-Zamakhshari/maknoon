@@ -46,7 +46,9 @@ Before every release or major push, the following steps **must** be completed:
     *   Check cyclomatic complexity (keep under 15).
     *   Run `go vet ./...`.
 
-- **Cryptographic Agility**: NEVER hardcode cryptographic algorithms or parameters (nonce sizes, salt sizes, etc.) in the core pipeline. All primitives MUST be accessed through the `CryptoProfile` interface. New algorithms should be implemented as a new `CryptoProfile` and registered in `pkg/crypto/profile.go`.
+- **Cryptographic Agility**: NEVER hardcode cryptographic algorithms or parameters (nonce sizes, salt sizes, etc.) in the core pipeline. All primitives MUST be accessed through the `CryptoProfile` interface. Maknoon supports Hybrid Profiles:
+    - **Secret Profiles (3-127)**: Definitions stored in external JSON files.
+    - **Portable Profiles (128-255)**: Definitions packed directly into the file header.
 - **Memory Hygiene**: Always use `crypto.SafeClear` to zero out sensitive data (keys, passphrases) in memory immediately after use.
 - **Streaming & Pipes**: Prefer `io.Reader` and `io.Writer` over file paths in command logic. All new encryption/decryption features MUST support standard I/O (stdin/stdout via `-`).
 - **Automation First**: New flags and commands should support a `--quiet` mode to suppress progress bars and informational output for CI/CD and scripts.

@@ -22,7 +22,7 @@ func DecryptStream(r io.Reader, w io.Writer, password []byte, concurrency int) (
 		return 0, errors.New("invalid file format: missing MAKN magic header")
 	}
 
-	profile, err := GetProfile(fixedHeader[4])
+	profile, err := GetProfile(fixedHeader[4], r)
 	if err != nil {
 		return 0, err
 	}
@@ -68,7 +68,7 @@ func DecryptStreamWithPrivateKey(r io.Reader, w io.Writer, privKeyBytes []byte, 
 		return 0, errors.New("invalid file format: missing MAKA magic header")
 	}
 
-	profile, err := GetProfile(fixedHeader[4])
+	profile, err := GetProfile(fixedHeader[4], r)
 	if err != nil {
 		return 0, err
 	}

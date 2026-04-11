@@ -26,8 +26,28 @@ Maknoon is a versatile, ultra-efficient CLI encryption tool designed for a post-
 
 Maknoon uses a **Suite/Profile** architecture. The first byte of every encrypted file (after the magic bytes) identifies the `ProfileID`.
 
-- **Profile v1 (Current):** NIST-standardized PQC (Kyber1024 + Dilithium87) with XChaCha20-Poly1305.
-- **Future-Proofing:** The pipeline is agnostic to nonce sizes, salt sizes, and specific KDF parameters, allowing power users or future versions to register new profiles easily.
+- **Built-in Profiles:**
+  - `ID 1`: NIST PQC (Kyber1024 + Dilithium87) with XChaCha20-Poly1305.
+  - `ID 2`: NIST PQC with AES-256-GCM.
+- **Secret Profiles (IDs 3-127):** Only the ID is stored in the header. The recipient **must** possess a matching JSON profile file to decrypt.
+- **Portable Profiles (IDs 128-255):** The profile parameters (Cipher, KDF settings) are packed directly into the file header. No extra configuration is needed for decryption.
+
+### Using Custom Profiles
+You can define your own profile in a JSON file:
+```json
+{
+  "id": 100,
+  "cipher": 1,
+  "kdf": 0,
+  "kdf_iterations": 5,
+  "kdf_memory": 131072,
+  "kdf_threads": 4,
+  "salt_size": 32,
+  "nonce_size": 12
+}
+```
+Encrypt using:
+`./maknoon encrypt secret.txt --profile-file custom.json -s mypass`
 
 ---
 

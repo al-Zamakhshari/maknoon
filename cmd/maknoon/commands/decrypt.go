@@ -23,6 +23,7 @@ func DecryptCmd() *cobra.Command {
 	var concurrency int
 	var useFido2 bool
 	var quiet bool
+	var profileFile string
 
 	cmd := &cobra.Command{
 		Use:   "decrypt [file]",
@@ -50,6 +51,18 @@ func DecryptCmd() *cobra.Command {
 				totalSize = info.Size()
 				in = f
 				inputName = inputFile
+			}
+
+			if profileFile != "" {
+				raw, err := os.ReadFile(profileFile)
+				if err != nil {
+					return fmt.Errorf("failed to read profile file: %w", err)
+				}
+				var dp crypto.DynamicProfile
+				if err := json.Unmarshal(raw, &dp); err != nil {
+					return fmt.Errorf("invalid profile format: %w", err)
+				}
+				crypto.RegisterProfile(&dp)
 			}
 
 			// 1. Peek at the header to determine encryption type and flags
@@ -114,6 +127,7 @@ func DecryptCmd() *cobra.Command {
 	cmd.Flags().IntVarP(&concurrency, "concurrency", "j", 0, "Number of parallel workers (0 for auto)")
 	cmd.Flags().BoolVarP(&useFido2, "fido2", "f", false, "Use FIDO2 security key for authentication")
 	cmd.Flags().BoolVarP(&quiet, "quiet", "q", false, "Suppress progress bars and informational messages")
+	cmd.Flags().StringVar(&profileFile, "profile-file", "", "Path to a custom profile JSON file")
 	return cmd
 }
 

@@ -15,7 +15,7 @@ func EncryptStream(r io.Reader, w io.Writer, password []byte, flags byte, concur
 	profile := DefaultProfile()
 	if profileID != 0 {
 		var err error
-		profile, err = GetProfile(profileID)
+		profile, err = GetProfile(profileID, nil)
 		if err != nil {
 			return err
 		}
@@ -68,7 +68,7 @@ func EncryptStreamWithPublicKey(r io.Reader, w io.Writer, pubKeyBytes []byte, fl
 	profile := DefaultProfile()
 	if profileID != 0 {
 		var err error
-		profile, err = GetProfile(profileID)
+		profile, err = GetProfile(profileID, nil)
 		if err != nil {
 			return err
 		}
@@ -95,12 +95,20 @@ func EncryptStreamWithPublicKey(r io.Reader, w io.Writer, pubKeyBytes []byte, fl
 		return err
 	}
 
-	// 3. Write Header: Magic (4) | Version/ProfileID (1) | Flags (1) | KEM Ciphertext (M) | BaseNonce (24)
+	// 3. Write Header: Magic (4) | Version/ProfileID (1) | Flags (1) | [PackedProfile (7) if ID >= 128] | KEM Ciphertext (M) | BaseNonce (24)
 	if _, err := w.Write([]byte(MagicHeaderAsym)); err != nil {
 		return err
 	}
 	if _, err := w.Write([]byte{profile.ID(), flags}); err != nil {
 		return err
+	}
+
+	if profile.ID() >= 128 {
+		if dp, ok := profile.(*DynamicProfile); ok {
+			if _, err := w.Write(dp.Pack()); err != nil {
+				return err
+			}
+		}
 	}
 	if _, err := w.Write(ct); err != nil {
 		return err

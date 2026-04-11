@@ -238,6 +238,101 @@ func TestIntegrationSignVerify(t *testing.T) {
 	}
 }
 
+func TestIntegrationSelfContainedProfile(t *testing.T) {
+	tmpDir := t.TempDir()
+	
+	// 1. Create a "Portable" Profile JSON (ID >= 128)
+	profileFile := filepath.Join(tmpDir, "portable_profile.json")
+	// Profile ID 200, AES-GCM, 1 iteration Argon2
+	profileJSON := `{
+		"id": 200,
+		"cipher": 1,
+		"kdf": 0,
+		"kdf_iterations": 1,
+		"kdf_memory": 16384,
+		"kdf_threads": 4,
+		"salt_size": 16,
+		"nonce_size": 12
+	}`
+	os.WriteFile(profileFile, []byte(profileJSON), 0644)
+
+	inputFile := filepath.Join(tmpDir, "portable_test.txt")
+	content := []byte("Portable Profile Content (Packed in Header)")
+	os.WriteFile(inputFile, content, 0644)
+	
+	encryptedFile := inputFile + ".makn"
+	passphrase := "portable-pass"
+
+	// 2. Encrypt using the profile file
+	encCmd := commands.EncryptCmd()
+	encCmd.SetArgs([]string{inputFile, "-o", encryptedFile, "-s", passphrase, "--profile-file", profileFile, "--quiet"})
+	if err := encCmd.Execute(); err != nil {
+		t.Fatalf("Portable profile encryption failed: %v", err)
+	}
+
+	// 3. Decrypt WITHOUT the profile file (Self-Contained Portability)
+	decryptedFile := filepath.Join(tmpDir, "portable_restored.txt")
+	decCmd := commands.DecryptCmd()
+	// NOTE: We do NOT pass --profile-file here!
+	decCmd.SetArgs([]string{encryptedFile, "-o", decryptedFile, "-s", passphrase, "--quiet"})
+	if err := decCmd.Execute(); err != nil {
+		t.Fatalf("Portable profile decryption failed: %v", err)
+	}
+
+	// 4. Verify
+	restored, _ := os.ReadFile(decryptedFile)
+	if !bytes.Equal(content, restored) {
+		t.Fatalf("Portable profile restored content mismatch")
+	}
+}
+
+func TestIntegrationSecretProfile(t *testing.T) {
+	tmpDir := t.TempDir()
+	
+	// 1. Create a "Secret" Profile JSON
+	profileFile := filepath.Join(tmpDir, "secret_profile.json")
+	// Profile ID 100, AES-GCM, 1 iteration Argon2
+	profileJSON := `{
+		"id": 100,
+		"cipher": 1,
+		"kdf": 0,
+		"kdf_iterations": 1,
+		"kdf_memory": 16384,
+		"kdf_threads": 4,
+		"salt_size": 16,
+		"nonce_size": 12
+	}`
+	os.WriteFile(profileFile, []byte(profileJSON), 0644)
+
+	inputFile := filepath.Join(tmpDir, "secret_test.txt")
+	content := []byte("Secret Profile Content")
+	os.WriteFile(inputFile, content, 0644)
+	
+	encryptedFile := inputFile + ".makn"
+	passphrase := "secret-profile-pass"
+
+	// 2. Encrypt using the profile file
+	encCmd := commands.EncryptCmd()
+	encCmd.SetArgs([]string{inputFile, "-o", encryptedFile, "-s", passphrase, "--profile-file", profileFile, "--quiet"})
+	if err := encCmd.Execute(); err != nil {
+		t.Fatalf("Secret profile encryption failed: %v", err)
+	}
+
+	// 3. Decrypt using the SAME profile file (Secret Portability)
+	decryptedFile := filepath.Join(tmpDir, "secret_restored.txt")
+	decCmd := commands.DecryptCmd()
+	decCmd.SetArgs([]string{encryptedFile, "-o", decryptedFile, "-s", passphrase, "--profile-file", profileFile, "--quiet"})
+	if err := decCmd.Execute(); err != nil {
+		t.Fatalf("Secret profile decryption failed: %v", err)
+	}
+
+	// 4. Verify
+	restored, _ := os.ReadFile(decryptedFile)
+	if !bytes.Equal(content, restored) {
+		t.Fatalf("Secret profile restored content mismatch")
+	}
+}
+
 func TestIntegrationProfileV2(t *testing.T) {
 	tmpDir := t.TempDir()
 	inputFile := filepath.Join(tmpDir, "v2_test.txt")

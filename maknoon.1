@@ -46,7 +46,16 @@ Provide a passphrase non-interactively.
 Enable Zstd compression before encryption.
 .TP
 .B \-o, \-\-output
-Specify the output file path or directory.
+Specify the output file path or directory. Use "-" as the output path to write to standard output.
+.TP
+.B \-q, \-\-quiet
+Suppress progress bars and informational messages.
+.TP
+.B \-\-profile [id]
+Specify a built-in cryptographic profile ID (1: XChaCha20, 2: AES-GCM).
+.TP
+.B \-\-profile-file [path]
+Load a custom cryptographic profile from a JSON file. If the ID is 3-127, it creates a "Secret Profile" (requires the file for decryption). If the ID is 128-255, it creates a "Portable Profile" (packed in the header).
 .TP
 .B \-j, \-\-concurrency
 Specify the number of parallel workers for chunk processing (0 for auto-scale, 1 for sequential).

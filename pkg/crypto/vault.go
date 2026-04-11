@@ -54,7 +54,7 @@ func OpenEntry(data []byte, masterKey []byte) (*VaultEntry, error) {
 		return nil, fmt.Errorf("invalid ciphertext")
 	}
 
-	profile, err := GetProfile(data[0])
+	profile, err := GetProfile(data[0], nil)
 	if err != nil {
 		return nil, err
 	}

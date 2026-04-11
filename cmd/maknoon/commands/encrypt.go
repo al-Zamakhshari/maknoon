@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -20,6 +21,7 @@ func EncryptCmd() *cobra.Command {
 	var concurrency int
 	var quiet bool
 	var profile int
+	var profileFile string
 
 	cmd := &cobra.Command{
 		Use:   "encrypt [file/dir]",
@@ -68,6 +70,19 @@ func EncryptCmd() *cobra.Command {
 				}
 				defer f.Close()
 				out = f
+			}
+
+			if profileFile != "" {
+				raw, err := os.ReadFile(profileFile)
+				if err != nil {
+					return fmt.Errorf("failed to read profile file: %w", err)
+				}
+				var dp crypto.DynamicProfile
+				if err := json.Unmarshal(raw, &dp); err != nil {
+					return fmt.Errorf("invalid profile format: %w", err)
+				}
+				crypto.RegisterProfile(&dp)
+				profile = int(dp.ID())
 			}
 
 			opts := crypto.Options{
@@ -142,5 +157,6 @@ func EncryptCmd() *cobra.Command {
 	cmd.Flags().IntVarP(&concurrency, "concurrency", "j", 0, "Number of parallel workers (0 for auto)")
 	cmd.Flags().BoolVarP(&quiet, "quiet", "q", false, "Suppress progress bars and informational messages")
 	cmd.Flags().IntVar(&profile, "profile", 0, "Cryptographic profile ID (1: NIST PQC, 2: AES-GCM)")
+	cmd.Flags().StringVar(&profileFile, "profile-file", "", "Path to a custom profile JSON file")
 	return cmd
 }

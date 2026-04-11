@@ -3,6 +3,7 @@ package crypto
 import (
 	"crypto/cipher"
 	"fmt"
+	"io"
 	"sync"
 )
 
@@ -43,18 +44,31 @@ func RegisterProfile(p CryptoProfile) {
 }
 
 // GetProfile retrieves a cryptographic profile by its ID.
-func GetProfile(id byte) (CryptoProfile, error) {
+// If ID >= 128 and not registered, it reads the next 7 bytes from r to unpack a dynamic profile.
+func GetProfile(id byte, r io.Reader) (CryptoProfile, error) {
 	mu.RLock()
-	defer mu.RUnlock()
 	p, ok := profiles[id]
-	if !ok {
-		return nil, fmt.Errorf("unsupported cryptographic profile ID: %d", id)
+	mu.RUnlock()
+	if ok {
+		return p, nil
 	}
-	return p, nil
+
+	if id >= 128 {
+		if r == nil {
+			return nil, fmt.Errorf("reader required for unknown dynamic profile ID: %d", id)
+		}
+		packed := make([]byte, 7)
+		if _, err := io.ReadFull(r, packed); err != nil {
+			return nil, fmt.Errorf("failed to read packed profile: %w", err)
+		}
+		return UnpackDynamicProfile(id, packed)
+	}
+
+	return nil, fmt.Errorf("unsupported cryptographic profile ID: %d", id)
 }
 
 // DefaultProfile returns the standard NIST PQC profile (v1).
 func DefaultProfile() CryptoProfile {
-	p, _ := GetProfile(1)
+	p, _ := GetProfile(1, nil)
 	return p
 }
