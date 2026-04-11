@@ -81,6 +81,9 @@ func EncryptCmd() *cobra.Command {
 				if err := json.Unmarshal(raw, &dp); err != nil {
 					return fmt.Errorf("invalid profile format: %w", err)
 				}
+				if err := dp.Validate(); err != nil {
+					return fmt.Errorf("invalid profile parameters: %w", err)
+				}
 				crypto.RegisterProfile(&dp)
 				profile = int(dp.ID())
 			}

@@ -57,8 +57,35 @@ func (p *DynamicProfile) NewAEAD(key []byte) (cipher.AEAD, error) {
 		}
 		return cipher.NewGCM(block)
 	default:
-		return nil, fmt.Errorf("unsupported cipher type: %d", p.CipherType)
+		return nil, fmt.Errorf("unsupported cipher type: %d (only 0:XChaCha20, 1:AES-GCM supported)", p.CipherType)
 	}
+}
+
+// Validate checks if the profile uses supported algorithms and sensible security parameters.
+func (p *DynamicProfile) Validate() error {
+	if p.CipherType > 1 {
+		return fmt.Errorf("unsupported cipher type: %d", p.CipherType)
+	}
+	if p.KdfType != KdfArgon2id {
+		return fmt.Errorf("unsupported KDF type: %d", p.KdfType)
+	}
+	if p.ArgonTime < 1 {
+		return fmt.Errorf("invalid KDF iterations: %d (min 1)", p.ArgonTime)
+	}
+	if p.ArgonMem < 1024 {
+		return fmt.Errorf("invalid KDF memory: %d KB (min 1024)", p.ArgonMem)
+	}
+	if p.CustomSalt < 8 {
+		return fmt.Errorf("invalid salt size: %d (min 8)", p.CustomSalt)
+	}
+	// Check nonce size compatibility
+	if p.CipherType == AlgoAES256GCM && p.CustomNonc != 12 {
+		return fmt.Errorf("AES-GCM requires exactly 12-byte nonce (got %d)", p.CustomNonc)
+	}
+	if p.CipherType == AlgoXChaCha20Poly1305 && p.CustomNonc != 24 {
+		return fmt.Errorf("XChaCha20-Poly1305 requires exactly 24-byte nonce (got %d)", p.CustomNonc)
+	}
+	return nil
 }
 
 // Pack serializes the dynamic profile into 7 bytes for "Self-Contained" headers.

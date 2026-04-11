@@ -94,6 +94,44 @@ func TestProfileAsymmetricRoundTrip(t *testing.T) {
 	}
 }
 
+func TestProfileValidation(t *testing.T) {
+	tests := []struct {
+		name    string
+		dp      DynamicProfile
+		wantErr bool
+	}{
+		{"Valid XChaCha", DynamicProfile{CipherType: AlgoXChaCha20Poly1305, KdfType: KdfArgon2id, ArgonTime: 1, ArgonMem: 1024, CustomSalt: 16, CustomNonc: 24}, false},
+		{"Valid AES", DynamicProfile{CipherType: AlgoAES256GCM, KdfType: KdfArgon2id, ArgonTime: 1, ArgonMem: 1024, CustomSalt: 16, CustomNonc: 12}, false},
+		{"Invalid Cipher", DynamicProfile{CipherType: 99, KdfType: KdfArgon2id, ArgonTime: 1, ArgonMem: 1024, CustomSalt: 16, CustomNonc: 12}, true},
+		{"Invalid Nonce AES", DynamicProfile{CipherType: AlgoAES256GCM, KdfType: KdfArgon2id, ArgonTime: 1, ArgonMem: 1024, CustomSalt: 16, CustomNonc: 24}, true},
+		{"Weak Argon Memory", DynamicProfile{CipherType: AlgoAES256GCM, KdfType: KdfArgon2id, ArgonTime: 1, ArgonMem: 512, CustomSalt: 16, CustomNonc: 12}, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.dp.Validate()
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Validate() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestMultipleCustomProfiles(t *testing.T) {
+	dp1 := &DynamicProfile{CustomID: 10, CipherType: AlgoAES256GCM, KdfType: KdfArgon2id, ArgonTime: 1, ArgonMem: 1024, CustomSalt: 16, CustomNonc: 12}
+	dp2 := &DynamicProfile{CustomID: 20, CipherType: AlgoXChaCha20Poly1305, KdfType: KdfArgon2id, ArgonTime: 1, ArgonMem: 1024, CustomSalt: 16, CustomNonc: 24}
+
+	RegisterProfile(dp1)
+	RegisterProfile(dp2)
+
+	p1, _ := GetProfile(10, nil)
+	p2, _ := GetProfile(20, nil)
+
+	if p1.NonceSize() != 12 || p2.NonceSize() != 24 {
+		t.Error("Custom profiles interfered with each other")
+	}
+}
+
 func TestProfileRegistry(t *testing.T) {
 	RegisterProfile(&MockProfileV2{})
 

@@ -61,7 +61,14 @@ func GetProfile(id byte, r io.Reader) (CryptoProfile, error) {
 		if _, err := io.ReadFull(r, packed); err != nil {
 			return nil, fmt.Errorf("failed to read packed profile: %w", err)
 		}
-		return UnpackDynamicProfile(id, packed)
+		dp, err := UnpackDynamicProfile(id, packed)
+		if err != nil {
+			return nil, err
+		}
+		if err := dp.Validate(); err != nil {
+			return nil, fmt.Errorf("embedded profile validation failed: %w", err)
+		}
+		return dp, nil
 	}
 
 	return nil, fmt.Errorf("unsupported cryptographic profile ID: %d", id)
