@@ -47,7 +47,7 @@ brew install maknoon
 ```
 
 **From Source:**
-Requires Go 1.24+
+Requires Go 1.25+
 ```bash
 git clone https://github.com/al-Zamakhshari/maknoon.git
 cd maknoon
