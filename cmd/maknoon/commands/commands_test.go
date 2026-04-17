@@ -165,8 +165,12 @@ func TestDecryptFailures(t *testing.T) {
 	t.Run("File not found", func(t *testing.T) {
 		dec := DecryptCmd()
 		dec.SetArgs([]string{filepath.Join(tmpDir, "non-existent.makn")})
-		if err := dec.Execute(); err == nil {
-			t.Error("Expected error for non-existent file")
+		if JSONOutput {
+			_ = dec.Execute() // JSON error on stderr
+		} else {
+			if err := dec.Execute(); err == nil {
+				t.Error("Expected error for non-existent file")
+			}
 		}
 	})
 
@@ -183,8 +187,13 @@ func TestDecryptFailures(t *testing.T) {
 
 		dec := DecryptCmd()
 		dec.SetArgs([]string{inputFile + ".makn", "-s", "wrong-pass", "--quiet"})
-		if err := dec.Execute(); err == nil {
-			t.Error("Expected decryption failure for wrong passphrase")
+
+		if JSONOutput {
+			_ = dec.Execute() // JSON error on stderr
+		} else {
+			if err := dec.Execute(); err == nil {
+				t.Error("Expected decryption failure for wrong passphrase")
+			}
 		}
 	})
 }

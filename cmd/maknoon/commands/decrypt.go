@@ -24,6 +24,7 @@ func DecryptCmd() *cobra.Command {
 	var useFido2 bool
 	var quiet bool
 	var profileFile string
+	var overwrite bool
 
 	cmd := &cobra.Command{
 		Use:   "decrypt [file]",
@@ -69,11 +70,7 @@ func DecryptCmd() *cobra.Command {
 			}
 
 			// 1. Peek at the header to determine encryption type and flags
-			// We need a way to peek at stdin if it's stdin.
-			// Let's use a buffered reader or just read the first few bytes.
 			header := make([]byte, 6)
-			// If it's stdin, we might lose these 6 bytes from the stream if we're not careful.
-			// Actually, we can just use io.MultiReader to put them back.
 			if _, err := io.ReadFull(in, header); err != nil {
 				return fmt.Errorf("failed to read file header: %w", err)
 			}
@@ -98,14 +95,26 @@ func DecryptCmd() *cobra.Command {
 				}
 			}()
 
-			// 3. Now that we have everything, initialize the Progress Bar and Pipe
-			if !quiet && output != "-" {
+			// 3. Prepare output path and check existence
+			outPath, err := resolveDecryptionOutputPath(output, inputFile, flags)
+			if err != nil {
+				return err
+			}
+
+			if outPath != "-" && !overwrite {
+				if _, err := os.Stat(outPath); err == nil {
+					return fmt.Errorf("output path already exists: %s (use --overwrite to bypass)", outPath)
+				}
+			}
+
+			// 4. Initialize the Progress Bar and Pipe
+			if !quiet && outPath != "-" {
 				fmt.Printf("Decrypting '%s'...\n", inputName)
 			}
 
 			pr, pw := io.Pipe()
 			proxyIn := fullIn
-			if !quiet && totalSize > 0 && output != "-" {
+			if !quiet && totalSize > 0 && outPath != "-" {
 				bar := progressbar.DefaultBytes(totalSize, "restoring")
 				proxyIn = io.TeeReader(fullIn, bar)
 			}
@@ -117,10 +126,10 @@ func DecryptCmd() *cobra.Command {
 				} else {
 					_, dErr = crypto.DecryptStreamWithPrivateKey(proxyIn, pw, finalKey, concurrency)
 				}
-				pw.CloseWithError(dErr)
+				_ = pw.CloseWithError(dErr)
 			}()
 
-			return finalizeDecryption(pr, flags, output, inputFile)
+			return finalizeDecryption(pr, flags, outPath)
 		},
 	}
 
@@ -131,7 +140,29 @@ func DecryptCmd() *cobra.Command {
 	cmd.Flags().BoolVarP(&useFido2, "fido2", "f", false, "Use FIDO2 security key for authentication")
 	cmd.Flags().BoolVarP(&quiet, "quiet", "q", false, "Suppress progress bars and informational messages")
 	cmd.Flags().StringVar(&profileFile, "profile-file", "", "Path to a custom profile JSON file")
+	cmd.Flags().BoolVar(&overwrite, "overwrite", false, "Overwrite existing files")
 	return cmd
+}
+
+func resolveDecryptionOutputPath(output, inputFile string, flags byte) (string, error) {
+	if output == "-" {
+		return "-", nil
+	}
+	if output != "" {
+		return output, nil
+	}
+	if inputFile == "-" {
+		return "", fmt.Errorf("output path required when reading from stdin (use -o)")
+	}
+
+	if flags&crypto.FlagArchive != 0 {
+		return ".", nil // Default to current dir for archives
+	}
+
+	if strings.HasSuffix(inputFile, ".makn") {
+		return strings.TrimSuffix(inputFile, ".makn"), nil
+	}
+	return inputFile + ".dec", nil
 }
 
 func resolveDecryptionKey(magic, manualPass, keyPath string, useFido2 bool, isStdin bool) ([]byte, []byte, error) {
@@ -184,7 +215,8 @@ func resolveAsymmetricKey(password []byte, keyPath string, isStdin bool) ([]byte
 
 	if len(keyBytes) > 4 && string(keyBytes[:4]) == crypto.MagicHeader {
 		// Handle FIDO2 or Passphrase unlocking
-		password, err = unlockPrivateKey(password, resolvedPath, keyBytes, isStdin)
+		var err error
+		password, err = unlockPrivateKey(password, resolvedPath, isStdin)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -199,7 +231,7 @@ func resolveAsymmetricKey(password []byte, keyPath string, isStdin bool) ([]byte
 	return password, keyBytes, nil
 }
 
-func unlockPrivateKey(password []byte, resolvedPath string, _ []byte, isStdin bool) ([]byte, error) {
+func unlockPrivateKey(password []byte, resolvedPath string, isStdin bool) ([]byte, error) {
 	// Check for companion FIDO2 file
 	fido2Path := strings.TrimSuffix(resolvedPath, ".key")
 	fido2Path = strings.TrimSuffix(fido2Path, ".kem")
@@ -234,7 +266,7 @@ func unlockPrivateKey(password []byte, resolvedPath string, _ []byte, isStdin bo
 	return password, nil
 }
 
-func finalizeDecryption(pr io.Reader, flags byte, output, inputFile string) error {
+func finalizeDecryption(pr io.Reader, flags byte, outPath string) error {
 	decryptedReader := pr
 	if flags&crypto.FlagCompress != 0 {
 		zr, err := zstd.NewReader(pr)
@@ -246,24 +278,13 @@ func finalizeDecryption(pr io.Reader, flags byte, output, inputFile string) erro
 	}
 
 	if flags&crypto.FlagArchive != 0 {
-		return crypto.ExtractArchive(decryptedReader, output)
+		return crypto.ExtractArchive(decryptedReader, outPath)
 	}
 
-	outPath := output
 	var out io.Writer
 	if outPath == "-" {
 		out = os.Stdout
 	} else {
-		if outPath == "" {
-			if inputFile == "-" {
-				return fmt.Errorf("output path required when reading from stdin (use -o)")
-			}
-			if strings.HasSuffix(inputFile, ".makn") {
-				outPath = strings.TrimSuffix(inputFile, ".makn")
-			} else {
-				outPath = inputFile + ".dec"
-			}
-		}
 		f, err := os.Create(outPath)
 		if err != nil {
 			return err

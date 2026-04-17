@@ -69,21 +69,31 @@ func printErrorJSON(err error) {
 	fmt.Fprintln(os.Stderr, string(raw))
 }
 
+func resolveVaultPath(name string) (string, error) {
+	if strings.Contains(name, string(os.PathSeparator)) {
+		return name, nil
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("failed to get home directory: %w", err)
+	}
+	return filepath.Join(home, crypto.MaknoonDir, crypto.VaultsDir, name+".db"), nil
+}
+
 func openVault() (*bbolt.DB, []byte, error) {
 	checkJSONMode(nil)
 	if err := crypto.EnsureMaknoonDirs(); err != nil {
 		return nil, nil, err
 	}
 
-	dbPath := vaultName
-	if !strings.Contains(vaultName, string(os.PathSeparator)) {
-		home, _ := os.UserHomeDir()
-		dbPath = filepath.Join(home, crypto.MaknoonDir, crypto.VaultsDir, vaultName+".db")
+	dbPath, err := resolveVaultPath(vaultName)
+	if err != nil {
+		return nil, nil, err
 	}
 
 	db, err := bbolt.Open(dbPath, 0600, nil)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("failed to open vault database: %w", err)
 	}
 
 	var salt []byte
@@ -158,8 +168,12 @@ func openVault() (*bbolt.DB, []byte, error) {
 		return nil, nil, fmt.Errorf("master passphrase required via MAKNOON_PASSPHRASE or -s")
 	} else {
 		fmt.Print("Enter Vault Master Passphrase: ")
-		p, _ := term.ReadPassword(int(os.Stdin.Fd()))
+		p, err := term.ReadPassword(int(os.Stdin.Fd()))
 		fmt.Println()
+		if err != nil {
+			_ = db.Close()
+			return nil, nil, err
+		}
 		passphrase = p
 	}
 
@@ -172,8 +186,9 @@ func openVault() (*bbolt.DB, []byte, error) {
 func vaultSetCmd() *cobra.Command {
 	var user, note string
 	cmd := &cobra.Command{
-		Use:  "set [service] [password]",
-		Args: cobra.RangeArgs(1, 2),
+		Use:   "set [service] [password]",
+		Short: "Store a secret in the vault",
+		Args:  cobra.RangeArgs(1, 2),
 		RunE: func(_ *cobra.Command, args []string) error {
 			service := args[0]
 			var password string
@@ -185,9 +200,13 @@ func vaultSetCmd() *cobra.Command {
 				return nil
 			} else {
 				fmt.Print("Enter password for ", service, ": ")
-				p, _ := term.ReadPassword(int(os.Stdin.Fd()))
+				p, err := term.ReadPassword(int(os.Stdin.Fd()))
 				fmt.Println()
+				if err != nil {
+					return err
+				}
 				password = string(p)
+				// Note: password string is immutable, but we cleared it from term buffer
 			}
 
 			db, key, err := openVault()
@@ -236,8 +255,9 @@ func vaultSetCmd() *cobra.Command {
 
 func vaultGetCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:  "get [service]",
-		Args: cobra.ExactArgs(1),
+		Use:   "get [service]",
+		Short: "Retrieve a secret from the vault",
+		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			checkJSONMode(cmd)
 			service := args[0]
@@ -254,10 +274,21 @@ func vaultGetCmd() *cobra.Command {
 
 			h := sha256.Sum256([]byte(strings.ToLower(service)))
 			var ciphertext []byte
-			_ = db.View(func(tx *bbolt.Tx) error {
-				ciphertext = tx.Bucket([]byte(vaultBucket)).Get([]byte(hex.EncodeToString(h[:])))
+			err = db.View(func(tx *bbolt.Tx) error {
+				b := tx.Bucket([]byte(vaultBucket))
+				if b == nil {
+					return fmt.Errorf("vault bucket not found")
+				}
+				ciphertext = b.Get([]byte(hex.EncodeToString(h[:])))
 				return nil
 			})
+			if err != nil {
+				if JSONOutput {
+					printErrorJSON(err)
+					return nil
+				}
+				return err
+			}
 
 			if ciphertext == nil {
 				err := fmt.Errorf("service not found")
@@ -289,7 +320,8 @@ func vaultGetCmd() *cobra.Command {
 
 func vaultListCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use: "list",
+		Use:   "list",
+		Short: "List all services stored in the vault",
 		RunE: func(_ *cobra.Command, _ []string) error {
 			db, key, err := openVault()
 			if err != nil {
@@ -304,7 +336,11 @@ func vaultListCmd() *cobra.Command {
 
 			var services []string
 			err = db.View(func(tx *bbolt.Tx) error {
-				return tx.Bucket([]byte(vaultBucket)).ForEach(func(_ []byte, v []byte) error {
+				b := tx.Bucket([]byte(vaultBucket))
+				if b == nil {
+					return nil // empty vault
+				}
+				return b.ForEach(func(_ []byte, v []byte) error {
 					entry, err := crypto.OpenEntry(v, key)
 					if err == nil {
 						if JSONOutput {

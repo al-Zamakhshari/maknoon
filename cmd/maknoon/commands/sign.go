@@ -27,11 +27,20 @@ func SignCmd() *cobra.Command {
 
 			resolvedPath := crypto.ResolveKeyPath(sigKeyPath, "MAKNOON_PRIVATE_KEY")
 			if resolvedPath == "" {
-				return fmt.Errorf("signing key required (use --private-key or MAKNOON_PRIVATE_KEY)")
+				err := fmt.Errorf("signing key required (use --private-key or MAKNOON_PRIVATE_KEY)")
+				if JSONOutput {
+					printErrorJSON(err)
+					return nil
+				}
+				return err
 			}
 
 			keyBytes, err := os.ReadFile(resolvedPath)
 			if err != nil {
+				if JSONOutput {
+					printErrorJSON(err)
+					return nil
+				}
 				return err
 			}
 
@@ -44,32 +53,50 @@ func SignCmd() *cobra.Command {
 					}
 				}
 				if len(password) == 0 {
-					return fmt.Errorf("private key is encrypted; provide passphrase via --passphrase or MAKNOON_PASSPHRASE")
+					err := fmt.Errorf("private key is encrypted; provide passphrase via --passphrase or MAKNOON_PASSPHRASE")
+					if JSONOutput {
+						printErrorJSON(err)
+						return nil
+					}
+					return err
 				}
 
 				var unlockedKey bytes.Buffer
 				if _, err := crypto.DecryptStream(bytes.NewReader(keyBytes), &unlockedKey, password, 1); err != nil {
-					return fmt.Errorf("failed to unlock signing key: %w", err)
+					err := fmt.Errorf("failed to unlock signing key: %w", err)
+					if JSONOutput {
+						printErrorJSON(err)
+						return nil
+					}
+					return err
 				}
 				keyBytes = unlockedKey.Bytes()
-				defer func() {
-					for i := range keyBytes {
-						keyBytes[i] = 0
-					}
-				}()
+				defer crypto.SafeClear(keyBytes)
 			}
 
 			sig, err := crypto.SignData(data, keyBytes)
 			if err != nil {
+				if JSONOutput {
+					printErrorJSON(err)
+					return nil
+				}
 				return err
 			}
 
 			sigFile := filePath + ".sig"
 			if err := os.WriteFile(sigFile, sig, 0644); err != nil {
+				if JSONOutput {
+					printErrorJSON(err)
+					return nil
+				}
 				return err
 			}
 
-			fmt.Printf("File signed successfully. Signature saved to %s\n", sigFile)
+			if JSONOutput {
+				printJSON(map[string]string{"status": "success", "signature": sigFile})
+			} else {
+				fmt.Printf("File signed successfully. Signature saved to %s\n", sigFile)
+			}
 			return nil
 		},
 	}

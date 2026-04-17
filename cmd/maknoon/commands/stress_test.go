@@ -3,6 +3,7 @@ package commands
 import (
 	"archive/tar"
 	"bytes"
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -38,8 +39,24 @@ func TestIntegrationSecurityScenarios(t *testing.T) {
 
 		verifyCmd := VerifyCmd()
 		verifyCmd.SetArgs([]string{msgFile, "--public-key", keyBase + ".sig.pub"})
-		if err := verifyCmd.Execute(); err == nil {
-			t.Error("Expected verification failure for tampered file")
+
+		// In JSON mode (which might be active due to environment), we check stderr
+		if JSONOutput {
+			oldStderr := os.Stderr
+			r, w, _ := os.Pipe()
+			os.Stderr = w
+			_ = verifyCmd.Execute()
+			_ = w.Close()
+			os.Stderr = oldStderr
+			var buf bytes.Buffer
+			_, _ = io.Copy(&buf, r)
+			if !bytes.Contains(buf.Bytes(), []byte("FAILED")) {
+				t.Error("Expected verification failure in JSON output")
+			}
+		} else {
+			if err := verifyCmd.Execute(); err == nil {
+				t.Error("Expected verification failure for tampered file")
+			}
 		}
 	})
 
@@ -127,7 +144,10 @@ func TestIntegrationLargeFileConcurrency(t *testing.T) {
 		t.Fatalf("Concurrent decryption failed: %v", err)
 	}
 
-	restored, _ := os.ReadFile(restoredFile)
+	restored, err := os.ReadFile(restoredFile)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !bytes.Equal(data, restored) {
 		t.Error("Large file restored content mismatch")
 	}

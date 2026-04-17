@@ -21,6 +21,10 @@ func VerifyCmd() *cobra.Command {
 			filePath := args[0]
 			data, err := os.ReadFile(filePath)
 			if err != nil {
+				if JSONOutput {
+					printErrorJSON(err)
+					return nil
+				}
 				return err
 			}
 
@@ -29,20 +33,39 @@ func VerifyCmd() *cobra.Command {
 			}
 			sigBytes, err := os.ReadFile(signaturePath)
 			if err != nil {
-				return fmt.Errorf("signature file not found: %w", err)
+				err := fmt.Errorf("signature file not found: %w", err)
+				if JSONOutput {
+					printErrorJSON(err)
+					return nil
+				}
+				return err
 			}
 
 			resolvedPath := crypto.ResolveKeyPath(pubKeyPath, "MAKNOON_PUBLIC_KEY")
 			pubKeyBytes, err := os.ReadFile(resolvedPath)
 			if err != nil {
-				return fmt.Errorf("failed to read public key: %w", err)
+				err := fmt.Errorf("failed to read public key: %w", err)
+				if JSONOutput {
+					printErrorJSON(err)
+					return nil
+				}
+				return err
 			}
 
 			valid := crypto.VerifySignature(data, sigBytes, pubKeyBytes)
 			if valid {
-				fmt.Println("✅ Signature Verified! The data is authentic and has not been tampered with.")
+				if JSONOutput {
+					printJSON(map[string]string{"status": "success", "message": "Signature Verified"})
+				} else {
+					fmt.Println("✅ Signature Verified! The data is authentic and has not been tampered with.")
+				}
 			} else {
-				return fmt.Errorf("❌ Signature Verification FAILED! The data might be corrupted or from an untrusted source")
+				err := fmt.Errorf("❌ Signature Verification FAILED! The data might be corrupted or from an untrusted source")
+				if JSONOutput {
+					printErrorJSON(err)
+					return nil
+				}
+				return err
 			}
 
 			return nil

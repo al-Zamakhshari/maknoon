@@ -13,6 +13,13 @@ func main() {
 		Use:   "maknoon",
 		Short: "Maknoon (مكنون): A versatile, ultra-efficient CLI encryption tool.",
 		Long:  `Maknoon uses bleeding-edge hybrid cryptography to protect your files carefully.`,
+		PersistentPreRun: func(cmd *cobra.Command, _ []string) {
+			if commands.JSONOutput || os.Getenv("MAKNOON_JSON") == "1" {
+				commands.JSONOutput = true
+				cmd.SilenceUsage = true
+				cmd.SilenceErrors = true
+			}
+		},
 	}
 
 	rootCmd.PersistentFlags().BoolVar(&commands.JSONOutput, "json", false, "Output results in JSON format")

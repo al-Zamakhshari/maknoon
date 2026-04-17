@@ -33,14 +33,29 @@ func KeygenCmd() *cobra.Command {
 			if profileFile != "" {
 				raw, err := os.ReadFile(profileFile)
 				if err != nil {
-					return fmt.Errorf("failed to read profile file: %w", err)
+					err := fmt.Errorf("failed to read profile file: %w", err)
+					if JSONOutput {
+						printErrorJSON(err)
+						return nil
+					}
+					return err
 				}
 				var dp crypto.DynamicProfile
 				if err := json.Unmarshal(raw, &dp); err != nil {
-					return fmt.Errorf("invalid profile format: %w", err)
+					err := fmt.Errorf("invalid profile format: %w", err)
+					if JSONOutput {
+						printErrorJSON(err)
+						return nil
+					}
+					return err
 				}
 				if err := dp.Validate(); err != nil {
-					return fmt.Errorf("invalid profile parameters: %w", err)
+					err := fmt.Errorf("invalid profile parameters: %w", err)
+					if JSONOutput {
+						printErrorJSON(err)
+						return nil
+					}
+					return err
 				}
 				crypto.RegisterProfile(&dp)
 				profile = int(dp.ID())
@@ -49,6 +64,10 @@ func KeygenCmd() *cobra.Command {
 			if useFido2 {
 				meta, secret, err := crypto.Fido2Enroll("maknoon.io", "keygen-user")
 				if err != nil {
+					if JSONOutput {
+						printErrorJSON(err)
+						return nil
+					}
 					return err
 				}
 				fido2Meta = meta
@@ -56,6 +75,10 @@ func KeygenCmd() *cobra.Command {
 			} else {
 				password, err = getInitialPassphrase(noPassword, passphrase)
 				if err != nil {
+					if JSONOutput {
+						printErrorJSON(err)
+						return nil
+					}
 					return err
 				}
 			}
@@ -64,10 +87,17 @@ func KeygenCmd() *cobra.Command {
 				defer crypto.SafeClear(password)
 			}
 
-			fmt.Println("Generating bleeding-edge Post-Quantum identity (Kyber1024 + ML-DSA-87)...")
+			if !JSONOutput {
+				fmt.Println("Generating bleeding-edge Post-Quantum identity (Kyber1024 + ML-DSA-87)...")
+			}
 			kemPub, kemPriv, sigPub, sigPriv, err := crypto.GeneratePQKeyPair()
 			if err != nil {
-				return fmt.Errorf("failed to generate keypairs: %w", err)
+				err := fmt.Errorf("failed to generate keypairs: %w", err)
+				if JSONOutput {
+					printErrorJSON(err)
+					return nil
+				}
+				return err
 			}
 
 			defer func() {
@@ -77,21 +107,48 @@ func KeygenCmd() *cobra.Command {
 
 			basePath, baseName, err := resolveBaseKeyPath(output)
 			if err != nil {
+				if JSONOutput {
+					printErrorJSON(err)
+					return nil
+				}
 				return err
 			}
 			if err := writeIdentityKeys(basePath, baseName, kemPub, kemPriv, sigPub, sigPriv, password, byte(profile)); err != nil {
+				if JSONOutput {
+					printErrorJSON(err)
+					return nil
+				}
 				return err
 			}
 
 			if fido2Meta != nil {
 				raw, err := json.Marshal(fido2Meta)
 				if err != nil {
-					return fmt.Errorf("failed to marshal fido2 metadata: %w", err)
+					err := fmt.Errorf("failed to marshal fido2 metadata: %w", err)
+					if JSONOutput {
+						printErrorJSON(err)
+						return nil
+					}
+					return err
 				}
 				if err := os.WriteFile(basePath+".fido2", raw, 0644); err != nil {
-					return fmt.Errorf("failed to write fido2 metadata: %w", err)
+					err := fmt.Errorf("failed to write fido2 metadata: %w", err)
+					if JSONOutput {
+						printErrorJSON(err)
+						return nil
+					}
+					return err
 				}
 			}
+
+			if JSONOutput {
+				printJSON(map[string]string{
+					"status":    "success",
+					"base_path": basePath,
+					"base_name": baseName,
+				})
+			}
+
 			return nil
 		},
 	}
@@ -107,7 +164,9 @@ func KeygenCmd() *cobra.Command {
 
 func getInitialPassphrase(noPassword bool, manual string) ([]byte, error) {
 	if noPassword {
-		fmt.Println("Generating unprotected keypair (Automation Mode)...")
+		if !JSONOutput {
+			fmt.Println("Generating unprotected keypair (Automation Mode)...")
+		}
 		return nil, nil
 	}
 	if manual != "" {
@@ -115,6 +174,10 @@ func getInitialPassphrase(noPassword bool, manual string) ([]byte, error) {
 	}
 	if env := os.Getenv("MAKNOON_PASSPHRASE"); env != "" {
 		return []byte(env), nil
+	}
+
+	if JSONOutput {
+		return nil, fmt.Errorf("passphrase required via MAKNOON_PASSPHRASE or -s in JSON mode")
 	}
 
 	fmt.Print("Enter passphrase to protect your private keys: ")
@@ -126,9 +189,16 @@ func getInitialPassphrase(noPassword bool, manual string) ([]byte, error) {
 
 	if len(p) > 0 {
 		fmt.Print("Confirm passphrase: ")
-		confirm, _ := term.ReadPassword(int(os.Stdin.Fd()))
+		confirm, err := term.ReadPassword(int(os.Stdin.Fd()))
 		fmt.Println()
+		if err != nil {
+			crypto.SafeClear(p)
+			return nil, err
+		}
+		defer crypto.SafeClear(confirm)
+
 		if string(p) != string(confirm) {
+			crypto.SafeClear(p)
 			return nil, fmt.Errorf("passphrases do not match")
 		}
 	}
@@ -188,8 +258,10 @@ func writeIdentityKeys(basePath, baseName string, kemPub, kemPriv, sigPub, sigPr
 		return err
 	}
 
-	fmt.Printf("Success! Identity generated in %s\n", filepath.Dir(basePath))
-	fmt.Printf("  - Encryption Keys: %s.kem.{key,pub}\n", baseName)
-	fmt.Printf("  - Signing Keys:    %s.sig.{key,pub}\n", baseName)
+	if !JSONOutput {
+		fmt.Printf("Success! Identity generated in %s\n", filepath.Dir(basePath))
+		fmt.Printf("  - Encryption Keys: %s.kem.{key,pub}\n", baseName)
+		fmt.Printf("  - Signing Keys:    %s.sig.{key,pub}\n", baseName)
+	}
 	return nil
 }
