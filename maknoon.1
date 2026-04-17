@@ -1,4 +1,4 @@
-.TH MAKNOON 1 "April 2026" "1.1.4" "Maknoon Manual"
+.TH MAKNOON 1 "April 2026" "1.1.5" "Maknoon Manual"
 .SH NAME
 maknoon \- Versatile, ultra-efficient Post-Quantum CLI encryption tool.
 .SH SYNOPSIS
@@ -18,7 +18,7 @@ Generate a full Post-Quantum identity (Encryption + Signing keys). Keys are prot
 Encrypt a file or directory. If a directory is provided, it is streamed through a TAR encoder and encrypted on-the-fly. Supports \-\-compress (Zstd) and \-\-public-key (ML-KEM).
 .TP
 .B decrypt [file]
-Decrypt and restore data. Automatically detects archive and compression status from the encrypted header.
+Decrypt and restore data. Automatically detects archive and compression status from the encrypted header. Use \-\-overwrite to bypass safety checks for existing files.
 .TP
 .B sign [file]
 Generate a detached Post-Quantum (ML-DSA-87) signature for a file.
@@ -27,13 +27,21 @@ Generate a detached Post-Quantum (ML-DSA-87) signature for a file.
 Cryptographically verify a file's integrity and origin using a public ML-DSA key.
 .TP
 .B vault
-Manage a secure, encrypted password database (bbolt) protected by Argon2id.
+Manage a secure, encrypted password database (bbolt) protected by Argon2id. Subcommands: \fBset\fR, \fBget\fR, \fBlist\fR.
 .TP
-.B gen
-Generate high-entropy secure passwords or passphrases using a cryptographically secure RNG.
+.B gen [subcommand]
+Generate high-entropy secure credentials.
+.RS
+.TP
+.B password
+Generate a random character password. Supports \-\-length and \-\-no-symbols.
+.TP
+.B passphrase
+Generate a mnemonic passphrase. Supports \-\-words and \-\-separator.
+.RE
 .TP
 .B profiles
-List built-in cryptographic profiles and the JSON schema for constructing custom profiles. Supports \-\-generate to output a randomized secure profile JSON.
+List built-in cryptographic profiles and the JSON schema for constructing custom profiles. Supports \-\-generate to output a randomized secure profile JSON and \-\-output to save it.
 .SH OPTIONS
 .TP
 .B \-p, \-\-public-key
@@ -51,23 +59,26 @@ Enable Zstd compression before encryption.
 .B \-o, \-\-output
 Specify the output file path or directory. Use "-" as the output path to write to standard output.
 .TP
+.B \-\-overwrite
+Force overwrite of existing files during decryption or profile generation.
+.TP
 .B \-q, \-\-quiet
 Suppress progress bars and informational messages.
 .TP
 .B \-\-json
-Output command results (especially vault operations) in strict JSON format. Suppresses interactive prompts and returns errors as JSON on stderr.
+Output command results in strict JSON format. Suppresses interactive prompts and returns errors as JSON on stderr.
 .TP
 .B \-\-profile [id]
 Specify a built-in cryptographic profile ID (1: XChaCha20, 2: AES-GCM).
 .TP
 .B \-\-profile-file [path]
-Load a custom cryptographic profile from a JSON file. If the ID is 3-127, it creates a "Secret Profile" (requires the file for decryption). If the ID is 128-255, it creates a "Portable Profile" (packed in the header).
+Load a custom cryptographic profile from a JSON file.
 .TP
 .B \-j, \-\-concurrency
-Specify the number of parallel workers for chunk processing (0 for auto-scale, 1 for sequential).
+Specify the number of parallel workers for chunk processing (0 for auto-scale).
 .TP
 .B \-f, \-\-fido2
-Use a FIDO2 hardware security key (e.g., YubiKey) for authentication and key derivation.
+Use a FIDO2 hardware security key for authentication and key derivation.
 .SH SECURITY RATIONALE
 .TP
 .B XChaCha20-Poly1305
