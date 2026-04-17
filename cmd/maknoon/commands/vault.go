@@ -70,14 +70,23 @@ func printErrorJSON(err error) {
 }
 
 func resolveVaultPath(name string) (string, error) {
-	if strings.Contains(name, string(os.PathSeparator)) {
-		return name, nil
-	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("failed to get home directory: %w", err)
 	}
-	return filepath.Join(home, crypto.MaknoonDir, crypto.VaultsDir, name+".db"), nil
+	defaultDir := filepath.Join(home, crypto.MaknoonDir, crypto.VaultsDir)
+
+	if strings.Contains(name, string(os.PathSeparator)) {
+		if JSONOutput {
+			// In Agent/JSON mode, we strictly prohibit arbitrary paths for security
+			absPath, _ := filepath.Abs(name)
+			if !strings.HasPrefix(absPath, defaultDir) {
+				return "", fmt.Errorf("security policy: arbitrary vault paths are prohibited in JSON mode")
+			}
+		}
+		return name, nil
+	}
+	return filepath.Join(defaultDir, name+".db"), nil
 }
 
 func openVault() (*bbolt.DB, []byte, error) {
@@ -186,28 +195,29 @@ func openVault() (*bbolt.DB, []byte, error) {
 func vaultSetCmd() *cobra.Command {
 	var user, note string
 	cmd := &cobra.Command{
-		Use:   "set [service] [password]",
+		Use:   "set [service]",
 		Short: "Store a secret in the vault",
-		Args:  cobra.RangeArgs(1, 2),
+		Args:  cobra.ExactArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
 			service := args[0]
-			var password string
-			if len(args) > 1 {
-				password = args[1]
+			var password []byte
+			var err error
+
+			if env := os.Getenv("MAKNOON_PASSWORD"); env != "" {
+				password = []byte(env)
 			} else if JSONOutput {
-				err := fmt.Errorf("password required as argument when using --json")
+				err := fmt.Errorf("password required via MAKNOON_PASSWORD environment variable in JSON mode")
 				printErrorJSON(err)
 				return nil
 			} else {
 				fmt.Print("Enter password for ", service, ": ")
-				p, err := term.ReadPassword(int(os.Stdin.Fd()))
+				password, err = term.ReadPassword(int(os.Stdin.Fd()))
 				fmt.Println()
 				if err != nil {
 					return err
 				}
-				password = string(p)
-				// Note: password string is immutable, but we cleared it from term buffer
 			}
+			defer crypto.SafeClear(password)
 
 			db, key, err := openVault()
 			if err != nil {
@@ -306,11 +316,24 @@ func vaultGetCmd() *cobra.Command {
 				}
 				return err
 			}
+			defer crypto.SafeClear(entry.Password)
 
 			if JSONOutput {
-				printJSON(entry)
+				// For JSON output, we convert []byte password to string for serialization
+				type jsonEntry struct {
+					Service  string `json:"service"`
+					Username string `json:"username"`
+					Password string `json:"password"`
+					Note     string `json:"note"`
+				}
+				printJSON(jsonEntry{
+					Service:  entry.Service,
+					Username: entry.Username,
+					Password: string(entry.Password),
+					Note:     entry.Note,
+				})
 			} else {
-				fmt.Printf("Service:  %s\nUsername: %s\nPassword: %s\n", entry.Service, entry.Username, entry.Password)
+				fmt.Printf("Service:  %s\nUsername: %s\nPassword: %s\n", entry.Service, entry.Username, string(entry.Password))
 			}
 			return nil
 		},
@@ -343,6 +366,7 @@ func vaultListCmd() *cobra.Command {
 				return b.ForEach(func(_ []byte, v []byte) error {
 					entry, err := crypto.OpenEntry(v, key)
 					if err == nil {
+						defer crypto.SafeClear(entry.Password)
 						if JSONOutput {
 							services = append(services, entry.Service)
 						} else {

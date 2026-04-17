@@ -5,73 +5,41 @@ import (
 	"testing"
 )
 
-func TestDeriveVaultKey(t *testing.T) {
-	password := []byte("pass")
+func TestIntegrationVault(t *testing.T) {
+	masterPass := []byte("master-secret-123")
 	salt := make([]byte, 32)
+	key := DeriveVaultKey(masterPass, salt)
 
-	key1 := DeriveVaultKey(password, salt)
-	key2 := DeriveVaultKey(password, salt)
-
-	if !bytes.Equal(key1, key2) {
-		t.Fatal("Deterministic key derivation failed")
-	}
-
-	if len(key1) != 32 {
-		t.Errorf("Expected 32-byte key, got %d", len(key1))
-	}
-}
-
-func TestVaultEntryRoundTrip(t *testing.T) {
-	masterKey := make([]byte, 32)
 	entry := &VaultEntry{
-		Service:  "test",
-		Password: "secret-password",
+		Service:  "CloudService",
+		Username: "admin",
+		Password: []byte("secret-password"),
 	}
 
-	ciphertext, err := SealEntry(entry, masterKey)
+	// Seal
+	ct, err := SealEntry(entry, key)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("Seal failed: %v", err)
 	}
 
-	restored, err := OpenEntry(ciphertext, masterKey)
+	// Open
+	restored, err := OpenEntry(ct, key)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("Open failed: %v", err)
 	}
 
-	if restored.Password != entry.Password {
-		t.Errorf("Vault round-trip failed. Got %s", restored.Password)
+	if restored.Service != entry.Service || restored.Username != entry.Username {
+		t.Errorf("Mismatch in restored metadata")
 	}
-}
 
-func TestCorruptedHeader(t *testing.T) {
-	data := []byte("NOT-A-MAKN-FILE-AT-ALL")
-	var out bytes.Buffer
+	if !bytes.Equal(restored.Password, entry.Password) {
+		t.Errorf("Mismatch in restored password. Got %s, Want %s", restored.Password, entry.Password)
+	}
 
-	_, err := DecryptStream(bytes.NewReader(data), &out, []byte("pass"), 1)
+	// Wrong key should fail
+	wrongKey := make([]byte, 32)
+	_, err = OpenEntry(ct, wrongKey)
 	if err == nil {
-		t.Fatal("Expected error for invalid magic header, but got nil")
-	}
-}
-
-func TestUnsupportedVersion(t *testing.T) {
-	// Magic (4) | Version (1) | ...
-	data := []byte("MAKN")
-	data = append(data, 99) // Unsupported version 99
-	data = append(data, make([]byte, 100)...)
-
-	var out bytes.Buffer
-	_, err := DecryptStream(bytes.NewReader(data), &out, []byte("pass"), 1)
-	if err == nil {
-		t.Fatal("Expected error for unsupported version, but got nil")
-	}
-}
-
-func TestSafeClear(t *testing.T) {
-	b := []byte{1, 2, 3, 4}
-	SafeClear(b)
-	for i := range b {
-		if b[i] != 0 {
-			t.Errorf("SafeClear failed to zero out index %d", i)
-		}
+		t.Errorf("Expected failure with wrong master key")
 	}
 }

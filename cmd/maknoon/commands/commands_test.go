@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/al-Zamakhshari/maknoon/pkg/crypto"
 )
 
 // captureOutput captures the stdout of a function.
@@ -98,20 +100,30 @@ func TestResolveKeyPath(t *testing.T) {
 }
 
 func TestVaultGet(t *testing.T) {
-	tmpDir := t.TempDir()
-	vaultPath := filepath.Join(tmpDir, "testvault.db")
+	vaultName := "testvault_get"
 	passphrase := "testpass"
 
+	// Clean up
+	home, _ := os.UserHomeDir()
+	dbPath := filepath.Join(home, crypto.MaknoonDir, crypto.VaultsDir, vaultName+".db")
+	_ = os.Remove(dbPath)
+	defer os.Remove(dbPath)
+
 	// Set a secret first
+	if err := os.Setenv("MAKNOON_PASSWORD", "token123"); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Unsetenv("MAKNOON_PASSWORD")
+
 	setCmd := VaultCmd()
-	setCmd.SetArgs([]string{"--vault", vaultPath, "--passphrase", passphrase, "set", "github", "token123"})
+	setCmd.SetArgs([]string{"--vault", vaultName, "--passphrase", passphrase, "set", "github"})
 	if err := setCmd.Execute(); err != nil {
 		t.Fatal(err)
 	}
 
 	t.Run("Get existing service", func(t *testing.T) {
 		getCmd := VaultCmd()
-		getCmd.SetArgs([]string{"--vault", vaultPath, "--passphrase", passphrase, "get", "github"})
+		getCmd.SetArgs([]string{"--vault", vaultName, "--passphrase", passphrase, "get", "github"})
 		output := captureOutput(func() {
 			if err := getCmd.Execute(); err != nil {
 				t.Error(err)
@@ -124,7 +136,7 @@ func TestVaultGet(t *testing.T) {
 
 	t.Run("Get missing service", func(t *testing.T) {
 		getCmd := VaultCmd()
-		getCmd.SetArgs([]string{"--vault", vaultPath, "--passphrase", passphrase, "get", "nonexistent"})
+		getCmd.SetArgs([]string{"--vault", vaultName, "--passphrase", passphrase, "get", "nonexistent"})
 		if err := getCmd.Execute(); err == nil {
 			t.Error("Expected error for missing service, got nil")
 		}
@@ -132,22 +144,35 @@ func TestVaultGet(t *testing.T) {
 }
 
 func TestVaultList(t *testing.T) {
-	tmpDir := t.TempDir()
-	vaultPath := filepath.Join(tmpDir, "testvault_list.db")
+	vaultName := "testvault_list_v2"
 	passphrase := "testpass"
 
+	// Clean up
+	home, _ := os.UserHomeDir()
+	dbPath := filepath.Join(home, crypto.MaknoonDir, crypto.VaultsDir, vaultName+".db")
+	_ = os.Remove(dbPath)
+	defer os.Remove(dbPath)
+
 	setCmd := VaultCmd()
-	setCmd.SetArgs([]string{"--vault", vaultPath, "--passphrase", passphrase, "set", "svc1", "p1"})
-	if err := setCmd.Execute(); err != nil {
+	if err := os.Setenv("MAKNOON_PASSWORD", "p1"); err != nil {
 		t.Fatal(err)
 	}
-	setCmd.SetArgs([]string{"--vault", vaultPath, "--passphrase", passphrase, "set", "svc2", "p2"})
+	setCmd.SetArgs([]string{"--vault", vaultName, "--passphrase", passphrase, "set", "svc1"})
 	if err := setCmd.Execute(); err != nil {
 		t.Fatal(err)
 	}
 
+	if err := os.Setenv("MAKNOON_PASSWORD", "p2"); err != nil {
+		t.Fatal(err)
+	}
+	setCmd.SetArgs([]string{"--vault", vaultName, "--passphrase", passphrase, "set", "svc2"})
+	if err := setCmd.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	os.Unsetenv("MAKNOON_PASSWORD")
+
 	listCmd := VaultCmd()
-	listCmd.SetArgs([]string{"--vault", vaultPath, "--passphrase", passphrase, "list"})
+	listCmd.SetArgs([]string{"--vault", vaultName, "--passphrase", passphrase, "list"})
 	output := captureOutput(func() {
 		if err := listCmd.Execute(); err != nil {
 			t.Error(err)
@@ -292,12 +317,28 @@ func TestKeygenWithEnvPassphrase(t *testing.T) {
 
 func TestVaultJSON(t *testing.T) {
 	tmpDir := t.TempDir()
-	vaultPath := filepath.Join(tmpDir, "testvault_json.db")
+	
+	// Set custom home to ensure we are in a "safe" default vaults directory
+	oldHome := os.Getenv("HOME")
+	os.Setenv("HOME", tmpDir)
+	defer os.Setenv("HOME", oldHome)
+	
+	// Create the vaults dir
+	vaultsDir := filepath.Join(tmpDir, ".maknoon", "vaults")
+	if err := os.MkdirAll(vaultsDir, 0700); err != nil {
+		t.Fatal(err)
+	}
+
+	vaultName := "testvault_json_v2"
 	passphrase := "testpass"
 
+	// Clean up
+	home, _ := os.UserHomeDir()
+	dbPath := filepath.Join(home, crypto.MaknoonDir, crypto.VaultsDir, vaultName+".db")
+	_ = os.Remove(dbPath)
+	defer os.Remove(dbPath)
+
 	resetVaultGlobals := func() {
-		vaultName = ""
-		vaultPassphrase = ""
 		JSONOutput = false
 		if err := os.Unsetenv("MAKNOON_JSON"); err != nil {
 			t.Fatal(err)
@@ -310,8 +351,13 @@ func TestVaultJSON(t *testing.T) {
 		if err := os.Setenv("MAKNOON_JSON", "1"); err != nil {
 			t.Fatal(err)
 		}
+		if err := os.Setenv("MAKNOON_PASSWORD", "pass1"); err != nil {
+			t.Fatal(err)
+		}
+		defer os.Unsetenv("MAKNOON_PASSWORD")
+
 		setCmd := VaultCmd()
-		setCmd.SetArgs([]string{"--vault", vaultPath, "--passphrase", passphrase, "set", "service_env", "pass1"})
+		setCmd.SetArgs([]string{"--vault", vaultName, "--passphrase", passphrase, "set", "service_env"})
 		output := captureOutput(func() {
 			if err := setCmd.Execute(); err != nil {
 				t.Error(err)
@@ -326,7 +372,7 @@ func TestVaultJSON(t *testing.T) {
 	t.Run("Trigger via --json flag", func(t *testing.T) {
 		resetVaultGlobals()
 		getCmd := VaultCmd()
-		getCmd.SetArgs([]string{"--vault", vaultPath, "--passphrase", passphrase, "--json", "get", "service_env"})
+		getCmd.SetArgs([]string{"--vault", vaultName, "--passphrase", passphrase, "--json", "get", "service_env"})
 		output := captureOutput(func() {
 			if err := getCmd.Execute(); err != nil {
 				t.Error(err)
@@ -344,7 +390,7 @@ func TestVaultJSON(t *testing.T) {
 			t.Fatal(err)
 		}
 		getCmdErr := VaultCmd()
-		getCmdErr.SetArgs([]string{"--vault", vaultPath, "--passphrase", passphrase, "get", "nonexistent"})
+		getCmdErr.SetArgs([]string{"--vault", vaultName, "--passphrase", passphrase, "get", "nonexistent"})
 
 		oldStderr := os.Stderr
 		r, w, _ := os.Pipe()

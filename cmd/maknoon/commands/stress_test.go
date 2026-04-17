@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/al-Zamakhshari/maknoon/pkg/crypto"
@@ -61,26 +62,41 @@ func TestIntegrationSecurityScenarios(t *testing.T) {
 	})
 
 	t.Run("Vault Service Collision", func(t *testing.T) {
-		vaultPath := filepath.Join(tmpDir, "collision.db")
+		vaultPath := "collision_test"
+		pass := "pass"
+		
+		// Clean up previous test runs
+		home, _ := os.UserHomeDir()
+		dbPath := filepath.Join(home, crypto.MaknoonDir, crypto.VaultsDir, vaultPath+".db")
+		_ = os.Remove(dbPath)
+		defer os.Remove(dbPath)
+		
+		if err := os.Setenv("MAKNOON_PASSWORD", "secret1"); err != nil {
+			t.Fatal(err)
+		}
 		setCmd := VaultCmd()
-		setCmd.SetArgs([]string{"--vault", vaultPath, "--passphrase", "pass", "set", "service1", "secret1", "--json"})
+		setCmd.SetArgs([]string{"--vault", vaultPath, "--passphrase", pass, "set", "service1", "--json"})
 		if err := setCmd.Execute(); err != nil {
 			t.Fatal(err)
 		}
 
-		setCmd.SetArgs([]string{"--vault", vaultPath, "--passphrase", "pass", "set", "SERVICE1", "secret2", "--json"})
+		if err := os.Setenv("MAKNOON_PASSWORD", "secret2"); err != nil {
+			t.Fatal(err)
+		}
+		setCmd.SetArgs([]string{"--vault", vaultPath, "--passphrase", pass, "set", "SERVICE1", "--json"})
 		if err := setCmd.Execute(); err != nil {
 			t.Fatal(err)
 		}
+		os.Unsetenv("MAKNOON_PASSWORD")
 
 		getCmd := VaultCmd()
-		getCmd.SetArgs([]string{"--vault", vaultPath, "--passphrase", "pass", "get", "service1", "--json"})
+		getCmd.SetArgs([]string{"--vault", vaultPath, "--passphrase", pass, "get", "service1", "--json"})
 		output := captureOutput(func() {
 			if err := getCmd.Execute(); err != nil {
 				t.Error(err)
 			}
 		})
-		if !bytes.Contains([]byte(output), []byte("secret2")) {
+		if !strings.Contains(output, "secret2") {
 			t.Error("Case-insensitive vault collision failed to overwrite")
 		}
 	})

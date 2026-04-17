@@ -65,9 +65,10 @@ def set_maknoon_secret(
     vault_name: str = "default"
 ) -> Dict[str, Any]:
     """Stores or updates a secret in the Maknoon vault."""
-    env = {}
+    # SECURITY: Pass password via environment variable to avoid process list exposure
+    env = {"MAKNOON_PASSWORD": password}
     cmd = [
-        "MAKNOON_PLACEHOLDER", "vault", "set", service_name, password,
+        "MAKNOON_PLACEHOLDER", "vault", "set", service_name,
         "--vault", vault_name,
         "--user", username, "--note", note
     ]
@@ -105,7 +106,8 @@ def encrypt_maknoon_file(
     cmd = ["MAKNOON_PLACEHOLDER", "encrypt", input_path, "-o", output_path, "--quiet"]
     if compress:
         cmd.append("--compress")
-    # Note: Overwrite flag added for security hardening compliance
+    if overwrite:
+        cmd.append("--overwrite")
     
     result = _run_maknoon(cmd, env, timeout=60)
     return _parse_json_result(result)
@@ -134,7 +136,9 @@ def list_maknoon_services(vault_name: str = "default") -> Union[List[str], Dict[
 @tool
 def list_maknoon_vaults() -> List[str]:
     """Lists the names of all available Maknoon vaults."""
-    vault_dir = os.path.expanduser("~/.maknoon/vaults")
+    # Note: Using default path. Consider making this configurable or using identity logic.
+    home = os.path.expanduser("~")
+    vault_dir = os.path.join(home, ".maknoon", "vaults")
     if not os.path.exists(vault_dir):
         return []
     

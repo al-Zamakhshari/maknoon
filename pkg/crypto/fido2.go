@@ -122,6 +122,7 @@ func handleFido2PIN(dev Authenticator, info *ctap2.AuthenticatorGetInfoResponse,
 		if err != nil {
 			return nil, err
 		}
+		defer SafeClear(pin)
 		token, err := dev.GetPinUvAuthTokenUsingPIN(string(pin), ctap2.PermissionMakeCredential|ctap2.PermissionGetAssertion, rpID)
 		if err != nil {
 			return nil, fmt.Errorf("PIN authentication failed: %w", err)
@@ -199,6 +200,7 @@ func Fido2DeriveWithAuthenticator(dev Authenticator, rpID string, credentialID [
 		if err != nil {
 			return nil, err
 		}
+		defer SafeClear(pin)
 		var err2 error
 		token, err2 = dev.GetPinUvAuthTokenUsingPIN(string(pin), ctap2.PermissionGetAssertion, rpID)
 		if err2 != nil {
