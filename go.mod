@@ -1,6 +1,6 @@
 module github.com/al-Zamakhshari/maknoon
 
-go 1.24.0
+go 1.26.1
 
 require (
 	github.com/cloudflare/circl v1.6.3
@@ -10,8 +10,8 @@ require (
 	github.com/secure-io/siv-go v0.0.0-20180922214919-5ff40651e2c4
 	github.com/spf13/cobra v1.10.2
 	go.etcd.io/bbolt v1.4.3
-	golang.org/x/crypto v0.49.0
-	golang.org/x/term v0.41.0
+	golang.org/x/crypto v0.50.0
+	golang.org/x/term v0.42.0
 )
 
 require (
