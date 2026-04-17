@@ -1,12 +1,12 @@
 # Maknoon (مكنون) - Project Context
 
-Maknoon is a high-performance, post-quantum CLI encryption tool written in Go. It focuses on efficiency, security, and future-proofing against quantum computing threats.
+Maknoon is a high-performance, post-quantum CLI encryption tool. It focuses on efficiency, security, and future-proofing against quantum computing threats.
 
 ## 🏗 Project Architecture
 
-- **`cmd/maknoon/`**: Contains the entry point (`main.go`) and CLI command definitions using the Cobra library.
-- **`pkg/crypto/`**: The core library implementing the cryptographic pipeline, streaming logic, and FIDO2 integration.
-- **`third_party/`**: Any external dependencies managed locally or specific patched versions.
+- **`cmd/maknoon/`**: Entry point (`main.go`) and CLI command definitions using Cobra.
+- **`pkg/crypto/`**: Core library implementing the cryptographic pipeline, streaming logic, and FIDO2 integration.
+- **`integrations/`**: Third-party wrappers and tools (e.g., Python/LangChain).
 
 ## 🛡 Cryptographic Stack
 
@@ -14,54 +14,51 @@ Maknoon is a high-performance, post-quantum CLI encryption tool written in Go. I
 - **Asymmetric Encryption (KEM)**: ML-KEM / Kyber1024 (NIST Standard).
 - **Digital Signatures**: ML-DSA-87 / Dilithium (NIST Standard).
 - **Key Derivation (KDF)**: Argon2id (Time: 3, Memory: 64MB).
-- **Hardware Security**: FIDO2 (Passkey) support via a CGO-free implementation.
+- **Hardware Security**: FIDO2 (Passkey) support via a CGO-free pure-Go implementation.
 
 ## 🛠 Building and Running
 
 ### Prerequisites
-- Go 1.21 or higher.
+- Go 1.25 or higher.
 
 ### Key Commands
 - **Build (Local)**: `go build -o maknoon ./cmd/maknoon`
 - **Build (Release Simulation)**: `goreleaser release --snapshot --clean`
 - **Test**: `go test ./...`
 - **Run (Development)**: `go run ./cmd/maknoon`
-- **Benchmark**: `go test -bench . ./pkg/crypto`
+- **Quality Check**: `staticcheck ./... && go vet ./...`
 
 ## 🚀 Pre-Release Checklist
-Before every release or major push, the following steps **must** be completed:
 
-1.  **Documentation Update**: Ensure `README.md` reflects all new features, flags, and architectural changes.
-2.  **Man Page Update**: Sync `maknoon.1` with the current CLI state (commands and flags).
-3.  **Test Verification**:
-    *   Update **Unit Tests** in `pkg/crypto/` to cover new logic.
-    *   Update **Integration Tests** in `cmd/maknoon/commands/stress_test.go` for end-to-end verification.
+1.  **Documentation Update**: Sync `README.md` and `maknoon.1` with all new features and security changes.
+2.  **Test Verification**:
+    *   Ensure **Unit Tests** in `pkg/crypto/` cover all new logic.
+    *   Verify **Integration Tests** in `cmd/maknoon/commands/stress_test.go`.
     *   Run the full suite: `go test -v ./...`.
-4.  **Security Audit**:
-    *   Check for path traversal vulnerabilities (Zip Slip).
-    *   Ensure memory hygiene (`SafeClear`) is applied to all new sensitive data paths.
-    *   Run `/security:analyze` if applicable.
-5.  **Quality Check**:
+3.  **Security Audit**:
+    *   Verify **Zip Slip** protection in `ExtractArchive`.
+    *   Ensure **Memory Hygiene** (`SafeClear`) is applied to ALL sensitive buffers (passphrases, keys, PINs).
+    *   Confirm **Access Control** logic for vault paths in JSON mode.
+4.  **Quality Check**:
     *   Ensure 100% `gofmt` compliance.
-    *   Check cyclomatic complexity (keep under 15).
-    *   Run `go vet ./...`.
-    *   Run `staticcheck ./...` to verify advanced logic and performance rules.
-    *   Verify that the **CI/CD workflow** (.github/workflows/ci.yml) is passing.
+    *   Check cyclomatic complexity (keep under 15 for core functions).
+    *   Run `staticcheck ./...`.
+    *   Verify that the **CI/CD workflow** (.github/workflows/ci.yml) is passing on main.
 
-- **Cryptographic Agility**: NEVER hardcode cryptographic algorithms or parameters (nonce sizes, salt sizes, etc.) in the core pipeline. All primitives MUST be accessed through the `CryptoProfile` interface. Maknoon supports Hybrid Profiles:
-    - **Secret Profiles (3-127)**: Definitions stored in external JSON files.
-    - **Portable Profiles (128-255)**: Definitions packed directly into the file header.
-- **Memory Hygiene**: Always use `crypto.SafeClear` to zero out sensitive data (keys, passphrases) in memory immediately after use.
-- **Streaming & Pipes**: Prefer `io.Reader` and `io.Writer` over file paths in command logic. All new encryption/decryption features MUST support standard I/O (stdin/stdout via `-`).
-- **Automation First**: New flags and commands should support a `--quiet` mode to suppress progress bars and informational output for CI/CD and scripts.
-- **Environment Integration**: Sensitive or repetitive inputs (keys, passphrases) should be resolvable via standard environment variables (`MAKNOON_*`).
-- **CGO Avoidance**: Prefer pure-Go implementations to maintain easy cross-compilation and portability.
-- **Documentation**: All exported functions and constants should have comments following the standard Go convention (`// Name ...`).
-- **Agentic AI Integration**: Maintain a strict `--json` output mode and `MAKNOON_JSON=1` environment trigger for all `vault` subcommands. Ensure that when JSON mode is active, all interactive prompts are suppressed and errors are returned as JSON on `stderr`.
-- **Python Tooling**: Keep `maknoon_agent_tool.py` updated as the reference implementation for LangChain/LangGraph integrations.
+## 📋 Engineering Standards
+
+- **Cryptographic Agility**: Use the `Profile` interface for all primitives. Support both Secret (3-127) and Portable (128-255) profiles.
+- **Memory Hygiene**: Use `crypto.SafeClear` immediately after sensitive data use. Sensitive fields in structs (like passwords) must be `[]byte`.
+- **Streaming & Pipes**: Prefer `io.Reader` and `io.Writer`. All commands MUST support standard I/O (stdin/stdout via `-`).
+- **Automation & AI**: Maintain a strict `--json` output mode. When `MAKNOON_JSON=1` is set:
+    - Suppress all interactive prompts.
+    - Strictly validate vault paths (restricted to `~/.maknoon/vaults`).
+    - Return errors as JSON on `stderr`.
+- **CGO Avoidance**: Maintain a 100% Pure Go codebase for maximum portability.
+- **Python Tooling**: Keep `integrations/langchain/maknoon_agent_tool.py` updated with the latest CLI signature.
 
 ## 🧪 Testing Practices
 
-- **Unit Tests**: Found in `*_test.go` files alongside the source code.
-- **Integration Tests**: Located in `cmd/maknoon/main_test.go` and `cmd/maknoon/commands/stress_test.go`, covering end-to-end CLI scenarios.
-- **Mocking**: Use the `Authenticator` interface in `pkg/crypto/fido2.go` for hardware-dependent testing.
+- **Unit Tests**: Alongside source in `*_test.go`.
+- **Integration Tests**: End-to-end CLI scenarios in `cmd/maknoon/main_test.go`.
+- **Mocking**: Use the `Authenticator` interface for hardware testing.

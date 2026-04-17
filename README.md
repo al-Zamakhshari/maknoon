@@ -6,19 +6,19 @@
 
 **Maknoon** (Arabic: مكنون) translates to *the hidden*, *the concealed*, or *that which is carefully preserved*. 
 
-Maknoon is a versatile, ultra-efficient CLI encryption tool designed for a post-quantum world. It combines bleeding-edge cryptographic standards with a high-performance streaming architecture to protect your files and directories with absolute care.
+Maknoon is a high-performance, post-quantum CLI encryption tool. It combines modern cryptographic standards with a hyper-efficient streaming architecture to protect your data with absolute care.
 
 ## ✨ Core Philosophies & Design Choices
 
-1.  **Post-Quantum Readiness (ML-KEM/ML-DSA):** Traditional RSA and Elliptic Curve cryptography are vulnerable to future quantum computers (Shor's algorithm). Maknoon uses **NIST-standardized** Post-Quantum algorithms (Kyber1024 and Dilithium87) to ensure your data remains secure for decades, not just years.
-2.  **Streaming Architecture (Hyper-Efficiency):** Unlike tools that load entire files into RAM, Maknoon uses a **64KB chunk-based streaming pipeline**. This ensures a **constant memory footprint** (~64KB) whether you are encrypting a 1MB PDF or a 1TB database backup.
-3.  **Strict Memory Hygiene:** To prevent sensitive data leakage through memory forensics or swap files, Maknoon **explicitly zeros out** all passphrases, raw keys, and confirmation buffers from RAM using `SafeClear` patterns immediately after use.
-4.  **Authenticated Encryption (XChaCha20-Poly1305):** We chose XChaCha20-Poly1305 for its superior performance in software-only environments and its resilience against nonce-misuse. Every chunk is independently authenticated, ensuring that any bit of corruption is detected immediately.
-5.  **Transparent Directory Support:** Maknoon treats directories as first-class citizens. By integrating a **streaming TAR encoder** into the cryptographic pipeline, it encrypts entire directory trees on-the-fly without creating intermediate unencrypted temporary files.
-6.  **High-Speed Compression:** Optional **Zstd** integration provides industry-leading compression ratios and speeds, perfectly suited for the streaming nature of the tool.
-7.  **Multi-Core Parallelism:** Maknoon can parallelize chunk encryption and decryption across all available CPU cores using a high-performance worker pool.
-8.  **Hardware-Backed Security (CGO-Free):** Maknoon supports FIDO2 security keys (like YubiKey) for hardware-backed master keys. Our implementation is **100% Pure Go**.
-9.  **Cryptographic Agility (Profile Architecture):** Modular "Profile" system allows for seamless migration to new standards (IDs 3-127 for secret profiles, 128-255 for portable/self-contained profiles).
+1.  **Post-Quantum Readiness (ML-KEM/ML-DSA):** Traditional RSA and ECC are vulnerable to future quantum threats. Maknoon uses **NIST-standardized** Post-Quantum algorithms (Kyber1024 and Dilithium87) to ensure long-term data security.
+2.  **Streaming Architecture (Hyper-Efficiency):** Using a **64KB chunk-based pipeline**, Maknoon maintains a **constant memory footprint** regardless of file size. It can securely process multi-terabyte datasets on low-resource hardware.
+3.  **Strict Memory Hygiene:** All passphrases, raw keys, and sensitive buffers are **explicitly zeroed out** from RAM immediately after use using `SafeClear` patterns to prevent leakage through memory forensics.
+4.  **Authenticated Encryption (XChaCha20-Poly1305):** Every data chunk is independently authenticated, ensuring immediate detection of any bit-level corruption or tampering.
+5.  **Transparent Directory Support:** Encrypts entire directory trees on-the-fly using an integrated streaming TAR encoder, avoiding intermediate unencrypted temporary files.
+6.  **High-Speed Compression:** Optional **Zstd** integration provides superior compression ratios without sacrificing streaming performance.
+7.  **Multi-Core Parallelism:** Automatically scales encryption/decryption across all available CPU cores for maximum throughput.
+8.  **Hardware-Backed Security:** Supports FIDO2 security keys (e.g., YubiKey) for hardware-bound master keys via a **100% Pure Go** implementation.
+9.  **Cryptographic Agility:** A modular **Profile** system allows for seamless migration to new standards while maintaining full backward compatibility.
 
 ---
 
@@ -28,8 +28,8 @@ Maknoon uses a **Suite/Profile** architecture. The first byte of every encrypted
 
 ### 🛠 Profile Management
 *   **Built-in 1 (Default):** XChaCha20-Poly1305 + NIST PQC.
-*   **Built-in 2:** AES-256-GCM + NIST PQC (Hardware Accelerated).
-*   **Custom:** Generate a random secure profile and save to file:
+*   **Built-in 2:** AES-256-GCM + NIST PQC.
+*   **Custom:** Generate a randomized secure profile JSON:
     ```bash
     maknoon profiles --generate --secret --output my_suite.json
     ```
@@ -47,7 +47,7 @@ brew install maknoon
 ```
 
 **From Source:**
-Requires Go 1.26+
+Requires Go 1.25+
 ```bash
 git clone https://github.com/al-Zamakhshari/maknoon.git
 cd maknoon
@@ -61,7 +61,7 @@ Generate a full Post-Quantum identity (Encryption + Signing keys).
 # Generates id_identity.kem.{key,pub} and id_identity.sig.{key,pub}
 maknoon keygen -o id_identity
 
-# Protect your identity with a physical security key (YubiKey)
+# Protect your private keys with a hardware security key (YubiKey)
 maknoon keygen --fido2 -o secure_id
 ```
 
@@ -69,10 +69,10 @@ maknoon keygen --fido2 -o secure_id
 
 **Symmetric Mode (Passphrase):**
 ```bash
-# Encrypt
+# Encrypt (will prompt for passphrase)
 maknoon encrypt sensitive_report.pdf -o report.makn
 
-# Decrypt (will prompt for passphrase)
+# Decrypt 
 maknoon decrypt report.makn
 
 # Decrypt and overwrite existing file
@@ -94,10 +94,8 @@ maknoon verify document.pdf --public-key my.sig.pub
 ```
 
 ### 3. High-Entropy Password Generation
-Generate cryptographically secure passwords or mnemonics.
-
 ```bash
-# Generate a 32-character password
+# Generate a random 32-character password
 maknoon gen password --length 32
 
 # Generate a 6-word mnemonic passphrase
@@ -108,41 +106,33 @@ maknoon gen passphrase --words 6
 Securely store credentials in a quantum-resistant database.
 
 ```bash
-# Store a secret
-maknoon vault set github.com "your-token-here" --user myname
+# Store a secret (prompts for secret via secure terminal)
+maknoon vault set github.com --user myname
+
+# Store a secret via environment variable (Agent Mode)
+export MAKNOON_PASSWORD="your-secure-token"
+maknoon vault set github.com --json
 
 # Retrieve
 maknoon vault get github.com
-
-# List all services
-maknoon vault list
 ```
 
 ---
 
 ## 🤖 Agentic AI Integration
 
-Maknoon is designed to be **Agent-Ready**. It features a strict JSON output mode and suppressed interactive prompts for seamless integration with LLM frameworks (LangChain, LangGraph, etc.).
+Maknoon is optimized for **Automated Workflows** and AI Agents. It features a strict JSON output mode and suppresses all interactive prompts.
 
 ### Key Features:
-- **`--json` Flag**: Explicitly triggers structured JSON output and redirects interactive prompts to errors.
-- **`MAKNOON_JSON=1`**: Environment variable for global non-interactive mode.
+- **`--json` Flag**: Triggers structured JSON output and redirects interactive prompts to errors.
+- **`MAKNOON_JSON=1`**: Global environment trigger for non-interactive mode.
 - **Python Tool Wrapper**: A complete LangChain-ready implementation is available in `integrations/langchain/maknoon_agent_tool.py`.
-
-### Example (CLI):
-```bash
-export MAKNOON_PASSPHRASE="your_master_key"
-maknoon vault get github --json
-```
 
 ### Example (Python):
 ```python
-from integrations.langchain.maknoon_agent_tool import get_maknoon_secret, generate_maknoon_password
+from integrations.langchain.maknoon_agent_tool import get_maknoon_secret
 
-# Generate a secure password for a new service
-new_pass = generate_maknoon_password.invoke({"length": 24})
-
-# Retrieve a secret
+# Retrieve a secret from the vault
 result = get_maknoon_secret.invoke({"service_name": "github"})
 print(result['password'])
 ```
@@ -152,10 +142,13 @@ print(result['password'])
 ## 🏗 Security Architecture
 
 ### Path & Overwrite Protection
-Maknoon includes safety checks to prevent accidental file overwrites. Decryption and profile generation will fail if the target file already exists, unless the `--overwrite` flag is explicitly provided.
+Maknoon includes safety checks to prevent accidental file overwrites. Decryption and profile generation will fail if the target file already exists, unless the `--overwrite` flag is provided.
 
-### Metadata Privacy
-Maknoon files include a minimal header. No filenames or internal directory structures are leaked; all metadata is contained within the encrypted payload.
+### Access Control (JSON Mode)
+To protect against unauthorized file access in automated environments, Maknoon restricts vault database locations to the default directory (`~/.maknoon/vaults`) when running in JSON mode.
+
+### RAM Security
+Sensitive data (passphrases, master keys, decrypted buffers) is stored in `[]byte` slices and explicitly zeroed out immediately after use to mitigate RAM-dump attacks.
 
 ---
 
@@ -163,7 +156,7 @@ Maknoon files include a minimal header. No filenames or internal directory struc
 
 ```bash
 # Set passphrase for headless environments
-export MAKNOON_PASSPHRASE="your-secret-key"
+export MAKNOON_PASSPHRASE="your-vault-key"
 
 # Pipe data directly into Maknoon
 echo "Secret data" | maknoon encrypt - -o secret.makn --quiet
