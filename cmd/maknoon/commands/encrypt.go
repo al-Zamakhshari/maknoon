@@ -68,7 +68,7 @@ func EncryptCmd() *cobra.Command {
 				if err != nil {
 					return fmt.Errorf("failed to create output file: %w", err)
 				}
-				defer f.Close()
+				defer func() { _ = f.Close() }()
 				out = f
 			}
 

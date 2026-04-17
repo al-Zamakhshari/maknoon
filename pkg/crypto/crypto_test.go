@@ -96,7 +96,9 @@ func TestInvalidPassword(t *testing.T) {
 	data := []byte("sensitive info")
 
 	var encrypted bytes.Buffer
-	EncryptStream(bytes.NewReader(data), &encrypted, password, FlagNone, 1, 0)
+	if err := EncryptStream(bytes.NewReader(data), &encrypted, password, FlagNone, 1, 0); err != nil {
+		t.Fatal(err)
+	}
 
 	var decrypted bytes.Buffer
 	_, err := DecryptStream(bytes.NewReader(encrypted.Bytes()), &decrypted, wrongPassword, 1)

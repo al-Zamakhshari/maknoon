@@ -117,7 +117,9 @@ func BenchmarkEncryption(b *testing.B) {
 			b.SetBytes(int64(dataSize))
 			for i := 0; i < b.N; i++ {
 				var out bytes.Buffer
-				EncryptStream(bytes.NewReader(data), &out, password, FlagNone, c, 0)
+				if err := EncryptStream(bytes.NewReader(data), &out, password, FlagNone, c, 0); err != nil {
+					b.Fatal(err)
+				}
 			}
 		})
 	}

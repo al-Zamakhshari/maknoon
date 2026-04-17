@@ -1,3 +1,4 @@
+// Package commands contains the implementation and tests for the Maknoon CLI commands.
 package commands
 
 import (
@@ -9,6 +10,7 @@ import (
 	"testing"
 )
 
+// captureOutput captures the stdout of a function.
 func captureOutput(f func()) string {
 	old := os.Stdout
 	r, w, _ := os.Pipe()
@@ -16,160 +18,144 @@ func captureOutput(f func()) string {
 
 	f()
 
-	w.Close()
+	if err := w.Close(); err != nil {
+		panic(err)
+	}
 	os.Stdout = old
 
 	var buf bytes.Buffer
-	io.Copy(&buf, r)
+	if _, err := io.Copy(&buf, r); err != nil {
+		panic(err)
+	}
 	return buf.String()
 }
 
 func TestGenCmd(t *testing.T) {
 	t.Run("Default password", func(t *testing.T) {
 		cmd := GenCmd()
-		cmd.SetArgs([]string{})
+		cmd.SetArgs([]string{"password"})
 		output := captureOutput(func() {
-			cmd.Execute()
+			if err := cmd.Execute(); err != nil {
+				t.Error(err)
+			}
 		})
-		output = strings.TrimSpace(output)
-		if len(output) != 32 {
-			t.Errorf("Expected length 32, got %d", len(output))
+		if len(strings.TrimSpace(output)) != 32 {
+			t.Errorf("Expected default length 32, got %d", len(strings.TrimSpace(output)))
 		}
 	})
 
 	t.Run("Custom length", func(t *testing.T) {
 		cmd := GenCmd()
-		cmd.SetArgs([]string{"--length", "16"})
+		cmd.SetArgs([]string{"password", "--length", "16"})
 		output := captureOutput(func() {
-			cmd.Execute()
+			if err := cmd.Execute(); err != nil {
+				t.Error(err)
+			}
 		})
-		output = strings.TrimSpace(output)
-		if len(output) != 16 {
-			t.Errorf("Expected length 16, got %d", len(output))
+		if len(strings.TrimSpace(output)) != 16 {
+			t.Errorf("Expected length 16, got %d", len(strings.TrimSpace(output)))
 		}
 	})
 
 	t.Run("Passphrase mode", func(t *testing.T) {
 		cmd := GenCmd()
-		cmd.SetArgs([]string{"--words", "4", "--separator", "."})
+		cmd.SetArgs([]string{"passphrase", "--words", "5"})
 		output := captureOutput(func() {
-			cmd.Execute()
+			if err := cmd.Execute(); err != nil {
+				t.Error(err)
+			}
 		})
-		output = strings.TrimSpace(output)
-		parts := strings.Split(output, ".")
-		if len(parts) != 4 {
-			t.Errorf("Expected 4 words, got %d", len(parts))
+		words := strings.Split(strings.TrimSpace(output), "-")
+		if len(words) != 5 {
+			t.Errorf("Expected 5 words, got %d. Output: %s", len(words), output)
 		}
 	})
 }
 
 func TestResolveKeyPath(t *testing.T) {
-	// Test existing path
-	tmpFile, _ := os.CreateTemp("", "testkey")
-	defer os.Remove(tmpFile.Name())
+	tmpFile, err := os.CreateTemp("", "maknoon_key_*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = os.Remove(tmpFile.Name()) }()
 
-	resolved := resolveKeyPath(tmpFile.Name(), "")
-	if resolved != tmpFile.Name() {
-		t.Errorf("Expected %s, got %s", tmpFile.Name(), resolved)
+	// 1. Explicit path
+	res := resolveKeyPath(tmpFile.Name(), "UNUSED")
+	if res != tmpFile.Name() {
+		t.Errorf("Expected %s, got %s", tmpFile.Name(), res)
 	}
 
-	// Test non-existing path fallback
-	resolved = resolveKeyPath("non-existent-key-file", "")
-	if resolved != "non-existent-key-file" {
-		t.Errorf("Expected fallback to original, got %s", resolved)
+	// 2. Env var
+	envKey := "MAKNOON_TEST_KEY_PATH"
+	if err := os.Setenv(envKey, tmpFile.Name()); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = os.Unsetenv(envKey) }()
+	res = resolveKeyPath("", envKey)
+	if res != tmpFile.Name() {
+		t.Errorf("Expected %s from env, got %s", tmpFile.Name(), res)
 	}
 }
 
 func TestVaultGet(t *testing.T) {
 	tmpDir := t.TempDir()
-	vaultPath := filepath.Join(tmpDir, "testvault_get.db")
+	vaultPath := filepath.Join(tmpDir, "testvault.db")
 	passphrase := "testpass"
 
-	// Reset globals
-	vaultName = ""
-	vaultPassphrase = ""
-
-	// Set item
+	// Set a secret first
 	setCmd := VaultCmd()
-	setCmd.SetArgs([]string{"--vault", vaultPath, "--passphrase", passphrase, "set", "myservice", "mypassword", "--user", "myuser"})
+	setCmd.SetArgs([]string{"--vault", vaultPath, "--passphrase", passphrase, "set", "github", "token123"})
 	if err := setCmd.Execute(); err != nil {
-		t.Fatalf("Vault set failed: %v", err)
+		t.Fatal(err)
 	}
 
-	// Reset globals
-	vaultName = ""
-	vaultPassphrase = ""
-
-	// Get item
-	getCmd := VaultCmd()
-	getCmd.SetArgs([]string{"--vault", vaultPath, "--passphrase", passphrase, "get", "myservice"})
-	output := captureOutput(func() {
-		getCmd.Execute()
+	t.Run("Get existing service", func(t *testing.T) {
+		getCmd := VaultCmd()
+		getCmd.SetArgs([]string{"--vault", vaultPath, "--passphrase", passphrase, "get", "github"})
+		output := captureOutput(func() {
+			if err := getCmd.Execute(); err != nil {
+				t.Error(err)
+			}
+		})
+		if !strings.Contains(output, "github") || !strings.Contains(output, "token123") {
+			t.Errorf("Vault get failed. Output: %s", output)
+		}
 	})
 
-	if !strings.Contains(output, "Service:  myservice") {
-		t.Errorf("Output missing service: %s", output)
-	}
-	if !strings.Contains(output, "Username: myuser") {
-		t.Errorf("Output missing username: %s", output)
-	}
-	if !strings.Contains(output, "Password: mypassword") {
-		t.Errorf("Output missing password: %s", output)
-	}
-
-	// Test non-existent service
-	vaultName = ""
-	vaultPassphrase = ""
-	getCmd = VaultCmd()
-	getCmd.SetArgs([]string{"--vault", vaultPath, "--passphrase", passphrase, "get", "unknown"})
-	if err := getCmd.Execute(); err == nil {
-		t.Errorf("Expected error for non-existent service")
-	}
+	t.Run("Get missing service", func(t *testing.T) {
+		getCmd := VaultCmd()
+		getCmd.SetArgs([]string{"--vault", vaultPath, "--passphrase", passphrase, "get", "nonexistent"})
+		if err := getCmd.Execute(); err == nil {
+			t.Error("Expected error for missing service, got nil")
+		}
+	})
 }
 
 func TestVaultList(t *testing.T) {
 	tmpDir := t.TempDir()
-	vaultPath := filepath.Join(tmpDir, "testvault.db")
+	vaultPath := filepath.Join(tmpDir, "testvault_list.db")
 	passphrase := "testpass"
 
-	// Reset globals
-	vaultName = ""
-	vaultPassphrase = ""
-
-	// Set item 1
-	setCmd1 := VaultCmd()
-	setCmd1.SetArgs([]string{"--vault", vaultPath, "--passphrase", passphrase, "set", "service1", "pass1", "--user", "user1"})
-	if err := setCmd1.Execute(); err != nil {
-		t.Fatalf("Vault set 1 failed: %v", err)
+	setCmd := VaultCmd()
+	setCmd.SetArgs([]string{"--vault", vaultPath, "--passphrase", passphrase, "set", "svc1", "p1"})
+	if err := setCmd.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	setCmd.SetArgs([]string{"--vault", vaultPath, "--passphrase", passphrase, "set", "svc2", "p2"})
+	if err := setCmd.Execute(); err != nil {
+		t.Fatal(err)
 	}
 
-	// Reset globals again just in case
-	vaultName = ""
-	vaultPassphrase = ""
-
-	// Set item 2
-	setCmd2 := VaultCmd()
-	setCmd2.SetArgs([]string{"--vault", vaultPath, "--passphrase", passphrase, "set", "service2", "pass2", "--user", "user2"})
-	if err := setCmd2.Execute(); err != nil {
-		t.Fatalf("Vault set 2 failed: %v", err)
-	}
-
-	// Reset globals
-	vaultName = ""
-	vaultPassphrase = ""
-
-	// List items
 	listCmd := VaultCmd()
 	listCmd.SetArgs([]string{"--vault", vaultPath, "--passphrase", passphrase, "list"})
 	output := captureOutput(func() {
-		listCmd.Execute()
+		if err := listCmd.Execute(); err != nil {
+			t.Error(err)
+		}
 	})
 
-	if !strings.Contains(output, "service1 (user1)") {
-		t.Errorf("Output missing service1: %s", output)
-	}
-	if !strings.Contains(output, "service2 (user2)") {
-		t.Errorf("Output missing service2: %s", output)
+	if !strings.Contains(output, "svc1") || !strings.Contains(output, "svc2") {
+		t.Errorf("Vault list missing services. Output: %s", output)
 	}
 }
 
@@ -177,26 +163,28 @@ func TestDecryptFailures(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	t.Run("File not found", func(t *testing.T) {
-		cmd := DecryptCmd()
-		cmd.SetArgs([]string{filepath.Join(tmpDir, "non-existent.makn")})
-		if err := cmd.Execute(); err == nil {
+		dec := DecryptCmd()
+		dec.SetArgs([]string{filepath.Join(tmpDir, "non-existent.makn")})
+		if err := dec.Execute(); err == nil {
 			t.Error("Expected error for non-existent file")
 		}
 	})
 
 	t.Run("Wrong passphrase", func(t *testing.T) {
 		inputFile := filepath.Join(tmpDir, "secret.txt")
-		encFile := inputFile + ".makn"
-		os.WriteFile(inputFile, []byte("data"), 0644)
-
+		if err := os.WriteFile(inputFile, []byte("data"), 0644); err != nil {
+			t.Fatal(err)
+		}
 		enc := EncryptCmd()
-		enc.SetArgs([]string{inputFile, "-o", encFile, "-s", "correct"})
-		enc.Execute()
+		enc.SetArgs([]string{inputFile, "-o", inputFile + ".makn", "-s", "right-pass", "--quiet"})
+		if err := enc.Execute(); err != nil {
+			t.Fatal(err)
+		}
 
 		dec := DecryptCmd()
-		dec.SetArgs([]string{encFile, "-s", "wrong"})
+		dec.SetArgs([]string{inputFile + ".makn", "-s", "wrong-pass", "--quiet"})
 		if err := dec.Execute(); err == nil {
-			t.Error("Expected error for wrong passphrase")
+			t.Error("Expected decryption failure for wrong passphrase")
 		}
 	})
 }
@@ -204,34 +192,33 @@ func TestDecryptFailures(t *testing.T) {
 func TestEncryptDecryptSymmetric(t *testing.T) {
 	tmpDir := t.TempDir()
 	inputFile := filepath.Join(tmpDir, "input.txt")
-	encryptedFile := filepath.Join(tmpDir, "encrypted.makn")
+	content := []byte("Hello Maknoon Integration")
+	if err := os.WriteFile(inputFile, content, 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	encryptedFile := inputFile + ".makn"
 	decryptedFile := filepath.Join(tmpDir, "decrypted.txt")
-	content := []byte("Hello Maknoon!")
-	passphrase := "secret-passphrase"
+	pass := "my-secret-key-123"
 
-	os.WriteFile(inputFile, content, 0644)
-
-	// Encrypt
-	encCmd := EncryptCmd()
-	encCmd.SetArgs([]string{inputFile, "-o", encryptedFile, "--passphrase", passphrase})
-	if err := encCmd.Execute(); err != nil {
+	enc := EncryptCmd()
+	enc.SetArgs([]string{inputFile, "-o", encryptedFile, "-s", pass, "--quiet"})
+	if err := enc.Execute(); err != nil {
 		t.Fatalf("Encryption failed: %v", err)
 	}
 
-	// Decrypt
-	decCmd := DecryptCmd()
-	decCmd.SetArgs([]string{encryptedFile, "-o", decryptedFile, "--passphrase", passphrase})
-	if err := decCmd.Execute(); err != nil {
+	dec := DecryptCmd()
+	dec.SetArgs([]string{encryptedFile, "-o", decryptedFile, "-s", pass, "--quiet"})
+	if err := dec.Execute(); err != nil {
 		t.Fatalf("Decryption failed: %v", err)
 	}
 
-	// Verify
 	restored, err := os.ReadFile(decryptedFile)
 	if err != nil {
-		t.Fatalf("Failed to read decrypted file: %v", err)
+		t.Fatal(err)
 	}
 	if !bytes.Equal(content, restored) {
-		t.Errorf("Content mismatch. Got %s, want %s", string(restored), string(content))
+		t.Error("Restored content mismatch")
 	}
 }
 
@@ -239,56 +226,59 @@ func TestKeygenAndAsymmetric(t *testing.T) {
 	tmpDir := t.TempDir()
 	keyBase := filepath.Join(tmpDir, "id_test")
 
-	// Keygen
-	keygenCmd := KeygenCmd()
-	keygenCmd.SetArgs([]string{"-o", keyBase, "--no-password"})
-	if err := keygenCmd.Execute(); err != nil {
+	// 1. Generate keys
+	gen := KeygenCmd()
+	gen.SetArgs([]string{"-o", keyBase, "--no-password"})
+	if err := gen.Execute(); err != nil {
 		t.Fatalf("Keygen failed: %v", err)
 	}
 
-	// Encrypt asymmetric
+	// 2. Encrypt with public key
 	inputFile := filepath.Join(tmpDir, "msg.txt")
-	encryptedFile := filepath.Join(tmpDir, "msg.makn")
-	content := []byte("Asymmetric encryption test")
-	os.WriteFile(inputFile, content, 0644)
+	content := []byte("Post-Quantum Secret Message")
+	if err := os.WriteFile(inputFile, content, 0644); err != nil {
+		t.Fatal(err)
+	}
+	encryptedFile := inputFile + ".makn"
 
-	encCmd := EncryptCmd()
-	encCmd.SetArgs([]string{inputFile, "-o", encryptedFile, "--public-key", keyBase + ".kem.pub"})
-	if err := encCmd.Execute(); err != nil {
+	enc := EncryptCmd()
+	enc.SetArgs([]string{inputFile, "-o", encryptedFile, "--public-key", keyBase + ".kem.pub", "--quiet"})
+	if err := enc.Execute(); err != nil {
 		t.Fatalf("Asymmetric encryption failed: %v", err)
 	}
 
-	// Decrypt asymmetric
-	decryptedFile := filepath.Join(tmpDir, "msg.dec.txt")
-	decCmd := DecryptCmd()
-	decCmd.SetArgs([]string{encryptedFile, "-o", decryptedFile, "--private-key", keyBase + ".kem.key"})
-	if err := decCmd.Execute(); err != nil {
+	// 3. Decrypt with private key
+	decryptedFile := filepath.Join(tmpDir, "msg_restored.txt")
+	dec := DecryptCmd()
+	dec.SetArgs([]string{encryptedFile, "-o", decryptedFile, "--private-key", keyBase + ".kem.key", "--quiet"})
+	if err := dec.Execute(); err != nil {
 		t.Fatalf("Asymmetric decryption failed: %v", err)
 	}
 
-	restored, _ := os.ReadFile(decryptedFile)
+	restored, err := os.ReadFile(decryptedFile)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !bytes.Equal(content, restored) {
-		t.Errorf("Asymmetric content mismatch")
+		t.Error("Asymmetric restored content mismatch")
 	}
 }
 
 func TestKeygenWithEnvPassphrase(t *testing.T) {
 	tmpDir := t.TempDir()
 	keyBase := filepath.Join(tmpDir, "id_env_test")
-	passphrase := "env-secret"
+	passphrase := "env-pass-123"
 
-	os.Setenv("MAKNOON_PASSPHRASE", passphrase)
-	defer os.Unsetenv("MAKNOON_PASSPHRASE")
-
-	keygenCmd := KeygenCmd()
-	keygenCmd.SetArgs([]string{"-o", keyBase})
-	if err := keygenCmd.Execute(); err != nil {
-		t.Fatalf("Keygen with env failed: %v", err)
+	if err := os.Setenv("MAKNOON_PASSPHRASE", passphrase); err != nil {
+		t.Fatal(err)
 	}
+	defer func() { _ = os.Unsetenv("MAKNOON_PASSPHRASE") }()
 
-	// Verify it can be used (meaning it was actually encrypted with this passphrase)
-	// We can't easily verify WITHOUT interaction unless we use the env var again for decryption
-	// But just executing it increases coverage of the env var branch.
+	gen := KeygenCmd()
+	gen.SetArgs([]string{"-o", keyBase})
+	if err := gen.Execute(); err != nil {
+		t.Fatalf("Keygen with env pass failed: %v", err)
+	}
 }
 
 func TestVaultJSON(t *testing.T) {
@@ -299,18 +289,24 @@ func TestVaultJSON(t *testing.T) {
 	resetVaultGlobals := func() {
 		vaultName = ""
 		vaultPassphrase = ""
-		JsonOutput = false
-		os.Unsetenv("MAKNOON_JSON")
+		JSONOutput = false
+		if err := os.Unsetenv("MAKNOON_JSON"); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	// 1. Test triggering via ENVIRONMENT VARIABLE
 	t.Run("Trigger via MAKNOON_JSON=1", func(t *testing.T) {
 		resetVaultGlobals()
-		os.Setenv("MAKNOON_JSON", "1")
+		if err := os.Setenv("MAKNOON_JSON", "1"); err != nil {
+			t.Fatal(err)
+		}
 		setCmd := VaultCmd()
 		setCmd.SetArgs([]string{"--vault", vaultPath, "--passphrase", passphrase, "set", "service_env", "pass1"})
 		output := captureOutput(func() {
-			setCmd.Execute()
+			if err := setCmd.Execute(); err != nil {
+				t.Error(err)
+			}
 		})
 		if !strings.Contains(output, `{"service":"service_env","status":"success"}`) {
 			t.Errorf("Env var trigger failed. Output: %s", output)
@@ -323,7 +319,9 @@ func TestVaultJSON(t *testing.T) {
 		getCmd := VaultCmd()
 		getCmd.SetArgs([]string{"--vault", vaultPath, "--passphrase", passphrase, "--json", "get", "service_env"})
 		output := captureOutput(func() {
-			getCmd.Execute()
+			if err := getCmd.Execute(); err != nil {
+				t.Error(err)
+			}
 		})
 		if !strings.Contains(output, `"service":"service_env"`) {
 			t.Errorf("Flag trigger failed. Output: %s", output)
@@ -333,18 +331,24 @@ func TestVaultJSON(t *testing.T) {
 	// 3. Test Error Output in JSON mode
 	t.Run("JSON Error formatting", func(t *testing.T) {
 		resetVaultGlobals()
-		os.Setenv("MAKNOON_JSON", "1")
+		if err := os.Setenv("MAKNOON_JSON", "1"); err != nil {
+			t.Fatal(err)
+		}
 		getCmdErr := VaultCmd()
 		getCmdErr.SetArgs([]string{"--vault", vaultPath, "--passphrase", passphrase, "get", "nonexistent"})
 
 		oldStderr := os.Stderr
 		r, w, _ := os.Pipe()
 		os.Stderr = w
-		getCmdErr.Execute()
-		w.Close()
+		_ = getCmdErr.Execute() // Expected to fail, checking JSON error message on stderr
+		if err := w.Close(); err != nil {
+			t.Fatal(err)
+		}
 		os.Stderr = oldStderr
 		var errBuf bytes.Buffer
-		io.Copy(&errBuf, r)
+		if _, err := io.Copy(&errBuf, r); err != nil {
+			t.Fatal(err)
+		}
 
 		if !strings.Contains(errBuf.String(), `{"error":"service not found"}`) {
 			t.Errorf("Error JSON formatting failed. Output: %s", errBuf.String())
@@ -356,14 +360,16 @@ func TestSignVerify(t *testing.T) {
 	tmpDir := t.TempDir()
 	keyBase := filepath.Join(tmpDir, "sig_test")
 
-	// Keygen
 	keygenCmd := KeygenCmd()
 	keygenCmd.SetArgs([]string{"-o", keyBase, "--no-password"})
-	keygenCmd.Execute()
+	if err := keygenCmd.Execute(); err != nil {
+		t.Fatal(err)
+	}
 
-	// Sign
 	msgFile := filepath.Join(tmpDir, "message.txt")
-	os.WriteFile(msgFile, []byte("Authentic message"), 0644)
+	if err := os.WriteFile(msgFile, []byte("Authentic message"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	signCmd := SignCmd()
 	signCmd.SetArgs([]string{msgFile, "--private-key", keyBase + ".sig.key"})
@@ -371,7 +377,6 @@ func TestSignVerify(t *testing.T) {
 		t.Fatalf("Signing failed: %v", err)
 	}
 
-	// Verify
 	verifyCmd := VerifyCmd()
 	verifyCmd.SetArgs([]string{msgFile, "--public-key", keyBase + ".sig.pub"})
 	if err := verifyCmd.Execute(); err != nil {

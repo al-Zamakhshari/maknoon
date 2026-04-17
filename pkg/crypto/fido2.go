@@ -57,7 +57,7 @@ func Fido2Enroll(rpID, user string) (*Fido2Metadata, []byte, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	defer dev.Close()
+	defer func() { _ = dev.Close() }()
 
 	return Fido2EnrollWithAuthenticator(dev, rpID, user)
 }
@@ -133,7 +133,9 @@ func handleFido2PIN(dev Authenticator, info *ctap2.AuthenticatorGetInfoResponse,
 
 func registerFido2Credential(dev Authenticator, token []byte, rpID, user string, hmacMC bool) (*ctap2.AuthenticatorMakeCredentialResponse, error) {
 	clientDataHash := make([]byte, 32)
-	rand.Read(clientDataHash)
+	if _, err := rand.Read(clientDataHash); err != nil {
+		return nil, err
+	}
 
 	extInputs := &webauthn.CreateAuthenticationExtensionsClientInputs{
 		CreateHMACSecretInputs: &webauthn.CreateHMACSecretInputs{HMACCreateSecret: true},
@@ -164,8 +166,8 @@ func registerFido2Credential(dev Authenticator, token []byte, rpID, user string,
 
 func extractOrDeriveSecret(dev Authenticator, res *ctap2.AuthenticatorMakeCredentialResponse, token []byte, rpID string, credentialID []byte) ([]byte, error) {
 	var initialSecret []byte
-	if res.ExtensionOutputs != nil && res.ExtensionOutputs.CreateHMACSecretMCOutputs != nil {
-		initialSecret = res.ExtensionOutputs.CreateHMACSecretMCOutputs.HMACGetSecret.Output1
+	if res.ExtensionOutputs != nil && len(res.ExtensionOutputs.HMACGetSecret.Output1) > 0 {
+		initialSecret = res.ExtensionOutputs.HMACGetSecret.Output1
 	}
 
 	if len(initialSecret) == 0 {
@@ -181,7 +183,7 @@ func Fido2Derive(rpID string, credentialID []byte) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer dev.Close()
+	defer func() { _ = dev.Close() }()
 
 	return Fido2DeriveWithAuthenticator(dev, rpID, credentialID)
 }
@@ -211,7 +213,9 @@ func fido2DeriveInternal(dev Authenticator, token []byte, rpID string, credentia
 	fmt.Println("Please touch your security key to derive the key...")
 
 	clientDataHash := make([]byte, 32)
-	rand.Read(clientDataHash)
+	if _, err := rand.Read(clientDataHash); err != nil {
+		return nil, err
+	}
 
 	assertions := dev.GetAssertion(
 		token,
@@ -235,11 +239,11 @@ func fido2DeriveInternal(dev Authenticator, token []byte, rpID string, credentia
 			return nil, fmt.Errorf("failed to get FIDO2 assertion: %w", err)
 		}
 
-		if res.ExtensionOutputs == nil || res.ExtensionOutputs.GetHMACSecretOutputs == nil {
+		if res.ExtensionOutputs == nil || len(res.ExtensionOutputs.HMACGetSecret.Output1) == 0 {
 			return nil, fmt.Errorf("FIDO2 key did not return an hmac-secret extension output")
 		}
 
-		return res.ExtensionOutputs.GetHMACSecretOutputs.HMACGetSecret.Output1, nil
+		return res.ExtensionOutputs.HMACGetSecret.Output1, nil
 	}
 
 	return nil, fmt.Errorf("no assertion returned from FIDO2 key")

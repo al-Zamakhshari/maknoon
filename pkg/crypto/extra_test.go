@@ -34,7 +34,9 @@ func TestProtectExtractRoundTrip(t *testing.T) {
 	inputFile := filepath.Join(tmpDir, "input.txt")
 	encryptedFile := filepath.Join(tmpDir, "output.makn")
 	content := []byte("Pipeline testing data")
-	os.WriteFile(inputFile, content, 0644)
+	if err := os.WriteFile(inputFile, content, 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	passphrase := []byte("secret")
 
@@ -47,7 +49,9 @@ func TestProtectExtractRoundTrip(t *testing.T) {
 	if err := Protect(inputFile, nil, out, opts); err != nil {
 		t.Fatalf("Protect failed: %v", err)
 	}
-	out.Close()
+	if err := out.Close(); err != nil {
+		t.Fatal(err)
+	}
 
 	// 2. Decrypt
 	in, _ := os.Open(encryptedFile)
@@ -56,7 +60,9 @@ func TestProtectExtractRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("DecryptStream failed: %v", err)
 	}
-	in.Close()
+	if err := in.Close(); err != nil {
+		t.Fatal(err)
+	}
 
 	if flags&FlagCompress == 0 {
 		t.Fatal("Expected compression flag to be set")
@@ -67,8 +73,12 @@ func TestProtectExtractRoundTrip(t *testing.T) {
 	// Since we are testing 'Protect', let's also test 'ExtractArchive' with a directory
 
 	srcDir := filepath.Join(tmpDir, "src_dir")
-	os.Mkdir(srcDir, 0755)
-	os.WriteFile(filepath.Join(srcDir, "a.txt"), []byte("a"), 0644)
+	if err := os.Mkdir(srcDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(srcDir, "a.txt"), []byte("a"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	archivedFile := filepath.Join(tmpDir, "archived.makn")
 	outArch, _ := os.Create(archivedFile)
@@ -80,7 +90,9 @@ func TestProtectExtractRoundTrip(t *testing.T) {
 	if err := Protect(srcDir, nil, outArch, optsArch); err != nil {
 		t.Fatalf("Protect archive failed: %v", err)
 	}
-	outArch.Close()
+	if err := outArch.Close(); err != nil {
+		t.Fatal(err)
+	}
 
 	// Decrypt Archive
 	inArch, _ := os.Open(archivedFile)
@@ -89,7 +101,9 @@ func TestProtectExtractRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("DecryptStream archive failed: %v", err)
 	}
-	inArch.Close()
+	if err := inArch.Close(); err != nil {
+		t.Fatal(err)
+	}
 
 	// Extract
 	extractDir := filepath.Join(tmpDir, "extracted")
@@ -127,7 +141,9 @@ func TestEnsureMaknoonDirs(t *testing.T) {
 func TestResolveKeyPath(t *testing.T) {
 	tmpDir := t.TempDir()
 	testFile := filepath.Join(tmpDir, "test.key")
-	os.WriteFile(testFile, []byte("key"), 0644)
+	if err := os.WriteFile(testFile, []byte("key"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	resolved := ResolveKeyPath(testFile, "")
 	if resolved != testFile {
@@ -183,7 +199,7 @@ func TestAsymmetricErrors(t *testing.T) {
 		t.Error("SignData should fail for invalid key length")
 	}
 	if VerifySignature(msg, sig, []byte("bad pub")) {
-		// Should return false
+		t.Error("VerifySignature should fail for bad public key")
 	}
 }
 
@@ -196,28 +212,28 @@ func TestStreamErrors(t *testing.T) {
 	}
 
 	// Test writer error during encryption
-	var encBuf bytes.Buffer
 	errWriter := &errorWriter{err: fmt.Errorf("write fail")}
 	if err := EncryptStream(bytes.NewReader([]byte("data")), errWriter, []byte("pass"), FlagNone, 1, 0); err == nil {
-		// This might fail during header write or chunk write
+		t.Error("EncryptStream should fail if writer fails")
 	}
-	_ = encBuf
 }
 
 type errorReader struct{ err error }
 
-func (r *errorReader) Read(p []byte) (n int, err error) { return 0, r.err }
+func (r *errorReader) Read(_ []byte) (n int, err error) { return 0, r.err }
 
 type errorWriter struct{ err error }
 
-func (w *errorWriter) Write(p []byte) (n int, err error) { return 0, w.err }
+func (w *errorWriter) Write(_ []byte) (n int, err error) { return 0, w.err }
 
 func TestDecryptStreamErrors(t *testing.T) {
 	password := []byte("pass")
 
 	// 1. Valid file but truncated
 	var encrypted bytes.Buffer
-	EncryptStream(bytes.NewReader([]byte("some data")), &encrypted, password, FlagNone, 1, 0)
+	if err := EncryptStream(bytes.NewReader([]byte("some data")), &encrypted, password, FlagNone, 1, 0); err != nil {
+		t.Fatal(err)
+	}
 	truncated := encrypted.Bytes()[:10]
 	var out bytes.Buffer
 	if _, err := DecryptStream(bytes.NewReader(truncated), &out, password, 1); err == nil {
@@ -225,7 +241,9 @@ func TestDecryptStreamErrors(t *testing.T) {
 	}
 
 	// 2. Corrupted chunk length
-	EncryptStream(bytes.NewReader([]byte("some data")), &encrypted, password, FlagNone, 1, 0)
+	if err := EncryptStream(bytes.NewReader([]byte("some data")), &encrypted, password, FlagNone, 1, 0); err != nil {
+		t.Fatal(err)
+	}
 	corrupted := encrypted.Bytes()
 	// Find where payload starts (Header: 4+1+1+32+24 = 62 bytes)
 	// Let's just mess with it.

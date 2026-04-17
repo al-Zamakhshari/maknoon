@@ -75,14 +75,22 @@ func KeygenCmd() *cobra.Command {
 				crypto.SafeClear(sigPriv)
 			}()
 
-			basePath, baseName := resolveBaseKeyPath(output)
+			basePath, baseName, err := resolveBaseKeyPath(output)
+			if err != nil {
+				return err
+			}
 			if err := writeIdentityKeys(basePath, baseName, kemPub, kemPriv, sigPub, sigPriv, password, byte(profile)); err != nil {
 				return err
 			}
 
 			if fido2Meta != nil {
-				raw, _ := json.Marshal(fido2Meta)
-				os.WriteFile(basePath+".fido2", raw, 0644)
+				raw, err := json.Marshal(fido2Meta)
+				if err != nil {
+					return fmt.Errorf("failed to marshal fido2 metadata: %w", err)
+				}
+				if err := os.WriteFile(basePath+".fido2", raw, 0644); err != nil {
+					return fmt.Errorf("failed to write fido2 metadata: %w", err)
+				}
 			}
 			return nil
 		},
@@ -127,10 +135,15 @@ func getInitialPassphrase(noPassword bool, manual string) ([]byte, error) {
 	return p, nil
 }
 
-func resolveBaseKeyPath(output string) (string, string) {
-	home, _ := os.UserHomeDir()
+func resolveBaseKeyPath(output string) (string, string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", "", fmt.Errorf("failed to get home directory: %w", err)
+	}
 	keysDir := filepath.Join(home, ".maknoon", "keys")
-	os.MkdirAll(keysDir, 0700)
+	if err := os.MkdirAll(keysDir, 0700); err != nil {
+		return "", "", fmt.Errorf("failed to create keys directory: %w", err)
+	}
 
 	baseName := "id_maknoon"
 	if output != "" {
@@ -142,7 +155,7 @@ func resolveBaseKeyPath(output string) (string, string) {
 		basePath = output
 		baseName = filepath.Base(output)
 	}
-	return basePath, baseName
+	return basePath, baseName, nil
 }
 
 func writeIdentityKeys(basePath, baseName string, kemPub, kemPriv, sigPub, sigPriv, password []byte, profileID byte) error {

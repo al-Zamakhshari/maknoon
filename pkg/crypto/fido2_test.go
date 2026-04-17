@@ -50,7 +50,7 @@ func setupMock(secret, credID []byte) *MockAuthenticator {
 				Options:    map[ctap2.Option]bool{ctap2.OptionClientPIN: false},
 			}
 		},
-		MakeCredentialFunc: func(pinUvAuthToken []byte, clientData []byte, rp webauthn.PublicKeyCredentialRpEntity, user webauthn.PublicKeyCredentialUserEntity, pubKeyCredParams []webauthn.PublicKeyCredentialParameters, excludeList []webauthn.PublicKeyCredentialDescriptor, extInputs *webauthn.CreateAuthenticationExtensionsClientInputs, options map[ctap2.Option]bool, enterpriseAttestation uint, attestationFormatsPreference []webauthn.AttestationStatementFormatIdentifier) (*ctap2.AuthenticatorMakeCredentialResponse, error) {
+		MakeCredentialFunc: func(_ []byte, _ []byte, _ webauthn.PublicKeyCredentialRpEntity, _ webauthn.PublicKeyCredentialUserEntity, _ []webauthn.PublicKeyCredentialParameters, _ []webauthn.PublicKeyCredentialDescriptor, _ *webauthn.CreateAuthenticationExtensionsClientInputs, _ map[ctap2.Option]bool, _ uint, _ []webauthn.AttestationStatementFormatIdentifier) (*ctap2.AuthenticatorMakeCredentialResponse, error) {
 			return &ctap2.AuthenticatorMakeCredentialResponse{
 				AuthData: &ctap2.MakeCredentialAuthData{
 					AttestedCredentialData: &ctap2.AttestedCredentialData{
@@ -66,9 +66,9 @@ func setupMock(secret, credID []byte) *MockAuthenticator {
 				},
 			}, nil
 		},
-		GetAssertionFunc: func(pinUvAuthToken []byte, rpID string, clientData []byte, allowList []webauthn.PublicKeyCredentialDescriptor, extInputs *webauthn.GetAuthenticationExtensionsClientInputs, options map[ctap2.Option]bool) iter.Seq2[*ctap2.AuthenticatorGetAssertionResponse, error] {
+		GetAssertionFunc: func(_ []byte, _ string, _ []byte, _ []webauthn.PublicKeyCredentialDescriptor, _ *webauthn.GetAuthenticationExtensionsClientInputs, _ map[ctap2.Option]bool) iter.Seq2[*ctap2.AuthenticatorGetAssertionResponse, error] {
 			return func(yield func(*ctap2.AuthenticatorGetAssertionResponse, error) bool) {
-				yield(&ctap2.AuthenticatorGetAssertionResponse{
+				_ = yield(&ctap2.AuthenticatorGetAssertionResponse{
 					ExtensionOutputs: &webauthn.GetAuthenticationExtensionsClientOutputs{
 						GetHMACSecretOutputs: &webauthn.GetHMACSecretOutputs{
 							HMACGetSecret: webauthn.HMACGetSecretOutput{
@@ -142,7 +142,7 @@ func TestFido2FallbackTouch(t *testing.T) {
 				Options:    map[ctap2.Option]bool{ctap2.OptionClientPIN: false},
 			}
 		},
-		MakeCredentialFunc: func(pinUvAuthToken []byte, clientData []byte, rp webauthn.PublicKeyCredentialRpEntity, user webauthn.PublicKeyCredentialUserEntity, pubKeyCredParams []webauthn.PublicKeyCredentialParameters, excludeList []webauthn.PublicKeyCredentialDescriptor, extInputs *webauthn.CreateAuthenticationExtensionsClientInputs, options map[ctap2.Option]bool, enterpriseAttestation uint, attestationFormatsPreference []webauthn.AttestationStatementFormatIdentifier) (*ctap2.AuthenticatorMakeCredentialResponse, error) {
+		MakeCredentialFunc: func(_ []byte, _ []byte, _ webauthn.PublicKeyCredentialRpEntity, _ webauthn.PublicKeyCredentialUserEntity, _ []webauthn.PublicKeyCredentialParameters, _ []webauthn.PublicKeyCredentialDescriptor, _ *webauthn.CreateAuthenticationExtensionsClientInputs, _ map[ctap2.Option]bool, _ uint, _ []webauthn.AttestationStatementFormatIdentifier) (*ctap2.AuthenticatorMakeCredentialResponse, error) {
 			return &ctap2.AuthenticatorMakeCredentialResponse{
 				AuthData: &ctap2.MakeCredentialAuthData{
 					AttestedCredentialData: &ctap2.AttestedCredentialData{
@@ -152,9 +152,9 @@ func TestFido2FallbackTouch(t *testing.T) {
 				// No ExtensionOutputs -> Force fallback
 			}, nil
 		},
-		GetAssertionFunc: func(pinUvAuthToken []byte, rpID string, clientData []byte, allowList []webauthn.PublicKeyCredentialDescriptor, extInputs *webauthn.GetAuthenticationExtensionsClientInputs, options map[ctap2.Option]bool) iter.Seq2[*ctap2.AuthenticatorGetAssertionResponse, error] {
+		GetAssertionFunc: func(_ []byte, _ string, _ []byte, _ []webauthn.PublicKeyCredentialDescriptor, _ *webauthn.GetAuthenticationExtensionsClientInputs, _ map[ctap2.Option]bool) iter.Seq2[*ctap2.AuthenticatorGetAssertionResponse, error] {
 			return func(yield func(*ctap2.AuthenticatorGetAssertionResponse, error) bool) {
-				yield(&ctap2.AuthenticatorGetAssertionResponse{
+				_ = yield(&ctap2.AuthenticatorGetAssertionResponse{
 					ExtensionOutputs: &webauthn.GetAuthenticationExtensionsClientOutputs{
 						GetHMACSecretOutputs: &webauthn.GetHMACSecretOutputs{
 							HMACGetSecret: webauthn.HMACGetSecretOutput{
@@ -178,8 +178,8 @@ func TestFido2FallbackTouch(t *testing.T) {
 
 func TestFido2NoAssertion(t *testing.T) {
 	mock := &MockAuthenticator{
-		GetAssertionFunc: func(pinUvAuthToken []byte, rpID string, clientData []byte, allowList []webauthn.PublicKeyCredentialDescriptor, extInputs *webauthn.GetAuthenticationExtensionsClientInputs, options map[ctap2.Option]bool) iter.Seq2[*ctap2.AuthenticatorGetAssertionResponse, error] {
-			return func(yield func(*ctap2.AuthenticatorGetAssertionResponse, error) bool) {
+		GetAssertionFunc: func(_ []byte, _ string, _ []byte, _ []webauthn.PublicKeyCredentialDescriptor, _ *webauthn.GetAuthenticationExtensionsClientInputs, _ map[ctap2.Option]bool) iter.Seq2[*ctap2.AuthenticatorGetAssertionResponse, error] {
+			return func(_ func(*ctap2.AuthenticatorGetAssertionResponse, error) bool) {
 				// Yield nothing
 			}
 		},

@@ -43,7 +43,7 @@ func DecryptCmd() *cobra.Command {
 				if err != nil {
 					return fmt.Errorf("failed to open input file: %w", err)
 				}
-				defer f.Close()
+				defer func() { _ = f.Close() }()
 				info, err := f.Stat()
 				if err != nil {
 					return err
@@ -104,7 +104,7 @@ func DecryptCmd() *cobra.Command {
 			}
 
 			pr, pw := io.Pipe()
-			var proxyIn io.Reader = fullIn
+			proxyIn := fullIn
 			if !quiet && totalSize > 0 && output != "-" {
 				bar := progressbar.DefaultBytes(totalSize, "restoring")
 				proxyIn = io.TeeReader(fullIn, bar)
@@ -199,7 +199,7 @@ func resolveAsymmetricKey(password []byte, keyPath string, isStdin bool) ([]byte
 	return password, keyBytes, nil
 }
 
-func unlockPrivateKey(password []byte, resolvedPath string, keyBytes []byte, isStdin bool) ([]byte, error) {
+func unlockPrivateKey(password []byte, resolvedPath string, _ []byte, isStdin bool) ([]byte, error) {
 	// Check for companion FIDO2 file
 	fido2Path := strings.TrimSuffix(resolvedPath, ".key")
 	fido2Path = strings.TrimSuffix(fido2Path, ".kem")
@@ -207,9 +207,14 @@ func unlockPrivateKey(password []byte, resolvedPath string, keyBytes []byte, isS
 	fido2Path += ".fido2"
 
 	if _, err := os.Stat(fido2Path); err == nil {
-		raw, _ := os.ReadFile(fido2Path)
+		raw, err := os.ReadFile(fido2Path)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read fido2 metadata: %w", err)
+		}
 		var meta crypto.Fido2Metadata
-		json.Unmarshal(raw, &meta)
+		if err := json.Unmarshal(raw, &meta); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal fido2 metadata: %w", err)
+		}
 
 		return crypto.Fido2Derive(meta.RPID, meta.CredentialID)
 	}
@@ -263,7 +268,7 @@ func finalizeDecryption(pr io.Reader, flags byte, output, inputFile string) erro
 		if err != nil {
 			return err
 		}
-		defer f.Close()
+		defer func() { _ = f.Close() }()
 		out = f
 	}
 

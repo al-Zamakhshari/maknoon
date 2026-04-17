@@ -15,7 +15,7 @@ func main() {
 		Long:  `Maknoon uses bleeding-edge hybrid cryptography to protect your files carefully.`,
 	}
 
-	rootCmd.PersistentFlags().BoolVar(&commands.JsonOutput, "json", false, "Output results in JSON format")
+	rootCmd.PersistentFlags().BoolVar(&commands.JSONOutput, "json", false, "Output results in JSON format")
 
 	rootCmd.AddCommand(commands.EncryptCmd())
 	rootCmd.AddCommand(commands.DecryptCmd())

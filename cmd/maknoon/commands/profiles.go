@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/big"
+	"os"
 
 	"github.com/a-khallaf/maknoon/pkg/crypto"
 	"github.com/spf13/cobra"
@@ -14,11 +15,12 @@ import (
 func ProfilesCmd() *cobra.Command {
 	var generate bool
 	var secret bool
+	var output string
 
 	cmd := &cobra.Command{
 		Use:   "profiles",
 		Short: "List built-in profiles or generate a random custom profile",
-		Run: func(_ *cobra.Command, _ []string) {
+		RunE: func(_ *cobra.Command, _ []string) error {
 			if generate {
 				var id byte
 				if secret {
@@ -33,8 +35,12 @@ func ProfilesCmd() *cobra.Command {
 
 				dp := crypto.GenerateRandomProfile(id)
 				raw, _ := json.MarshalIndent(dp, "", "  ")
+
+				if output != "" {
+					return os.WriteFile(output, raw, 0644)
+				}
 				fmt.Println(string(raw))
-				return
+				return nil
 			}
 
 			fmt.Println("🛡️  Maknoon Cryptographic Profiles")
@@ -66,10 +72,12 @@ func ProfilesCmd() *cobra.Command {
 			fmt.Println("  IDs 3-127:   'Secret' mode (profile file required for decryption)")
 			fmt.Println("  IDs 128-255: 'Portable' mode (profile parameters stored in file header)")
 			fmt.Println("\nUse --generate to create a random custom profile.")
+			return nil
 		},
 	}
 
 	cmd.Flags().BoolVarP(&generate, "generate", "g", false, "Generate a random secure custom profile JSON")
 	cmd.Flags().BoolVar(&secret, "secret", false, "Generate a 'Secret' profile (ID < 128) instead of a 'Portable' one")
+	cmd.Flags().StringVarP(&output, "output", "o", "", "Write the generated profile to a file")
 	return cmd
 }

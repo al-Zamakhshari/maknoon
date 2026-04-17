@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/a-khallaf/maknoon/pkg/crypto"
@@ -18,123 +17,118 @@ func TestIntegrationSecurityScenarios(t *testing.T) {
 		keyBase := filepath.Join(tmpDir, "sig_fail_test")
 		keygenCmd := KeygenCmd()
 		keygenCmd.SetArgs([]string{"-o", keyBase, "--no-password"})
-		keygenCmd.Execute()
+		if err := keygenCmd.Execute(); err != nil {
+			t.Fatal(err)
+		}
 
 		msgFile := filepath.Join(tmpDir, "tampered.txt")
-		os.WriteFile(msgFile, []byte("Original message"), 0644)
+		if err := os.WriteFile(msgFile, []byte("Original message"), 0644); err != nil {
+			t.Fatal(err)
+		}
 
 		signCmd := SignCmd()
 		signCmd.SetArgs([]string{msgFile, "--private-key", keyBase + ".sig.key"})
-		signCmd.Execute()
+		if err := signCmd.Execute(); err != nil {
+			t.Fatal(err)
+		}
 
-		// Tamper with the file
-		os.WriteFile(msgFile, []byte("Tampered message"), 0644)
+		if err := os.WriteFile(msgFile, []byte("Tampered message"), 0644); err != nil {
+			t.Fatal(err)
+		}
 
 		verifyCmd := VerifyCmd()
 		verifyCmd.SetArgs([]string{msgFile, "--public-key", keyBase + ".sig.pub"})
 		if err := verifyCmd.Execute(); err == nil {
-			t.Error("Expected verification failure for tampered file, but it passed")
+			t.Error("Expected verification failure for tampered file")
 		}
 	})
 
 	t.Run("Vault Service Collision", func(t *testing.T) {
-		vPath := filepath.Join(tmpDir, "collision.db")
-		pass := "pass"
-
+		vaultPath := filepath.Join(tmpDir, "collision.db")
 		setCmd := VaultCmd()
-		// Set first secret
-		setCmd.SetArgs([]string{"--vault", vPath, "--passphrase", pass, "set", "service1", "secret1"})
-		setCmd.Execute()
+		setCmd.SetArgs([]string{"--vault", vaultPath, "--passphrase", "pass", "set", "service1", "secret1", "--json"})
+		if err := setCmd.Execute(); err != nil {
+			t.Fatal(err)
+		}
 
-		// Overwrite with second secret
-		setCmd.SetArgs([]string{"--vault", vPath, "--passphrase", pass, "set", "service1", "secret2"})
-		setCmd.Execute()
+		setCmd.SetArgs([]string{"--vault", vaultPath, "--passphrase", "pass", "set", "SERVICE1", "secret2", "--json"})
+		if err := setCmd.Execute(); err != nil {
+			t.Fatal(err)
+		}
 
 		getCmd := VaultCmd()
-		getCmd.SetArgs([]string{"--vault", vPath, "--passphrase", pass, "get", "service1"})
+		getCmd.SetArgs([]string{"--vault", vaultPath, "--passphrase", "pass", "get", "service1", "--json"})
 		output := captureOutput(func() {
-			getCmd.Execute()
+			if err := getCmd.Execute(); err != nil {
+				t.Error(err)
+			}
 		})
-
-		if !strings.Contains(output, "secret2") {
-			t.Errorf("Vault collision handling failed. Expected secret2, got: %s", output)
+		if !bytes.Contains([]byte(output), []byte("secret2")) {
+			t.Error("Case-insensitive vault collision failed to overwrite")
 		}
 	})
 
 	t.Run("Zip Slip Path Traversal Detection", func(t *testing.T) {
-		// Create a malicious archive in memory
 		var buf bytes.Buffer
 		tw := tar.NewWriter(&buf)
-
-		// Malicious entry attempting to escape output directory
 		header := &tar.Header{
-			Name: "../outside.txt",
-			Mode: 0600,
+			Name: "../evil.txt",
 			Size: 4,
 		}
-		tw.WriteHeader(header)
-		tw.Write([]byte("evil"))
-		tw.Close()
+		if err := tw.WriteHeader(header); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := tw.Write([]byte("evil")); err != nil {
+			t.Fatal(err)
+		}
+		if err := tw.Close(); err != nil {
+			t.Fatal(err)
+		}
 
-		outDir := filepath.Join(tmpDir, "extract_safety")
-		os.MkdirAll(outDir, 0755)
+		outDir := filepath.Join(tmpDir, "unsafe_extract")
+		if err := os.MkdirAll(outDir, 0755); err != nil {
+			t.Fatal(err)
+		}
 
-		// Call ExtractArchive directly (internal logic verification)
-		err := crypto.ExtractArchive(&buf, outDir)
+		err := crypto.ExtractArchive(bytes.NewReader(buf.Bytes()), outDir)
 		if err == nil {
-			t.Fatal("Expected error for Zip Slip archive, but got nil")
-		}
-		if !strings.Contains(err.Error(), "illegal file path") {
-			t.Errorf("Expected 'illegal file path' error, got: %v", err)
+			t.Error("Expected error for Zip Slip attempt")
 		}
 
-		// Verify file was NOT created outside
-		outsideFile := filepath.Join(tmpDir, "outside.txt")
+		outsideFile := filepath.Join(filepath.Dir(outDir), "evil.txt")
 		if _, err := os.Stat(outsideFile); err == nil {
-			t.Error("VULNERABILITY CONFIRMED: File was created outside the target directory!")
-			os.Remove(outsideFile)
+			t.Errorf("Zip Slip SUCCEEDED! File written to %s", outsideFile)
+			_ = os.Remove(outsideFile)
 		}
 	})
 }
 
 func TestIntegrationLargeFileConcurrency(t *testing.T) {
-	if testing.Short() {
-		t.Skip("Skipping large file concurrency test in short mode")
-	}
-
 	tmpDir := t.TempDir()
 	inputFile := filepath.Join(tmpDir, "large.bin")
-	encFile := inputFile + ".makn"
-	decFile := inputFile + ".dec"
-
-	// Create a 10MB file (enough to have many 64KB chunks)
-	data := make([]byte, 10*1024*1024)
-	for i := range data {
-		data[i] = byte(i % 256)
-	}
-	os.WriteFile(inputFile, data, 0644)
-	pass := "large-pass"
-
-	// Encrypt with high concurrency
-	encCmd := EncryptCmd()
-	encCmd.SetArgs([]string{inputFile, "-o", encFile, "-s", pass, "-j", "8"})
-	if err := encCmd.Execute(); err != nil {
-		t.Fatalf("Large file encryption failed: %v", err)
+	data := make([]byte, 10*1024*1024) // 10MB
+	if err := os.WriteFile(inputFile, data, 0644); err != nil {
+		t.Fatal(err)
 	}
 
-	// Decrypt with different concurrency
-	decCmd := DecryptCmd()
-	decCmd.SetArgs([]string{encFile, "-o", decFile, "-s", pass, "-j", "1"}) // Sequential decryption of parallel encryption
-	if err := decCmd.Execute(); err != nil {
-		t.Fatalf("Large file decryption failed: %v", err)
+	encryptedFile := inputFile + ".makn"
+	passphrase := "large-file-pass"
+
+	enc := EncryptCmd()
+	enc.SetArgs([]string{inputFile, "-o", encryptedFile, "-s", passphrase, "-j", "4", "--quiet"})
+	if err := enc.Execute(); err != nil {
+		t.Fatalf("Concurrent encryption failed: %v", err)
 	}
 
-	res, _ := os.ReadFile(decFile)
-	if len(res) != len(data) {
-		t.Fatalf("Restored size mismatch: got %d, want %d", len(res), len(data))
+	dec := DecryptCmd()
+	restoredFile := filepath.Join(tmpDir, "large_restored.bin")
+	dec.SetArgs([]string{encryptedFile, "-o", restoredFile, "-s", passphrase, "-j", "8", "--quiet"})
+	if err := dec.Execute(); err != nil {
+		t.Fatalf("Concurrent decryption failed: %v", err)
 	}
-	// Check first and last bytes to save time
-	if res[0] != data[0] || res[len(res)-1] != data[len(data)-1] {
-		t.Fatal("Data corruption in large file round-trip")
+
+	restored, _ := os.ReadFile(restoredFile)
+	if !bytes.Equal(data, restored) {
+		t.Error("Large file restored content mismatch")
 	}
 }

@@ -12,7 +12,7 @@ import (
 	"golang.org/x/crypto/chacha20poly1305"
 )
 
-// Constants for algorithm selection in dynamic profiles
+// Constants for algorithm selection in dynamic profiles.
 const (
 	AlgoXChaCha20Poly1305 = byte(0)
 	AlgoAES256GCM         = byte(1)
@@ -35,12 +35,16 @@ type DynamicProfile struct {
 	CustomNonc int    `json:"nonce_size"`
 }
 
+// ID returns the custom profile identifier.
 func (p *DynamicProfile) ID() byte { return p.CustomID }
 
+// SaltSize returns the custom salt size in bytes.
 func (p *DynamicProfile) SaltSize() int { return p.CustomSalt }
 
+// NonceSize returns the custom nonce size in bytes.
 func (p *DynamicProfile) NonceSize() int { return p.CustomNonc }
 
+// DeriveKey derives a symmetric key using the configured KDF.
 func (p *DynamicProfile) DeriveKey(passphrase, salt []byte) []byte {
 	switch p.KdfType {
 	case KdfArgon2id:
@@ -50,6 +54,7 @@ func (p *DynamicProfile) DeriveKey(passphrase, salt []byte) []byte {
 	}
 }
 
+// NewAEAD returns a new AEAD instance based on the configured cipher type.
 func (p *DynamicProfile) NewAEAD(key []byte) (cipher.AEAD, error) {
 	switch p.CipherType {
 	case AlgoXChaCha20Poly1305:

@@ -24,7 +24,7 @@ type Options struct {
 
 // Protect handles the full encryption pipeline for a source (file, directory, or reader).
 func Protect(inputName string, r io.Reader, w io.Writer, opts Options) error {
-	var sourceReader io.Reader = r
+	sourceReader := r
 	var flags byte
 
 	if opts.IsArchive {
@@ -56,21 +56,21 @@ func Protect(inputName string, r io.Reader, w io.Writer, opts Options) error {
 					if err != nil {
 						return err
 					}
-					defer f.Close()
+					defer func() { _ = f.Close() }()
 					_, err = io.Copy(tw, f)
 					return err
 				}
 				return nil
 			})
-			tw.Close()
-			pw.CloseWithError(err)
+			_ = tw.Close()
+			_ = pw.CloseWithError(err)
 		}()
 	} else if sourceReader == nil {
 		f, err := os.Open(inputName)
 		if err != nil {
 			return err
 		}
-		defer f.Close()
+		defer func() { _ = f.Close() }()
 		sourceReader = f
 	}
 
@@ -90,8 +90,8 @@ func Protect(inputName string, r io.Reader, w io.Writer, opts Options) error {
 		go func() {
 			zw, _ := zstd.NewWriter(pw)
 			_, err := io.Copy(zw, oldReader)
-			zw.Close()
-			pw.CloseWithError(err)
+			_ = zw.Close()
+			_ = pw.CloseWithError(err)
 		}()
 	}
 
@@ -131,15 +131,24 @@ func ExtractArchive(r io.Reader, outputDir string) error {
 
 		switch h.Typeflag {
 		case tar.TypeDir:
-			os.MkdirAll(target, 0755)
+			if err := os.MkdirAll(target, 0755); err != nil {
+				return err
+			}
 		case tar.TypeReg:
-			os.MkdirAll(filepath.Dir(target), 0755)
+			if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
+				return err
+			}
 			f, err := os.OpenFile(target, os.O_CREATE|os.O_RDWR|os.O_TRUNC, os.FileMode(h.Mode))
 			if err != nil {
 				return err
 			}
-			io.Copy(f, tr)
-			f.Close()
+			if _, err := io.Copy(f, tr); err != nil {
+				_ = f.Close()
+				return err
+			}
+			if err := f.Close(); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
