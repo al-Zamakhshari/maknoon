@@ -11,7 +11,6 @@ import (
 	"strings"
 
 	"github.com/klauspost/compress/zstd"
-	"golang.org/x/crypto/chacha20poly1305"
 )
 
 // Options defines settings for the protection process.
