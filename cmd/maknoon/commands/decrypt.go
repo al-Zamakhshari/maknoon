@@ -74,7 +74,7 @@ func DecryptCmd() *cobra.Command {
 				}
 				fullIn = io.MultiReader(bytes.NewReader(header), in)
 				flags = header[1]
-				
+
 				// Infer magic based on provided decryption params
 				if keyPath != "" || useFido2 || os.Getenv("MAKNOON_PRIVATE_KEY") != "" {
 					magic = crypto.MagicHeaderAsym
