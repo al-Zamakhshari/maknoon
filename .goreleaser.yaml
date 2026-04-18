@@ -52,6 +52,7 @@ brews:
     repository:
       owner: al-Zamakhshari
       name: homebrew-tap
+    directory: Formula
     homepage: "https://github.com/al-Zamakhshari/maknoon"
     description: "Premier Post-Quantum Security Suite: Hybrid HPKE (ML-KEM + X25519) encryption."
     license: "MIT"
