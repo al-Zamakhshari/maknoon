@@ -46,18 +46,17 @@ changelog:
       - '^docs:'
       - '^test:'
 
-# Homebrew Cask configuration (modern distribution for pre-built binaries)
-homebrew_casks:
+# Homebrew Tap configuration (Standard Formula for CLI tools)
+homebrews:
   - name: maknoon
     repository:
       owner: al-Zamakhshari
       name: homebrew-tap
     homepage: "https://github.com/al-Zamakhshari/maknoon"
-    description: "Versatile, ultra-efficient Post-Quantum CLI encryption tool."
+    description: "Premier Post-Quantum Security Suite: Hybrid HPKE (ML-KEM + X25519) encryption."
     license: "MIT"
-    # Specify the binaries to install
-    binaries:
-      - maknoon
-    # Add manpage support
-    manpages:
-      - maknoon.1
+    test: |
+      system "#{bin}/maknoon --version"
+    install: |
+      bin.install "maknoon"
+      man1.install "maknoon.1"
