@@ -98,6 +98,19 @@ jobs:
           git commit -m "chore: sync extension manifest to $VERSION [skip ci]" || echo "No changes"
           git push origin HEAD:refs/heads/${{ github.head_ref }}
 
+      - name: Sync GitHub Wiki
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          echo "Syncing Wiki..."
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git clone https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.wiki.git wiki_repo
+          cp wiki/*.md wiki_repo/
+          cd wiki_repo
+          git add .
+          git commit -m "docs: automated sync from main [skip ci]" || echo "No wiki changes"
+          git push origin master
+
       - name: Bump version and push tag
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: anothrNick/github-tag-action@1.71.0
