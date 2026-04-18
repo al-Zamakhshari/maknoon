@@ -47,7 +47,7 @@ changelog:
       - '^test:'
 
 # Homebrew Tap configuration (Standard Formula for CLI tools)
-homebrews:
+brews:
   - name: maknoon
     repository:
       owner: al-Zamakhshari
