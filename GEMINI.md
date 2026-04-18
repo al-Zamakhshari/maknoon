@@ -41,15 +41,9 @@ Maknoon is a high-performance, post-quantum CLI encryption tool. It focuses on e
     *   **Strict Blocking Rule**: NEVER merge a Pull Request (including automated sync PRs) until the CI/CD build is explicitly verified as **SUCCESSFUL**. Jumping to conclusions about build status is strictly prohibited.
     *   **Automated Sync**: The CI/CD pipeline will automatically detect the next release version and sync the extension manifest directly to your Pull Request branch.
 5.  **Merge Requirements**: Once the CI has automatically synced the manifest and all checks pass, you may merge the PR into `main`.
-6.  **Wiki Synchronization**: After merging a major feature to `main`, ensure the GitHub Wiki is updated:
+6.  **Wiki Synchronization**: The GitHub Wiki is **automatically updated** by the CI/CD pipeline whenever changes are merged into `main`.
     *   The `wiki/` directory in the repository is the **Source of Truth** for documentation.
-    *   Update the relevant `.md` files in `wiki/`.
-    *   Synchronize with the remote wiki:
-        ```bash
-        git clone https://github.com/al-Zamakhshari/maknoon.wiki.git temp_wiki
-        cp wiki/*.md temp_wiki/
-        cd temp_wiki && git add . && git commit -m "docs: sync with main" && git push origin master
-        ```
+    *   To update the wiki, simply modify the `.md` files in the `wiki/` folder as part of your feature branch.
 
 ## 🚀 Pre-Release Checklist
 
