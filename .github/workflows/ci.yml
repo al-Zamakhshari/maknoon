@@ -46,11 +46,7 @@ jobs:
     name: Release & Sync
     needs: test
     runs-on: ubuntu-latest
-    # Only run on main pushes, tags, or PRs to main
-    if: |
-      github.event_name == 'pull_request' ||
-      github.ref == 'refs/heads/main' ||
-      startsWith(github.ref, 'refs/tags/v')
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
     steps:
       - name: Checkout
         uses: actions/checkout@v6
