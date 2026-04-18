@@ -30,12 +30,16 @@ Maknoon is a high-performance, post-quantum CLI encryption tool. It focuses on e
 
 ## 🚀 Development Workflow
 
-1.  **Mandatory Pull Requests**: ALL new changes and features MUST be submitted via a Pull Request. Direct pushes to `main` are restricted to emergency hotfixes or repository maintenance.
-2.  **PR Requirements**: Every Pull Request MUST satisfy the following before merging:
-    *   **Documentation**: Ensure `README.md` and the `maknoon.1` man page are updated to reflect all changes.
-    *   **Testing**: All new logic must be covered by Unit and/or Integration tests. The full test suite (`go test ./...`) must pass.
-    *   **Security Scan**: A fresh security scan must be performed. Use `/security:analyze` or manually verify that no new vulnerabilities (PII leaks, Zip Slip, etc.) have been introduced.
-    *   **Quality Check**: Ensure 100% `gofmt` compliance and passing `staticcheck`.
+1.  **Dedicated Branching**: ALWAYS create a new dedicated feature branch (`feat/...`, `fix/...`, or `chore/...`) BEFORE committing any changes. Direct commits to `main` are strictly prohibited.
+2.  **Pre-Push Requirements**: BEFORE pushing to the remote repository, you MUST:
+    *   **Update Documentation**: Sync `README.md` and the `maknoon.1` man page with all changes.
+    *   **Verify Tests**: Run the full test suite (`go test ./...`) and ensure a 100% pass rate.
+    *   **Security Check**: Manually review or use `/security:analyze` to ensure no new vulnerabilities (PII leaks, Zip Slip, path traversal) are introduced.
+3.  **Mandatory Pull Requests**: ALL changes MUST be submitted via a Pull Request from your dedicated branch to `main`.
+4.  **Post-Push Monitoring**:
+    *   **Monitor CI/CD**: After each push, actively monitor the GitHub Actions pipeline to ensure all checks (Quality, Test, Release) pass.
+    *   **Approve/Merge Sync PRs**: If the CI/CD pipeline triggers an automated extension manifest sync PR (e.g., `chore: sync extension manifest...`), you MUST approve and merge it immediately using administrator privileges if necessary to keep the extension in sync with the core tool.
+5.  **Merge Requirements**: Every PR must pass all quality checks, tests, and security scans before being merged into `main`.
 
 ## 🚀 Pre-Release Checklist
 
