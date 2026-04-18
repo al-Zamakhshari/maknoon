@@ -67,7 +67,17 @@ maknoon encrypt secret.pdf -p user1.pub -p user2.pub -p user3.pub
 maknoon info secret.pdf.makn
 ```
 
-### 3. Password Vault (Quantum-Resistant)
+### 3. Fingerprint Resistance (Stealth Mode)
+Remove recognizable magic bytes from headers to provide deniability. The ciphertext becomes indistinguishable from random noise.
+```bash
+# Encrypt in stealth mode
+maknoon encrypt secret.pdf -s "my-pass" --stealth
+
+# Decrypt in stealth mode (requires --stealth)
+maknoon decrypt secret.pdf.makn -o restored.pdf -s "my-pass" --stealth
+```
+
+### 4. Password Vault (Quantum-Resistant)
 ```bash
 # Store a secret
 maknoon vault set github.com --user myname

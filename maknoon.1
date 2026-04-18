@@ -84,6 +84,9 @@ Provide the vault master passphrase non-interactively.
 .B \-c, \-\-compress
 Enable Zstd compression before encryption.
 .TP
+.B \-\-stealth
+Enable fingerprint resistance by removing the recognizable magic bytes from the file header. This provides deniability by making the ciphertext indistinguishable from random noise. Requires the same flag for decryption.
+.TP
 .B \-o, \-\-output
 Specify the output file path or directory. Use "-" as the output path to write to standard output.
 .TP

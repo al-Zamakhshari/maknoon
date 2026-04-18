@@ -27,6 +27,7 @@ func DecryptCmd() *cobra.Command {
 	var verbose bool
 	var profileFile string
 	var overwrite bool
+	var stealth bool
 
 	cmd := &cobra.Command{
 		Use:   "decrypt [file]",
@@ -57,21 +58,49 @@ func DecryptCmd() *cobra.Command {
 			}
 
 			// 1. Peek at the header to determine encryption type and flags
-			header := make([]byte, 6)
-			if _, err := io.ReadFull(in, header); err != nil {
-				err := fmt.Errorf("failed to read file header: %w", err)
-				if JSONOutput {
-					printErrorJSON(err)
-					return nil
-				}
-				return err
-			}
-			fullIn := io.MultiReader(bytes.NewReader(header), in)
+			var magic string
+			var flags byte
+			var fullIn io.Reader
 
-			magic := string(header[:4])
-			flags := header[5]
-			if verbose {
-				fmt.Printf("DEBUG: Magic=%s Flags=0x%02x\n", magic, flags)
+			if stealth {
+				header := make([]byte, 2)
+				if _, err := io.ReadFull(in, header); err != nil {
+					err := fmt.Errorf("failed to read stealth header: %w", err)
+					if JSONOutput {
+						printErrorJSON(err)
+						return nil
+					}
+					return err
+				}
+				fullIn = io.MultiReader(bytes.NewReader(header), in)
+				flags = header[1]
+
+				// Infer magic based on provided decryption params
+				if keyPath != "" || useFido2 || os.Getenv("MAKNOON_PRIVATE_KEY") != "" {
+					magic = crypto.MagicHeaderAsym
+				} else {
+					magic = crypto.MagicHeader
+				}
+				if verbose {
+					fmt.Printf("DEBUG: Stealth mode active. Inferred Magic=%s Flags=0x%02x\n", magic, flags)
+				}
+			} else {
+				header := make([]byte, 6)
+				if _, err := io.ReadFull(in, header); err != nil {
+					err := fmt.Errorf("failed to read file header: %w", err)
+					if JSONOutput {
+						printErrorJSON(err)
+						return nil
+					}
+					return err
+				}
+				fullIn = io.MultiReader(bytes.NewReader(header), in)
+
+				magic = string(header[:4])
+				flags = header[5]
+				if verbose {
+					fmt.Printf("DEBUG: Magic=%s Flags=0x%02x\n", magic, flags)
+				}
 			}
 
 			// 2. Handle Passphrase/Identity logic
@@ -155,9 +184,9 @@ func DecryptCmd() *cobra.Command {
 				var dErr error
 				var f byte
 				if magic == crypto.MagicHeader {
-					f, dErr = crypto.DecryptStream(proxyIn, pw, finalKey, concurrency)
+					f, dErr = crypto.DecryptStream(proxyIn, pw, finalKey, concurrency, stealth)
 				} else {
-					f, dErr = crypto.DecryptStreamWithPrivateKeyAndVerifier(proxyIn, pw, finalKey, senderKey, concurrency)
+					f, dErr = crypto.DecryptStreamWithPrivateKeyAndVerifier(proxyIn, pw, finalKey, senderKey, concurrency, stealth)
 				}
 				_ = f
 				_ = pw.CloseWithError(dErr)
@@ -182,6 +211,7 @@ func DecryptCmd() *cobra.Command {
 	cmd.Flags().BoolVarP(&useFido2, "fido2", "f", false, "Use FIDO2 security key for authentication")
 	cmd.Flags().BoolVarP(&quiet, "quiet", "q", false, "Suppress progress bars and informational messages")
 	cmd.Flags().BoolVar(&verbose, "verbose", false, "Enable internal pipeline tracing (slog)")
+	cmd.Flags().BoolVar(&stealth, "stealth", false, "Enable fingerprint resistance (headerless)")
 	cmd.Flags().StringVar(&profileFile, "profile-file", "", "Path to a custom profile JSON file")
 	cmd.Flags().BoolVar(&overwrite, "overwrite", false, "Overwrite existing files")
 	return cmd
@@ -280,7 +310,7 @@ func resolveAsymmetricKey(password []byte, keyPath string, isStdin bool) ([]byte
 		}
 
 		var unlockedKey bytes.Buffer
-		if _, err := crypto.DecryptStream(bytes.NewReader(keyBytes), &unlockedKey, password, 1); err != nil {
+		if _, err := crypto.DecryptStream(bytes.NewReader(keyBytes), &unlockedKey, password, 1, false); err != nil {
 			return nil, nil, fmt.Errorf("failed to unlock private key: %w", err)
 		}
 		return password, unlockedKey.Bytes(), nil

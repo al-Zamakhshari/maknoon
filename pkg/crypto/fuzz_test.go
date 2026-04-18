@@ -23,7 +23,7 @@ func FuzzStreamEncryptDecrypt(f *testing.F) {
 		}
 
 		var decrypted bytes.Buffer
-		resFlags, err := DecryptStream(bytes.NewReader(encrypted.Bytes()), &decrypted, password, 2)
+		resFlags, err := DecryptStream(bytes.NewReader(encrypted.Bytes()), &decrypted, password, 2, false)
 		if err != nil {
 			t.Fatalf("Failed to decrypt valid ciphertext: %v", err)
 		}

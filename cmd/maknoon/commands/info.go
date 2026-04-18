@@ -11,6 +11,7 @@ import (
 
 // InfoCmd returns the cobra command for inspecting Maknoon files.
 func InfoCmd() *cobra.Command {
+	var stealth bool
 	cmd := &cobra.Command{
 		Use:   "info [file]",
 		Short: "Inspect a Maknoon encrypted file's metadata",
@@ -23,14 +24,27 @@ func InfoCmd() *cobra.Command {
 			}
 			defer f.Close()
 
-			header := make([]byte, 6)
-			if _, err := io.ReadFull(f, header); err != nil {
-				return fmt.Errorf("invalid file: header too short")
-			}
+			var magic string
+			var profileID byte
+			var flags byte
 
-			magic := string(header[:4])
-			profileID := header[4]
-			flags := header[5]
+			if stealth {
+				header := make([]byte, 2)
+				if _, err := io.ReadFull(f, header); err != nil {
+					return fmt.Errorf("invalid file: stealth header too short")
+				}
+				profileID = header[0]
+				flags = header[1]
+				magic = "STEALTH"
+			} else {
+				header := make([]byte, 6)
+				if _, err := io.ReadFull(f, header); err != nil {
+					return fmt.Errorf("invalid file: header too short")
+				}
+				magic = string(header[:4])
+				profileID = header[4]
+				flags = header[5]
+			}
 
 			if JSONOutput {
 				return printInfoJSON(magic, profileID, flags, filePath)
@@ -44,6 +58,8 @@ func InfoCmd() *cobra.Command {
 				fmt.Println("Type:           Symmetric (Passphrase Protected)")
 			case crypto.MagicHeaderAsym:
 				fmt.Println("Type:           Asymmetric (Public Key Protected)")
+			case "STEALTH":
+				fmt.Println("Type:           Stealth (Fingerprint Resistant)")
 			default:
 				return fmt.Errorf("not a valid Maknoon file (invalid magic: %s)", magic)
 			}
@@ -71,6 +87,8 @@ func InfoCmd() *cobra.Command {
 			return nil
 		},
 	}
+	cmd.Flags().BoolVar(&stealth, "stealth", false, "Enable fingerprint resistance (headerless)")
+	cmd.Flags().BoolVar(&JSONOutput, "json", false, "Output results in JSON format")
 	return cmd
 }
 
@@ -82,6 +100,7 @@ func printInfoJSON(magic string, profileID byte, flags byte, path string) error 
 		Compressed bool   `json:"compressed"`
 		IsArchive  bool   `json:"is_archive"`
 		IsSigned   bool   `json:"is_signed"`
+		IsStealth  bool   `json:"is_stealth"`
 	}
 
 	res := info{
@@ -90,12 +109,15 @@ func printInfoJSON(magic string, profileID byte, flags byte, path string) error 
 		Compressed: flags&crypto.FlagCompress != 0,
 		IsArchive:  flags&crypto.FlagArchive != 0,
 		IsSigned:   flags&crypto.FlagSigned != 0,
+		IsStealth:  magic == "STEALTH" || (flags&crypto.FlagStealth != 0),
 	}
 
 	if magic == crypto.MagicHeader {
 		res.Type = "symmetric"
 	} else if magic == crypto.MagicHeaderAsym {
 		res.Type = "asymmetric"
+	} else if magic == "STEALTH" {
+		res.Type = "stealth"
 	}
 
 	printJSON(res)

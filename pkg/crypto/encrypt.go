@@ -53,8 +53,10 @@ func EncryptStream(r io.Reader, w io.Writer, password []byte, flags byte, concur
 	}
 
 	// 4. Write Header: Magic (4) | Version/ProfileID (1) | Flags (1) | Salt (N) | BaseNonce (N)
-	if _, err := w.Write([]byte(MagicHeader)); err != nil {
-		return err
+	if flags&FlagStealth == 0 {
+		if _, err := w.Write([]byte(MagicHeader)); err != nil {
+			return err
+		}
 	}
 	if _, err := w.Write([]byte{profile.ID(), flags}); err != nil {
 		return err
@@ -169,8 +171,10 @@ func EncryptStreamWithPublicKeysAndSigner(r io.Reader, w io.Writer, pubKeys [][]
 		signature = sig
 	}
 
-	if _, err := w.Write([]byte(MagicHeaderAsym)); err != nil {
-		return err
+	if flags&FlagStealth == 0 {
+		if _, err := w.Write([]byte(MagicHeaderAsym)); err != nil {
+			return err
+		}
 	}
 	if _, err := w.Write([]byte{profile.ID(), flags, byte(len(recs))}); err != nil {
 		return err

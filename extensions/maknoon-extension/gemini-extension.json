@@ -1,6 +1,6 @@
 {
   "name": "maknoon-pqc",
-  "version": "1.2.3",
+  "version": "1.2.4",
   "description": "Post-Quantum encryption, signing, and vault capabilities for AI Agents.",
   "contextFileName": "skills/maknoon/SKILL.md"
 }

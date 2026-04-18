@@ -16,4 +16,6 @@ const (
 	FlagCompress = 1 << 1 // 0x02
 	// FlagSigned indicates the file header includes an integrated signature.
 	FlagSigned = 1 << 2 // 0x04
+	// FlagStealth indicates the magic bytes are omitted for fingerprint resistance.
+	FlagStealth = 1 << 3 // 0x08
 )

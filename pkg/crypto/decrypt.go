@@ -14,13 +14,15 @@ import (
 )
 
 // DecryptStream decrypts data from r to w using a passphrase.
-func DecryptStream(r io.Reader, w io.Writer, password []byte, concurrency int) (byte, error) {
-	magic := make([]byte, 4)
-	if _, err := io.ReadFull(r, magic); err != nil {
-		return 0, err
-	}
-	if string(magic) != MagicHeader {
-		return 0, errors.New("not a valid Maknoon file (symmetric)")
+func DecryptStream(r io.Reader, w io.Writer, password []byte, concurrency int, isStealth bool) (byte, error) {
+	if !isStealth {
+		magic := make([]byte, 4)
+		if _, err := io.ReadFull(r, magic); err != nil {
+			return 0, err
+		}
+		if string(magic) != MagicHeader {
+			return 0, errors.New("not a valid Maknoon file (symmetric)")
+		}
 	}
 
 	header := make([]byte, 2)
@@ -57,18 +59,20 @@ func DecryptStream(r io.Reader, w io.Writer, password []byte, concurrency int) (
 }
 
 // DecryptStreamWithPrivateKey decrypts data from r to w using a private key.
-func DecryptStreamWithPrivateKey(r io.Reader, w io.Writer, privKeyBytes []byte, concurrency int) (byte, error) {
-	return DecryptStreamWithPrivateKeyAndVerifier(r, w, privKeyBytes, nil, concurrency)
+func DecryptStreamWithPrivateKey(r io.Reader, w io.Writer, privKeyBytes []byte, concurrency int, isStealth bool) (byte, error) {
+	return DecryptStreamWithPrivateKeyAndVerifier(r, w, privKeyBytes, nil, concurrency, isStealth)
 }
 
 // DecryptStreamWithPrivateKeyAndVerifier is the internal implementation supporting optional signature verification.
-func DecryptStreamWithPrivateKeyAndVerifier(r io.Reader, w io.Writer, privKeyBytes []byte, senderPubKey []byte, concurrency int) (byte, error) {
-	magic := make([]byte, 4)
-	if _, err := io.ReadFull(r, magic); err != nil {
-		return 0, err
-	}
-	if string(magic) != MagicHeaderAsym {
-		return 0, errors.New("not a valid Maknoon file (asymmetric)")
+func DecryptStreamWithPrivateKeyAndVerifier(r io.Reader, w io.Writer, privKeyBytes []byte, senderPubKey []byte, concurrency int, isStealth bool) (byte, error) {
+	if !isStealth {
+		magic := make([]byte, 4)
+		if _, err := io.ReadFull(r, magic); err != nil {
+			return 0, err
+		}
+		if string(magic) != MagicHeaderAsym {
+			return 0, errors.New("not a valid Maknoon file (asymmetric)")
+		}
 	}
 
 	header := make([]byte, 3)

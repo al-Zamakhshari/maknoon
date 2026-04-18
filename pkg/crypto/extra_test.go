@@ -23,7 +23,7 @@ func TestProtectFullFlow(t *testing.T) {
 	}
 
 	var decrypted bytes.Buffer
-	flags, err := DecryptStream(&encrypted, &decrypted, passphrase, 1)
+	flags, err := DecryptStream(&encrypted, &decrypted, passphrase, 1, false)
 	if err != nil {
 		t.Fatalf("Decrypt failed: %v", err)
 	}

@@ -22,6 +22,7 @@ func EncryptCmd() *cobra.Command {
 	var concurrency int
 	var quiet bool
 	var verbose bool
+	var stealth bool
 	var profile int
 	var profileFile string
 
@@ -78,6 +79,7 @@ func EncryptCmd() *cobra.Command {
 				Concurrency: concurrency,
 				ProfileID:   byte(profile),
 				Verbose:     verbose,
+				Stealth:     stealth,
 			}
 
 			// Apply KDF overrides to the profile if it's ProfileV1
@@ -148,6 +150,7 @@ func EncryptCmd() *cobra.Command {
 	cmd.Flags().IntVarP(&concurrency, "concurrency", "j", 0, "Number of parallel workers (0 for auto)")
 	cmd.Flags().BoolVarP(&quiet, "quiet", "q", false, "Suppress progress bars and informational messages")
 	cmd.Flags().BoolVar(&verbose, "verbose", false, "Enable internal pipeline tracing (slog)")
+	cmd.Flags().BoolVar(&stealth, "stealth", false, "Enable fingerprint resistance (headerless)")
 	cmd.Flags().IntVar(&profile, "profile", 0, "Cryptographic profile ID (1: NIST PQC, 2: AES-GCM)")
 	cmd.Flags().StringVar(&profileFile, "profile-file", "", "Path to a custom profile JSON file")
 

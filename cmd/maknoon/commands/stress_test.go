@@ -170,3 +170,58 @@ func TestIntegrationLargeFileConcurrency(t *testing.T) {
 		t.Error("Large file restored content mismatch")
 	}
 }
+
+func TestIntegrationStealthMode(t *testing.T) {
+	JSONOutput = false
+	tmpDir := t.TempDir()
+	inputFile := filepath.Join(tmpDir, "secret.txt")
+	content := []byte("Stealth Mode Integration Test")
+	if err := os.WriteFile(inputFile, content, 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	encryptedFile := filepath.Join(tmpDir, "secret.makn")
+	passphrase := "stealth-pass"
+
+	// 1. Encrypt with --stealth
+	enc := EncryptCmd()
+	enc.SetArgs([]string{inputFile, "-o", encryptedFile, "-s", passphrase, "--stealth", "--quiet"})
+	if err := enc.Execute(); err != nil {
+		t.Fatalf("Stealth encryption failed: %v", err)
+	}
+
+	// Verify magic bytes are NOT present
+	raw, err := os.ReadFile(encryptedFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(raw) > 4 && (string(raw[:4]) == crypto.MagicHeader || string(raw[:4]) == crypto.MagicHeaderAsym) {
+		t.Errorf("Security failure: Magic bytes found in stealth file")
+	}
+
+	// 2. Decrypt with --stealth
+	dec := DecryptCmd()
+	restoredFile := filepath.Join(tmpDir, "secret.restored")
+	dec.SetArgs([]string{encryptedFile, "-o", restoredFile, "-s", passphrase, "--stealth", "--quiet"})
+	if err := dec.Execute(); err != nil {
+		t.Fatalf("Stealth decryption failed: %v", err)
+	}
+
+	restored, err := os.ReadFile(restoredFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(content, restored) {
+		t.Error("Stealth restored content mismatch")
+	}
+
+	// 3. Info with --stealth
+	info := InfoCmd()
+	info.SetArgs([]string{encryptedFile, "--stealth", "--json"})
+	output := CaptureOutput(func() {
+		_ = info.Execute()
+	})
+	if !strings.Contains(output, "\"is_stealth\":true") {
+		t.Errorf("Info failed to detect stealth mode. Output: %s", output)
+	}
+}

@@ -24,7 +24,7 @@ func TestParallelEquivalence(t *testing.T) {
 
 	// 2. Decrypt Sequential (concurrency = 1)
 	var decryptedSeq bytes.Buffer
-	if _, err := DecryptStream(bytes.NewReader(encryptedPar.Bytes()), &decryptedSeq, password, 1); err != nil {
+	if _, err := DecryptStream(bytes.NewReader(encryptedPar.Bytes()), &decryptedSeq, password, 1, false); err != nil {
 		t.Fatalf("Sequential decryption of parallel-encrypted data failed: %v", err)
 	}
 
@@ -35,7 +35,7 @@ func TestParallelEquivalence(t *testing.T) {
 
 	// 4. Decrypt Parallel (concurrency = 0 -> auto)
 	var decryptedPar bytes.Buffer
-	if _, err := DecryptStream(bytes.NewReader(encryptedPar.Bytes()), &decryptedPar, password, 0); err != nil {
+	if _, err := DecryptStream(bytes.NewReader(encryptedPar.Bytes()), &decryptedPar, password, 0, false); err != nil {
 		t.Fatalf("Parallel decryption failed: %v", err)
 	}
 
@@ -60,7 +60,7 @@ func TestResequencingChaos(t *testing.T) {
 	}
 
 	var decrypted bytes.Buffer
-	if _, err := DecryptStream(bytes.NewReader(encrypted.Bytes()), &decrypted, password, concurrency); err != nil {
+	if _, err := DecryptStream(bytes.NewReader(encrypted.Bytes()), &decrypted, password, concurrency, false); err != nil {
 		t.Fatal(err)
 	}
 
@@ -109,7 +109,7 @@ func BenchmarkDecryption(b *testing.B) {
 			b.SetBytes(int64(dataSize))
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				if _, err := DecryptStream(bytes.NewReader(encData), io.Discard, password, c); err != nil {
+				if _, err := DecryptStream(bytes.NewReader(encData), io.Discard, password, c, false); err != nil {
 					b.Fatal(err)
 				}
 			}

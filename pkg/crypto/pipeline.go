@@ -25,6 +25,7 @@ type Options struct {
 	Concurrency    int       // 0 for auto (NumCPU), 1 for sequential
 	ProgressReader io.Reader // Optional reader to track progress
 	Verbose        bool      // Enables internal slog tracing
+	Stealth        bool      // Enables fingerprint resistance (headerless)
 }
 
 // Protect handles the full encryption pipeline for a source (file, directory, or reader).
@@ -113,6 +114,11 @@ func Protect(inputName string, r io.Reader, w io.Writer, opts Options) error {
 			defer func() { _ = zw.Close() }()
 			_, zErr = io.Copy(zw, oldReader)
 		}()
+	}
+
+	if opts.Stealth {
+		logger.Info("enabling stealth mode (headerless)")
+		flags |= FlagStealth
 	}
 
 	allPublicKeys := opts.PublicKeys
