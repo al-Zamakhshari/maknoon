@@ -105,6 +105,7 @@ jobs:
 
       - name: Create PR for Extension Sync
         uses: peter-evans/create-pull-request@v7
+        continue-on-error: true
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           commit-message: "chore: sync extension manifest to ${{ steps.sync_manifest.outputs.version }}"
