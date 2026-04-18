@@ -85,13 +85,13 @@ maknoon vault delete old_vault
 ## 🤖 Agentic AI Integration
 Maknoon is **Agent-Ready** with strict JSON output and non-interactive environment triggers.
 
-```bash
-# Enable global JSON mode
-export MAKNOON_JSON=1
-export MAKNOON_PASSWORD="secret-to-store"
+### Agent Handshake
+If `MAKNOON_AGENT_MODE=1` is set, Maknoon automatically switches to JSON mode whenever its output is piped or redirected (not a TTY), allowing for seamless "zero-config" agent integration.
 
-# Automated vault entry
-maknoon vault set api_service
+```bash
+# Automated discovery and encryption
+export MAKNOON_AGENT_MODE=1
+maknoon identity active | jq .
 ```
 
 ---
