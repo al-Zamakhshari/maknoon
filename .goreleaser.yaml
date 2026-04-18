@@ -55,8 +55,9 @@ homebrew_casks:
     homepage: "https://github.com/al-Zamakhshari/maknoon"
     description: "Versatile, ultra-efficient Post-Quantum CLI encryption tool."
     license: "MIT"
-    # Specify the binary to install
-    binary: maknoon
+    # Specify the binaries to install
+    binaries:
+      - maknoon
     # Add manpage support
     manpages:
       - maknoon.1

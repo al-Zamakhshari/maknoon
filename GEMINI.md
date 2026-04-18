@@ -37,9 +37,9 @@ Maknoon is a high-performance, post-quantum CLI encryption tool. It focuses on e
     *   **Security Check**: Manually review or use `/security:analyze` to ensure no new vulnerabilities (PII leaks, Zip Slip, path traversal) are introduced.
 3.  **Mandatory Pull Requests**: ALL changes MUST be submitted via a Pull Request from your dedicated branch to `main`.
 4.  **Post-Push Monitoring**:
-    *   **Monitor CI/CD**: After each push, actively monitor the GitHub Actions pipeline to ensure all checks (Quality, Test, Release) pass.
-    *   **Approve/Merge Sync PRs**: If the CI/CD pipeline triggers an automated extension manifest sync PR (e.g., `chore: sync extension manifest...`), you MUST approve and merge it immediately using administrator privileges if necessary to keep the extension in sync with the core tool.
-5.  **Merge Requirements**: Every PR must pass all quality checks, tests, and security scans before being merged into `main`.
+    *   **Monitor CI/CD**: After each push, actively monitor the GitHub Actions pipeline.
+    *   **Automated Sync**: The CI/CD pipeline will automatically detect the next release version and sync the extension manifest directly to your Pull Request branch. You DO NOT need to create a second PR.
+5.  **Merge Requirements**: Once the CI has automatically synced the manifest and all checks pass, you may merge the PR into `main`.
 
 ## 🚀 Pre-Release Checklist
 

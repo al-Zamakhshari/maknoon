@@ -3,7 +3,7 @@ name: CI/CD
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "*" ]
     tags:
       - 'v*'
   pull_request:
@@ -11,7 +11,7 @@ on:
 
 permissions:
   contents: write
-  pull-requests: write
+  pull_requests: write
 
 jobs:
   quality:
@@ -68,9 +68,8 @@ jobs:
         run: go test -v ./...
 
   release:
-    name: Release
+    name: Release & Sync
     needs: test
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -84,38 +83,48 @@ jobs:
           go-version-file: 'go.mod'
           cache: true
 
-      - name: Tidy
-        run: go mod tidy
+      - name: Get Next Version
+        id: next_version
+        uses: anothrNick/github-tag-action@1.71.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          WITH_V: true
+          DEFAULT_BUMP: patch
+          DRY_RUN: true
+
+      - name: Sync Extension Manifest
+        run: |
+          VERSION=$(echo "${{ steps.next_version.outputs.new_tag }}" | sed 's/v//')
+          if [ -z "$VERSION" ]; then
+             VERSION=$(git describe --tags --abbrev=0 | sed 's/v//')
+          fi
+          echo "Syncing manifest to version: $VERSION"
+          sed -i "s/\"version\": \".*\"/\"version\": \"$VERSION\"/" extensions/maknoon-extension/gemini-extension.json
+          cp integrations/maknoon-skill/SKILL.md extensions/maknoon-extension/skills/maknoon/SKILL.md
+          
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add extensions/maknoon-extension/
+          
+          if [ "${{ github.event_name }}" == "pull_request" ]; then
+            git commit -m "chore: sync extension manifest to $VERSION" || echo "No changes"
+            git push origin HEAD:${{ github.head_ref }}
+          elif [ "${{ github.ref }}" == "refs/heads/main" ]; then
+             # On main, we just update the file before GoReleaser or Tagging
+             git commit -m "chore: sync extension manifest to $VERSION [skip ci]" || echo "No changes"
+             git push origin main
+          fi
 
       - name: Bump version and push tag
-        if: github.ref == 'refs/heads/main' && !startsWith(github.ref, 'refs/tags/')
-        id: tag_action
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: anothrNick/github-tag-action@1.71.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           WITH_V: true
           DEFAULT_BUMP: patch
 
-      - name: Sync Extension Manifest
-        id: sync_manifest
-        run: |
-          VERSION=$(git describe --tags --abbrev=0 | sed 's/v//')
-          sed -i "s/\"version\": \".*\"/\"version\": \"$VERSION\"/" extensions/maknoon-extension/gemini-extension.json
-          cp integrations/maknoon-skill/SKILL.md extensions/maknoon-extension/skills/maknoon/SKILL.md
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-
-      - name: Create PR for Extension Sync
-        uses: peter-evans/create-pull-request@v7
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          commit-message: "chore: sync extension manifest to ${{ steps.sync_manifest.outputs.version }}"
-          title: "chore: sync extension manifest to ${{ steps.sync_manifest.outputs.version }}"
-          body: "Automated update of the Gemini CLI extension manifest to match the latest release version."
-          branch: "sync-extension-${{ steps.sync_manifest.outputs.version }}"
-          base: main
-          delete-branch: true
-
       - name: Run GoReleaser
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
         uses: goreleaser/goreleaser-action@v7
         with:
           distribution: goreleaser
