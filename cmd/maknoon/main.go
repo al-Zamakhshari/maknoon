@@ -6,6 +6,7 @@ import (
 
 	"github.com/al-Zamakhshari/maknoon/cmd/maknoon/commands"
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 )
 
 func main() {
@@ -14,7 +15,9 @@ func main() {
 		Short: "Maknoon (مكنون): A versatile, ultra-efficient CLI encryption tool.",
 		Long:  `Maknoon uses bleeding-edge hybrid cryptography to protect your files carefully.`,
 		PersistentPreRun: func(cmd *cobra.Command, _ []string) {
-			if commands.JSONOutput || os.Getenv("MAKNOON_JSON") == "1" {
+			// Auto-detect Agent mode: not a TTY and MAKNOON_AGENT_MODE env var is set
+			isAgent := !term.IsTerminal(int(os.Stdout.Fd())) && os.Getenv("MAKNOON_AGENT_MODE") == "1"
+			if commands.JSONOutput || os.Getenv("MAKNOON_JSON") == "1" || isAgent {
 				commands.JSONOutput = true
 				cmd.SilenceUsage = true
 				cmd.SilenceErrors = true

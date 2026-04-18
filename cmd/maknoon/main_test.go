@@ -717,7 +717,13 @@ func TestIntegrationIdentity(t *testing.T) {
 		t.Errorf("Identity list mismatch. Got: %s", output)
 	}
 
-	// 3. Rename identity
+	// 3. Test 'active' command (Identity Discovery)
+	outputActive := runRootCmd("identity", "active", "--json")
+	if !strings.Contains(outputActive, "test_id.kem.pub") {
+		t.Errorf("Identity active discovery failed. Output: %s", outputActive)
+	}
+
+	// 4. Rename identity
 	newBase := "renamed_id"
 	runRootCmd("identity", "rename", keyBase, newBase)
 

@@ -18,9 +18,55 @@ func IdentityCmd() *cobra.Command {
 	}
 
 	cmd.AddCommand(identityListCmd())
+	cmd.AddCommand(identityActiveCmd())
 	cmd.AddCommand(identityShowCmd())
 	cmd.AddCommand(identityRenameCmd())
 
+	return cmd
+}
+
+func identityActiveCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "active",
+		Short: "List absolute paths of available public keys for encryption",
+		RunE: func(_ *cobra.Command, _ []string) error {
+			home, _ := os.UserHomeDir()
+			keysDir := filepath.Join(home, crypto.MaknoonDir, crypto.KeysDir)
+
+			files, err := os.ReadDir(keysDir)
+			if err != nil {
+				if os.IsNotExist(err) {
+					if JSONOutput {
+						printJSON(map[string]interface{}{"active_keys": []string{}})
+						return nil
+					}
+					fmt.Println("No identities found.")
+					return nil
+				}
+				return err
+			}
+
+			var keys []string
+			for _, f := range files {
+				name := f.Name()
+				if strings.HasSuffix(name, ".kem.pub") {
+					keys = append(keys, filepath.Join(keysDir, name))
+				}
+			}
+
+			if JSONOutput {
+				printJSON(map[string]interface{}{
+					"active_keys": keys,
+				})
+			} else {
+				fmt.Println("🛡️  Active Public Keys (Absolute Paths):")
+				for _, k := range keys {
+					fmt.Printf("  - %s\n", k)
+				}
+			}
+			return nil
+		},
+	}
 	return cmd
 }
 
