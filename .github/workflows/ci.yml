@@ -2,7 +2,7 @@ name: CI/CD
 
 on:
   push:
-    branches: [ "*" ]
+    branches: [ "main" ]
     tags:
       - 'v*'
   pull_request:
@@ -70,6 +70,11 @@ jobs:
     name: Release & Sync
     needs: test
     runs-on: ubuntu-latest
+    # Only run on main pushes, tags, or pull requests targeting main
+    if: |
+      github.event_name == 'pull_request' ||
+      github.ref == 'refs/heads/main' ||
+      startsWith(github.ref, 'refs/tags/v')
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -106,7 +111,7 @@ jobs:
           git add extensions/maknoon-extension/
           
           if [ "${{ github.event_name }}" == "pull_request" ]; then
-            git commit -m "chore: sync extension manifest to $VERSION" || echo "No changes"
+            git commit -m "chore: sync extension manifest to $VERSION [skip ci]" || echo "No changes"
             git push origin HEAD:${{ github.head_ref }}
           elif [ "${{ github.ref }}" == "refs/heads/main" ]; then
              git commit -m "chore: sync extension manifest to $VERSION [skip ci]" || echo "No changes"
