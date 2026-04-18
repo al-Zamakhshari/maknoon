@@ -3,12 +3,15 @@ package crypto
 
 import (
 	"crypto/cipher"
+	"crypto/hpke"
 	"encoding/json"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"sync"
+
+	"github.com/awnumar/memguard"
 )
 
 // Profile defines the cryptographic primitives and parameters for a Maknoon version.
@@ -27,14 +30,14 @@ type Profile interface {
 
 	// KEMName returns the name of the Key Encapsulation Mechanism.
 	KEMName() string
-	// GenerateKEMKeyPair generates a new KEM key pair.
-	GenerateKEMKeyPair() (pub, priv []byte, err error)
-	// KEMEncapsulate generates a shared secret and its encapsulation for a public key.
-	KEMEncapsulate(pubKey []byte) (ct, ss []byte, err error)
-	// KEMDecapsulate recovers a shared secret from its encapsulation using a private key.
-	KEMDecapsulate(privKey, ct []byte) (ss []byte, err error)
-	// KEMCiphertextSize returns the size of the KEM ciphertext in bytes.
-	KEMCiphertextSize() int
+
+	// V2 Hybrid HPKE methods
+	// GenerateHybridKeyPair generates a new hybrid key pair (ML-KEM-768 + X25519).
+	GenerateHybridKeyPair() (hpke.PrivateKey, hpke.PublicKey, error)
+	// WrapFEK encapsulates an ephemeral symmetric key (FEK) for a recipient.
+	WrapFEK(recipientPub hpke.PublicKey, flags byte, fekEnclave *memguard.Enclave) ([]byte, error)
+	// UnwrapFEK decapsulates the FEK from the header material.
+	UnwrapFEK(recipientPriv hpke.PrivateKey, flags byte, headerData []byte) (*memguard.Enclave, error)
 
 	// SIGName returns the name of the digital signature algorithm.
 	SIGName() string
@@ -61,9 +64,6 @@ func RegisterProfile(p Profile) {
 }
 
 // GetProfile retrieves a cryptographic profile by its ID.
-// 1. Checks memory registry.
-// 2. If ID < 128, attempts to auto-load from ~/.maknoon/profiles/ID.json.
-// 3. If ID >= 128 and r is not nil, attempts to unpack from reader.
 func GetProfile(id byte, r io.Reader) (Profile, error) {
 	mu.RLock()
 	p, ok := profiles[id]
@@ -116,4 +116,18 @@ func GetProfile(id byte, r io.Reader) (Profile, error) {
 func DefaultProfile() Profile {
 	p, _ := GetProfile(1, nil)
 	return p
+}
+
+// SafeClear deterministically zeroizes a standard Go byte slice.
+func SafeClear(b []byte) {
+	for i := range b {
+		b[i] = 0
+	}
+}
+
+// SafeClearString clears a string slice by setting each element to empty.
+func SafeClearString(s []string) {
+	for i := range s {
+		s[i] = ""
+	}
 }

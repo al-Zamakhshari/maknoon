@@ -22,8 +22,9 @@ const (
 )
 
 // DynamicProfile is a profile defined at runtime either from a file or from header bytes.
+// It inherits V2 Hybrid HPKE (X25519 + ML-KEM-768) and ML-DSA-87 signatures from ProfileV1.
 type DynamicProfile struct {
-	ProfileV1 `json:"-"` // Default KEM/SIG behavior for now
+	ProfileV1 `json:"-"`
 
 	CustomID   byte   `json:"id"`
 	CipherType byte   `json:"cipher"`
@@ -53,9 +54,6 @@ func (p *DynamicProfile) DeriveKey(passphrase, salt []byte) []byte {
 		return nil
 	}
 }
-
-// SIGSize returns the size of the signature in bytes.
-func (p *DynamicProfile) SIGSize() int { return p.ProfileV1.SIGSize() }
 
 // NewAEAD returns a new AEAD instance based on the configured cipher type.
 func (p *DynamicProfile) NewAEAD(key []byte) (cipher.AEAD, error) {
@@ -149,15 +147,12 @@ func GenerateRandomProfile(id byte) *DynamicProfile {
 	saltSize := 16 + int(s.Uint64())
 
 	// 4. Random Argon2 Settings (Realistic but varying)
-	// Iterations: 1 to 11
 	it, _ := rand.Int(rand.Reader, big.NewInt(11))
 	iterations := uint32(1 + it.Uint64())
 
-	// Memory: 16MB to 512MB (in KB steps of 16MB)
 	memSteps, _ := rand.Int(rand.Reader, big.NewInt(32))
 	memory := uint32(16384 + (memSteps.Uint64() * 16384))
 
-	// Threads: 1 to 8
 	th, _ := rand.Int(rand.Reader, big.NewInt(8))
 	threads := uint8(1 + th.Uint64())
 

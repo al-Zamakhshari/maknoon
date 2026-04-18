@@ -2,10 +2,12 @@ package crypto
 
 import (
 	"crypto/cipher"
+	"crypto/hpke"
 	"crypto/rand"
 	"fmt"
 
-	"github.com/cloudflare/circl/kem/kyber/kyber1024"
+	"github.com/al-Zamakhshari/maknoon/pkg/maknooncrypto"
+	"github.com/awnumar/memguard"
 	"github.com/cloudflare/circl/sign/mldsa/mldsa87"
 	"golang.org/x/crypto/argon2"
 	"golang.org/x/crypto/chacha20poly1305"
@@ -19,7 +21,7 @@ func init() {
 	})
 }
 
-// ProfileV1 implements the standard NIST PQC suite (Maknoon v1).
+// ProfileV1 implements the standard NIST PQC suite (Maknoon v2 Hybrid).
 type ProfileV1 struct {
 	ArgonTime uint32
 	ArgonMem  uint32
@@ -35,7 +37,7 @@ func (p *ProfileV1) SaltSize() int { return 32 }
 // NonceSize returns the nonce size in bytes (24 for XChaCha20).
 func (p *ProfileV1) NonceSize() int { return 24 }
 
-// DeriveKey derives a symmetric key using Argon2id with profile-defined parameters.
+// DeriveKey derives a symmetric key using Argon2id.
 func (p *ProfileV1) DeriveKey(passphrase, salt []byte) []byte {
 	return argon2.IDKey(passphrase, salt, p.ArgonTime, p.ArgonMem, p.ArgonThrd, chacha20poly1305.KeySize)
 }
@@ -46,42 +48,21 @@ func (p *ProfileV1) NewAEAD(key []byte) (cipher.AEAD, error) {
 }
 
 // KEMName returns the KEM algorithm name.
-func (p *ProfileV1) KEMName() string { return "Kyber1024" }
+func (p *ProfileV1) KEMName() string { return "Hybrid ML-KEM-768+X25519" }
 
-// GenerateKEMKeyPair generates a new Kyber1024 keypair.
-func (p *ProfileV1) GenerateKEMKeyPair() (pub, priv []byte, err error) {
-	pk, sk, err := kyber1024.GenerateKeyPair(rand.Reader)
-	if err != nil {
-		return nil, nil, err
-	}
-	pub, _ = pk.MarshalBinary()
-	priv, _ = sk.MarshalBinary()
-	return pub, priv, nil
+// GenerateHybridKeyPair generates a new hybrid key pair (ML-KEM-768 + X25519).
+func (p *ProfileV1) GenerateHybridKeyPair() (hpke.PrivateKey, hpke.PublicKey, error) {
+	return maknooncrypto.GenerateKeys()
 }
 
-// KEMEncapsulate generates a shared secret and ciphertext for a public key.
-func (p *ProfileV1) KEMEncapsulate(pubKeyBytes []byte) (ct, ss []byte, err error) {
-	scheme := kyber1024.Scheme()
-	pubKey, err := scheme.UnmarshalBinaryPublicKey(pubKeyBytes)
-	if err != nil {
-		return nil, nil, err
-	}
-	return scheme.Encapsulate(pubKey)
+// WrapFEK encapsulates the FEK using HPKE.
+func (p *ProfileV1) WrapFEK(recipientPub hpke.PublicKey, flags byte, fekEnclave *memguard.Enclave) ([]byte, error) {
+	return maknooncrypto.WrapEphemeralKey(recipientPub, p.ID(), flags, fekEnclave)
 }
 
-// KEMDecapsulate derives the shared secret from a ciphertext and private key.
-func (p *ProfileV1) KEMDecapsulate(privKeyBytes, ct []byte) (ss []byte, err error) {
-	scheme := kyber1024.Scheme()
-	privKey, err := scheme.UnmarshalBinaryPrivateKey(privKeyBytes)
-	if err != nil {
-		return nil, err
-	}
-	return scheme.Decapsulate(privKey, ct)
-}
-
-// KEMCiphertextSize returns the size of the KEM ciphertext.
-func (p *ProfileV1) KEMCiphertextSize() int {
-	return kyber1024.Scheme().CiphertextSize()
+// UnwrapFEK decapsulates the FEK using HPKE.
+func (p *ProfileV1) UnwrapFEK(recipientPriv hpke.PrivateKey, flags byte, headerData []byte) (*memguard.Enclave, error) {
+	return maknooncrypto.UnwrapEphemeralKey(recipientPriv, p.ID(), flags, headerData)
 }
 
 // SIGName returns the signature algorithm name.

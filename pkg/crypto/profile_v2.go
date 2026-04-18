@@ -17,10 +17,10 @@ func init() {
 	})
 }
 
-// ProfileV2 implements a "High-Compatibility" suite using AES-256-GCM and a faster KDF.
-// Note: This is mainly to demonstrate cryptographic agility.
+// ProfileV2 implements a "High-Compatibility" suite using AES-256-GCM.
+// It inherits the new V2 Hybrid HPKE (X25519 + ML-KEM-768) from ProfileV1.
 type ProfileV2 struct {
-	ProfileV1 // Inherit KEM/SIG from V1 for now
+	ProfileV1
 }
 
 // ID returns the profile identifier (2).
@@ -34,7 +34,6 @@ func (p *ProfileV2) NonceSize() int { return 12 }
 
 // DeriveKey derives a symmetric key using Argon2id.
 func (p *ProfileV2) DeriveKey(passphrase, salt []byte) []byte {
-	// Standard high-security Argon2 settings (matching Profile 1)
 	return argon2.IDKey(passphrase, salt, 3, 64*1024, 4, 32)
 }
 
@@ -45,13 +44,4 @@ func (p *ProfileV2) NewAEAD(key []byte) (cipher.AEAD, error) {
 		return nil, err
 	}
 	return cipher.NewGCM(block)
-}
-
-// SIGSize returns the size of the signature in bytes.
-func (p *ProfileV2) SIGSize() int { return p.ProfileV1.SIGSize() }
-
-// GenerateKEMKeyPair generates a new KEM keypair (inherited from V1).
-func (p *ProfileV2) GenerateKEMKeyPair() (pub, priv []byte, err error) {
-	// For V2, we'll keep using the same KEM as V1 for identity compatibility
-	return p.ProfileV1.GenerateKEMKeyPair()
 }

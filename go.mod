@@ -3,6 +3,7 @@ module github.com/al-Zamakhshari/maknoon
 go 1.26.1
 
 require (
+	github.com/awnumar/memguard v0.23.0
 	github.com/cloudflare/circl v1.6.3
 	github.com/klauspost/compress v1.18.5
 	github.com/mark3labs/mcp-go v0.48.0
@@ -17,6 +18,7 @@ require (
 
 require (
 	github.com/aead/cmac v0.0.0-20160719120800-7af84192f0b1 // indirect
+	github.com/awnumar/memcall v0.4.0 // indirect
 	github.com/ebitengine/purego v0.9.1 // indirect
 	github.com/fxamacker/cbor/v2 v2.9.0 // indirect
 	github.com/google/jsonschema-go v0.4.2 // indirect

@@ -2,12 +2,15 @@ package crypto
 
 import (
 	"crypto/cipher"
+	"crypto/hpke"
 	"crypto/rand"
 	"encoding/binary"
 	"fmt"
 	"io"
 	"runtime"
 	"sync"
+
+	"github.com/awnumar/memguard"
 )
 
 // bufferPool reuses buffers to reduce GC pressure.
@@ -90,11 +93,15 @@ func EncryptStreamWithPublicKeysAndSigner(r io.Reader, w io.Writer, pubKeys [][]
 		return fmt.Errorf("too many recipients (max 255)")
 	}
 
-	fek := make([]byte, 32)
-	if _, err := io.ReadFull(rand.Reader, fek); err != nil {
+	// Generate FEK in a secure enclave
+	fekRaw := make([]byte, 32)
+	if _, err := io.ReadFull(rand.Reader, fekRaw); err != nil {
 		return err
 	}
-	defer SafeClear(fek)
+	fekEnclave := memguard.NewBufferFromBytes(fekRaw).Seal()
+	SafeClear(fekRaw)
+	// No defer destroy here because we pass it to workers, we should destroy after workers are done.
+	// Actually, streamEncrypt accepts cipher.AEAD, we can derive it here.
 
 	type recipientHeader struct {
 		pubKeyHash []byte // 4 bytes of SHA256(pubKey)
@@ -102,29 +109,41 @@ func EncryptStreamWithPublicKeysAndSigner(r io.Reader, w io.Writer, pubKeys [][]
 	}
 	var recs []recipientHeader
 
-	for _, pk := range pubKeys {
-		ct, ss, err := profile.KEMEncapsulate(pk)
+	if len(signingKey) > 0 {
+		flags |= FlagSigned
+	}
+
+	kem := hpke.MLKEM768X25519()
+
+	for _, pkBytes := range pubKeys {
+		pubKey, err := kem.NewPublicKey(pkBytes)
+		if err != nil {
+			return fmt.Errorf("invalid recipient public key: %w", err)
+		}
+
+		wrappedMaterial, err := profile.WrapFEK(pubKey, flags, fekEnclave)
 		if err != nil {
 			return fmt.Errorf("failed to encapsulate for a recipient: %w", err)
 		}
 
-		wrappedFEK, err := wrapFEK(ss, fek)
-		if err != nil {
-			return err
-		}
-		SafeClear(ss)
-
-		h := sha256Sum(pk)[:4]
+		h := sha256Sum(pkBytes)[:4]
 		recs = append(recs, recipientHeader{
 			pubKeyHash: h,
-			ciphertext: append(ct, wrappedFEK...),
+			ciphertext: wrappedMaterial,
 		})
 	}
 
-	aead, err := profile.NewAEAD(fek)
+	// Instantiate AEAD from FEK
+	fekBuf, err := fekEnclave.Open()
 	if err != nil {
 		return err
 	}
+	aead, err := profile.NewAEAD(fekBuf.Bytes())
+	fekBuf.Destroy() // Wipe immediately after creating AEAD
+	if err != nil {
+		return err
+	}
+
 	baseNonce := make([]byte, aead.NonceSize())
 	if _, err := io.ReadFull(rand.Reader, baseNonce); err != nil {
 		return err
@@ -132,11 +151,15 @@ func EncryptStreamWithPublicKeysAndSigner(r io.Reader, w io.Writer, pubKeys [][]
 
 	var signature []byte
 	if len(signingKey) > 0 {
-		flags |= FlagSigned
-		commitment := make([]byte, 0, 4+1+1+len(fek)+len(baseNonce))
+		commitment := make([]byte, 0, 4+1+1+32+len(baseNonce))
 		commitment = append(commitment, []byte(MagicHeaderAsym)...)
 		commitment = append(commitment, profile.ID(), flags)
-		commitment = append(commitment, fek...)
+		
+		// Re-open fek briefly for signature commitment
+		fb, _ := fekEnclave.Open()
+		commitment = append(commitment, fb.Bytes()...)
+		fb.Destroy()
+		
 		commitment = append(commitment, baseNonce...)
 
 		sig, err := profile.Sign(commitment, signingKey)

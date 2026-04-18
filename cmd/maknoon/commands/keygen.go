@@ -84,7 +84,7 @@ func KeygenCmd() *cobra.Command {
 			}
 
 			if !JSONOutput {
-				fmt.Println("Generating bleeding-edge Post-Quantum identity (Kyber1024 + ML-DSA-87)...")
+				fmt.Println("Generating bleeding-edge Hybrid Post-Quantum identity (ML-KEM-768-X25519 + ML-DSA-87)...")
 			}
 			kemPub, kemPriv, sigPub, sigPriv, err := crypto.GeneratePQKeyPair()
 			if err != nil {

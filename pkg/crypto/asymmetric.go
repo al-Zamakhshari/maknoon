@@ -2,21 +2,25 @@
 // encryption logic for Maknoon.
 package crypto
 
-// GeneratePQKeyPair generates a fresh ML-KEM and ML-DSA keypair using the default profile.
+// GeneratePQKeyPair generates a fresh Hybrid (ML-KEM + X25519) and ML-DSA keypair using the default profile.
+// The KEM keys are returned as marshaled binary for storage compatibility.
 func GeneratePQKeyPair() (kemPub, kemPriv, sigPub, sigPriv []byte, err error) {
 	profile := DefaultProfile()
 
-	kemPub, kemPriv, err = profile.GenerateKEMKeyPair()
+	priv, pub, err := profile.GenerateHybridKeyPair()
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
 
+	kemPriv, err = priv.Bytes()
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
+	kemPub = pub.Bytes()
+
 	sigPub, sigPriv, err = profile.GenerateSIGKeyPair()
 	if err != nil {
-		// Zero out KEM keys before failing
-		for i := range kemPriv {
-			kemPriv[i] = 0
-		}
+		SafeClear(kemPriv)
 		return nil, nil, nil, nil, err
 	}
 
@@ -25,13 +29,7 @@ func GeneratePQKeyPair() (kemPub, kemPriv, sigPub, sigPriv []byte, err error) {
 
 // SignData signs a message using a Post-Quantum private key.
 func SignData(message []byte, privKeyBytes []byte) ([]byte, error) {
-	// Zero out the input bytes after unmarshaling to protect memory
-	defer func() {
-		for i := range privKeyBytes {
-			privKeyBytes[i] = 0
-		}
-	}()
-
+	defer SafeClear(privKeyBytes)
 	return DefaultProfile().Sign(message, privKeyBytes)
 }
 

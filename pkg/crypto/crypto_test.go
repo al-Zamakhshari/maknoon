@@ -35,20 +35,22 @@ func TestSymmetricRoundTrip(t *testing.T) {
 func TestAsymmetricRoundTrip(t *testing.T) {
 	data := []byte("Post-Quantum Asymmetric Encryption Test Data")
 	profile := DefaultProfile()
-	pub, priv, err := profile.GenerateKEMKeyPair()
+	priv, pub, err := profile.GenerateHybridKeyPair()
 	if err != nil {
 		t.Fatal(err)
 	}
+	pubBytes := pub.Bytes()
+	privBytes, _ := priv.Bytes()
 
 	// 1. Encrypt
 	var encrypted bytes.Buffer
-	if err := EncryptStreamWithPublicKey(bytes.NewReader(data), &encrypted, pub, FlagNone, 0, 0); err != nil {
+	if err := EncryptStreamWithPublicKey(bytes.NewReader(data), &encrypted, pubBytes, FlagNone, 0, 0); err != nil {
 		t.Fatalf("Asymmetric encryption failed: %v", err)
 	}
 
 	// 2. Decrypt
 	var decrypted bytes.Buffer
-	if _, err := DecryptStreamWithPrivateKey(bytes.NewReader(encrypted.Bytes()), &decrypted, priv, 0); err != nil {
+	if _, err := DecryptStreamWithPrivateKey(bytes.NewReader(encrypted.Bytes()), &decrypted, privBytes, 0); err != nil {
 		t.Fatalf("Asymmetric decryption failed: %v", err)
 	}
 
@@ -62,27 +64,29 @@ func TestIntegratedSignThenEncryptUnit(t *testing.T) {
 	profile := DefaultProfile()
 
 	// Recipient keys
-	pub, priv, _ := profile.GenerateKEMKeyPair()
+	priv, pub, _ := profile.GenerateHybridKeyPair()
+	pubBytes := pub.Bytes()
+	privBytes, _ := priv.Bytes()
 	// Sender keys
 	spub, spriv, _ := profile.GenerateSIGKeyPair()
 
 	// 1. Encrypt with integrated signature
 	var encrypted bytes.Buffer
-	if err := EncryptStreamWithPublicKeysAndSigner(bytes.NewReader(data), &encrypted, [][]byte{pub}, spriv, FlagNone, 0, 0); err != nil {
+	if err := EncryptStreamWithPublicKeysAndSigner(bytes.NewReader(data), &encrypted, [][]byte{pubBytes}, spriv, FlagNone, 0, 0); err != nil {
 		t.Fatalf("Integrated encryption failed: %v", err)
 	}
 
 	// 2. Decrypt and Verify
 	var decrypted bytes.Buffer
 	// Test failure without sender key
-	_, err := DecryptStreamWithPrivateKey(bytes.NewReader(encrypted.Bytes()), &decrypted, priv, 0)
+	_, err := DecryptStreamWithPrivateKey(bytes.NewReader(encrypted.Bytes()), &decrypted, privBytes, 0)
 	if err == nil || !bytes.Contains([]byte(err.Error()), []byte("sender public key not provided")) {
 		t.Errorf("Expected error for missing sender key, got: %v", err)
 	}
 
 	// Test success with sender key
 	decrypted.Reset()
-	_, err = DecryptStreamWithPrivateKeyAndVerifier(bytes.NewReader(encrypted.Bytes()), &decrypted, priv, spub, 0)
+	_, err = DecryptStreamWithPrivateKeyAndVerifier(bytes.NewReader(encrypted.Bytes()), &decrypted, privBytes, spub, 0)
 	if err != nil {
 		t.Fatalf("Integrated decryption failed: %v", err)
 	}
