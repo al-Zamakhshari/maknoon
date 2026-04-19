@@ -20,6 +20,15 @@ Encrypt a file or directory. If a directory is provided, it is streamed through 
 .B decrypt [file]
 Decrypt and restore data. Automatically detects archive and compression status from the encrypted header. Use \-\-overwrite to bypass safety checks for existing files.
 .TP
+.B send [file/dir]
+Send a file or directory via secure ephemeral P2P (Magic Wormhole). Generates a one-time code and session passphrase. Data is encrypted with a session-specific key before entering the P2P transport.
+.TP
+.B receive [code]
+Receive a file or directory from a peer using the provided code. Requires the session passphrase for decryption.
+.TP
+.B info [file]
+Displays metadata and cryptographic details of an encrypted file (Type, Profile, KEM, SIG, KDF).
+.TP
 .B identity
 Manage Post-Quantum cryptographic identities.
 .RS

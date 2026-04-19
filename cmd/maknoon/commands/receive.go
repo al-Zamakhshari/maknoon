@@ -9,6 +9,7 @@ import (
 
 	"github.com/al-Zamakhshari/maknoon/pkg/crypto"
 	"github.com/psanford/wormhole-william/wormhole"
+	"github.com/schollz/progressbar/v3"
 	"github.com/spf13/cobra"
 )
 
@@ -16,13 +17,14 @@ var (
 	recvOutput     string
 	recvPassphrase string
 	recvStealth    bool
+	quietRecv      bool
 )
 
 // ReceiveCmd returns the cobra command for receiving files via ephemeral P2P.
 func ReceiveCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "receive [code]",
-		Short: "Receive a file via secure ephemeral P2P",
+		Short: "Receive a file or directory via secure ephemeral P2P",
 		Long:  `Downloads and decrypts a file directly from a peer.`,
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -31,7 +33,13 @@ func ReceiveCmd() *cobra.Command {
 			var c wormhole.Client
 			ctx := context.Background()
 
-			fmt.Println("🕳️  Connecting to wormhole...")
+			if JSONOutput {
+				quietRecv = true
+			}
+
+			if !quietRecv {
+				fmt.Println("🕳️  Connecting to wormhole...")
+			}
 			msg, err := c.Receive(ctx, code)
 			if err != nil {
 				return err
@@ -48,7 +56,7 @@ func ReceiveCmd() *cobra.Command {
 					"transfer_bytes": msg.TransferBytes64,
 				})
 			} else {
-				fmt.Printf("📥 Incoming file: %s (%d bytes)\n", msg.Name, msg.TransferBytes64)
+				fmt.Printf("📥 Incoming: %s (%d bytes)\n", msg.Name, msg.TransferBytes64)
 			}
 
 			// 1. Download to a temporary file
@@ -62,10 +70,13 @@ func ReceiveCmd() *cobra.Command {
 				_ = os.Remove(tmpPath)
 			}()
 
-			if !JSONOutput {
-				fmt.Println("⏳ Downloading...")
+			var proxyReader io.Reader = msg
+			if !quietRecv {
+				bar := progressbar.DefaultBytes(msg.TransferBytes64, "downloading")
+				proxyReader = io.TeeReader(msg, bar)
 			}
-			if _, err := io.Copy(tmpFile, msg); err != nil {
+
+			if _, err := io.Copy(tmpFile, proxyReader); err != nil {
 				if JSONOutput {
 					printErrorJSON(err)
 					return nil
@@ -79,12 +90,11 @@ func ReceiveCmd() *cobra.Command {
 					printErrorJSON(fmt.Errorf("session passphrase required via --passphrase"))
 					return nil
 				}
-				fmt.Printf("\n🔐 Enter session passphrase to decrypt: ")
+				fmt.Printf("\n🔐 Enter session passphrase: ")
 				fmt.Scanln(&recvPassphrase)
 			}
 
 			// 1. Peek at the header to get flags (compression, etc)
-			// This avoids a race condition when starting the decryption goroutine.
 			if _, err := tmpFile.Seek(0, 0); err != nil {
 				return err
 			}
@@ -98,7 +108,9 @@ func ReceiveCmd() *cobra.Command {
 				return err
 			}
 
-			fmt.Println("🔓 Decrypting...")
+			if !quietRecv {
+				fmt.Println("🔓 Decrypting...")
+			}
 
 			// Set output name if not provided
 			finalOut := recvOutput
@@ -131,16 +143,17 @@ func ReceiveCmd() *cobra.Command {
 					"path":   finalOut,
 				})
 			} else {
-				fmt.Printf("\n✨ Success! File saved to: %s\n", finalOut)
+				fmt.Printf("\n✨ Success! Data saved to: %s\n", finalOut)
 			}
 			return nil
 
 		},
 	}
 
-	cmd.Flags().StringVarP(&recvOutput, "output", "o", "", "Output path")
+	cmd.Flags().StringVarP(&recvOutput, "output", "o", "", "Output path or directory")
 	cmd.Flags().StringVarP(&recvPassphrase, "passphrase", "s", "", "Session passphrase")
 	cmd.Flags().BoolVar(&recvStealth, "stealth", false, "Decrypt as stealth mode")
+	cmd.Flags().BoolVarP(&quietRecv, "quiet", "q", false, "Suppress informational messages")
 
 	return cmd
 }
