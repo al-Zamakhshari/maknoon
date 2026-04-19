@@ -10,10 +10,12 @@ import (
 func CaptureOutput(f func()) string {
 	oldStdout := os.Stdout
 	oldJSONWriter := JSONWriter
+	oldGlobalWriter := GlobalContext.JSONWriter
 
 	r, w, _ := os.Pipe()
 	os.Stdout = w
 	JSONWriter = w
+	GlobalContext.JSONWriter = w
 
 	f()
 
@@ -22,6 +24,7 @@ func CaptureOutput(f func()) string {
 	}
 	os.Stdout = oldStdout
 	JSONWriter = oldJSONWriter
+	GlobalContext.JSONWriter = oldGlobalWriter
 
 	var buf bytes.Buffer
 	if _, err := io.Copy(&buf, r); err != nil {
@@ -29,3 +32,4 @@ func CaptureOutput(f func()) string {
 	}
 	return buf.String()
 }
+

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"strings"
 
@@ -133,7 +134,15 @@ func ReceiveCmd() *cobra.Command {
 				}
 			}()
 
-			if err := finalizeDecryption(pr, flags, finalOut); err != nil {
+			if finalOut == "-" {
+				// If we are outputting to stdout, we MUST send JSON status to stderr
+				// to avoid corrupting the raw data stream.
+				oldWriter := GlobalContext.JSONWriter
+				GlobalContext.JSONWriter = os.Stderr
+				defer func() { GlobalContext.JSONWriter = oldWriter }()
+			}
+
+			if err := crypto.FinalizeRestoration(pr, flags, finalOut, slog.New(slog.NewTextHandler(io.Discard, nil))); err != nil {
 				if JSONOutput {
 					printErrorJSON(err)
 					return err

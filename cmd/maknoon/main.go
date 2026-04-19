@@ -21,10 +21,11 @@ func main() {
 			// Auto-detect Agent mode: not a TTY and MAKNOON_AGENT_MODE env var is set
 			isAgent := !term.IsTerminal(int(os.Stdout.Fd())) && os.Getenv("MAKNOON_AGENT_MODE") == "1"
 			if commands.JSONOutput || os.Getenv("MAKNOON_JSON") == "1" || isAgent {
-				commands.JSONOutput = true
+				commands.SetJSONOutput(true)
 				cmd.SilenceUsage = true
 				cmd.SilenceErrors = true
 			}
+			commands.GlobalContext.JSONWriter = commands.JSONWriter
 		},
 	}
 

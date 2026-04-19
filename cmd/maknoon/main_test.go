@@ -44,11 +44,13 @@ func runRootCmd(args ...string) string {
 	oldStdout := os.Stdout
 	oldStderr := os.Stderr
 	oldJSONWriter := commands.JSONWriter
+	oldGlobalWriter := commands.GlobalContext.JSONWriter
 
 	r, w, _ := os.Pipe()
 	os.Stdout = w
 	os.Stderr = w
 	commands.JSONWriter = w
+	commands.GlobalContext.JSONWriter = w
 
 	_ = rootCmd.Execute()
 
@@ -56,8 +58,8 @@ func runRootCmd(args ...string) string {
 	os.Stdout = oldStdout
 	os.Stderr = oldStderr
 	commands.JSONWriter = oldJSONWriter
+	commands.GlobalContext.JSONWriter = oldGlobalWriter
 	io.Copy(&buf, r)
-
 	return buf.String()
 }
 

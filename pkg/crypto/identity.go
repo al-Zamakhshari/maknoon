@@ -1,8 +1,10 @@
 package crypto
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 const (
@@ -16,16 +18,30 @@ const (
 	ProfilesDir = "profiles"
 )
 
-// ResolveKeyPath checks if a key exists locally, in ~/.maknoon/keys/, or in environment variables.
-func ResolveKeyPath(path string, envVar string) string {
+// IdentityManager handles resolution and discovery of cryptographic identities.
+type IdentityManager struct {
+	KeysDir  string
+	HomeDir  string
+}
+
+// NewIdentityManager creates a new manager with default paths.
+func NewIdentityManager() *IdentityManager {
+	home, _ := os.UserHomeDir()
+	return &IdentityManager{
+		KeysDir: filepath.Join(home, MaknoonDir, KeysDir),
+		HomeDir: home,
+	}
+}
+
+// ResolveKeyPath checks if a key exists locally, in the manager's keys directory, or in environment variables.
+func (m *IdentityManager) ResolveKeyPath(path string, envVar string) string {
 	// 1. Check if provided path is actually a path to a file
 	if path != "" {
 		if _, err := os.Stat(path); err == nil {
 			return path
 		}
-		// 2. Check in ~/.maknoon/keys/
-		home, _ := os.UserHomeDir()
-		maknoonPath := filepath.Join(home, MaknoonDir, KeysDir, path)
+		// 2. Check in managed keys directory
+		maknoonPath := filepath.Join(m.KeysDir, path)
 		if _, err := os.Stat(maknoonPath); err == nil {
 			return maknoonPath
 		}
@@ -34,8 +50,6 @@ func ResolveKeyPath(path string, envVar string) string {
 	// 3. If path is empty or not found, check environment variable
 	if envVar != "" {
 		if env := os.Getenv(envVar); env != "" {
-			// If it's a path, return it. If it's the key content itself, we might need to handle it.
-			// For now, assume it's a path.
 			if _, err := os.Stat(env); err == nil {
 				return env
 			}
@@ -43,6 +57,31 @@ func ResolveKeyPath(path string, envVar string) string {
 	}
 
 	return path // Fallback
+}
+
+// ListActiveIdentities returns absolute paths to all available public keys.
+func (m *IdentityManager) ListActiveIdentities() ([]string, error) {
+	var keys []string
+	if _, err := os.Stat(m.KeysDir); os.IsNotExist(err) {
+		return keys, nil
+	}
+
+	files, err := os.ReadDir(m.KeysDir)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, f := range files {
+		if !f.IsDir() && strings.HasSuffix(f.Name(), ".pub") {
+			keys = append(keys, filepath.Join(m.KeysDir, f.Name()))
+		}
+	}
+	return keys, nil
+}
+
+// ResolveKeyPath checks if a key exists locally, in ~/.maknoon/keys/, or in environment variables.
+func ResolveKeyPath(path string, envVar string) string {
+	return NewIdentityManager().ResolveKeyPath(path, envVar)
 }
 
 // GetDefaultVaultPath returns the path to the default vault file.
@@ -67,5 +106,48 @@ func EnsureMaknoonDirs() error {
 			return err
 		}
 	}
+	return nil
+}
+
+// ValidatePath ensures a path is safe to use.
+// If restricted is true, it limits file operations to the user's home and system temp directories.
+func ValidatePath(path string, restricted bool) error {
+	if path == "-" || path == "" {
+		return nil
+	}
+
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return fmt.Errorf("invalid path: %w", err)
+	}
+
+	// Always resolve symlinks for final validation.
+	// If the file doesn't exist, resolve symlinks of the parent directory.
+	evalPath, err := filepath.EvalSymlinks(absPath)
+	if err != nil {
+		parentEval, err2 := filepath.EvalSymlinks(filepath.Dir(absPath))
+		if err2 == nil {
+			evalPath = filepath.Join(parentEval, filepath.Base(absPath))
+		} else {
+			evalPath = absPath
+		}
+	}
+
+	if restricted {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return fmt.Errorf("failed to get home directory: %w", err)
+		}
+		evalHome, _ := filepath.EvalSymlinks(home)
+
+		tmp := os.TempDir()
+		evalTmp, _ := filepath.EvalSymlinks(tmp)
+
+		// Ensure the path is within the home directory or system temp directory
+		if !strings.HasPrefix(evalPath, evalHome) && !strings.HasPrefix(evalPath, evalTmp) {
+			return fmt.Errorf("security policy: arbitrary file paths outside home or temp are prohibited")
+		}
+	}
+
 	return nil
 }

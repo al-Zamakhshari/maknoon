@@ -2,6 +2,7 @@ package crypto
 
 import (
 	"archive/tar"
+	"bytes"
 	"crypto/sha256"
 	"fmt"
 	"io"
@@ -85,6 +86,104 @@ func Protect(inputName string, r io.Reader, w io.Writer, opts Options) (byte, er
 	}
 	logger.Info("starting symmetric encryption")
 	return flags, EncryptStream(sourceReader, w, opts.Passphrase, flags, opts.Concurrency, opts.ProfileID)
+}
+
+// Unprotect handles the full decryption pipeline: Handshake -> Decrypt -> Decompress -> Extract.
+func Unprotect(r io.Reader, w io.Writer, outPath string, opts Options) (byte, error) {
+	var logger *slog.Logger
+	if opts.Verbose {
+		logger = slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	} else {
+		logger = slog.New(slog.NewTextHandler(io.Discard, nil))
+	}
+
+	// 1. Peek at the header to get flags (compression, archive, etc.)
+	magic, profileID, flags, err := ReadHeader(r, opts.Stealth)
+	if err != nil {
+		return 0, fmt.Errorf("failed to read file header: %w", err)
+	}
+
+	// 2. Wrap reader with multi-reader since we peeked
+	var headerBytes []byte
+	if !opts.Stealth {
+		headerBytes = append([]byte(magic), profileID, flags)
+	} else {
+		headerBytes = []byte{profileID, flags}
+	}
+	fullIn := io.MultiReader(bytes.NewReader(headerBytes), r)
+
+	// 3. Resolve key and perform core decryption stream
+	// We use a pipe to bridge decryption to restoration (decompression/archive)
+	pr, pw := io.Pipe()
+	var dErr error
+	go func() {
+		defer pw.Close()
+		var dFlags byte
+		if len(opts.PublicKeys) > 0 || len(opts.PublicKey) > 0 {
+			// Asymmetric
+			allPublicKeys := opts.PublicKeys
+			if len(opts.PublicKey) > 0 {
+				allPublicKeys = append(allPublicKeys, opts.PublicKey)
+			}
+			// Note: Current core API for asymmetric decrypt expects a single priv key.
+			// Pipeline 'Restore' assumes the caller provided the correct single key in Passphrase or similar.
+			// For now, assume symmetric or simple asymmetric bypass.
+			dFlags, dErr = DecryptStreamWithPrivateKeyAndVerifier(fullIn, pw, opts.Passphrase, opts.PublicKey, opts.Concurrency, opts.Stealth)
+		} else {
+			// Symmetric
+			dFlags, dErr = DecryptStream(fullIn, pw, opts.Passphrase, opts.Concurrency, opts.Stealth)
+		}
+		_ = dFlags
+		if dErr != nil {
+			_ = pw.CloseWithError(dErr)
+		}
+	}()
+
+	// 4. Finalize: Decompress and/or Extract Archive
+	err = FinalizeRestoration(pr, flags, outPath, logger)
+	return flags, err
+}
+
+// FinalizeRestoration handles the post-decryption steps: decompression and archive extraction.
+func FinalizeRestoration(pr io.Reader, flags byte, outPath string, logger *slog.Logger) error {
+	decReader := pr
+	if flags&FlagCompress != 0 {
+		logger.Info("decompressing zstd stream")
+		zr, err := zstd.NewReader(pr)
+		if err != nil {
+			return fmt.Errorf("failed to initialize zstd reader: %w", err)
+		}
+		defer zr.Close()
+		decReader = zr
+	}
+
+	if flags&FlagArchive != 0 {
+		logger.Info("extracting tar archive", "target", outPath)
+		if err := ExtractArchive(decReader, outPath); err != nil {
+			return fmt.Errorf("failed to extract archive: %w", err)
+		}
+		return nil
+	}
+
+	var out io.Writer
+	if outPath == "-" {
+		out = os.Stdout
+	} else {
+		if err := os.MkdirAll(filepath.Dir(outPath), 0755); err != nil {
+			return err
+		}
+		f, err := os.Create(outPath)
+		if err != nil {
+			return fmt.Errorf("failed to create output file: %w", err)
+		}
+		defer func() { _ = f.Close() }()
+		out = f
+	}
+
+	if _, err := io.Copy(out, decReader); err != nil {
+		return fmt.Errorf("failed to write restored data: %w", err)
+	}
+	return nil
 }
 
 func wrapWithArchiver(inputName string, logger *slog.Logger) io.Reader {

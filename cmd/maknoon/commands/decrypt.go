@@ -5,11 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"strings"
 
 	"github.com/al-Zamakhshari/maknoon/pkg/crypto"
-	"github.com/klauspost/compress/zstd"
 	"github.com/schollz/progressbar/v3"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
@@ -195,12 +195,12 @@ func DecryptCmd() *cobra.Command {
 			if outPath == "-" {
 				// If we are outputting to stdout, we MUST send JSON status to stderr
 				// to avoid corrupting the raw data stream.
-				oldWriter := JSONWriter
-				JSONWriter = os.Stderr
-				defer func() { JSONWriter = oldWriter }()
+				oldWriter := GlobalContext.JSONWriter
+				GlobalContext.JSONWriter = os.Stderr
+				defer func() { GlobalContext.JSONWriter = oldWriter }()
 			}
 
-			if err := finalizeDecryption(pr, flags, outPath); err != nil {
+			if err := crypto.FinalizeRestoration(pr, flags, outPath, slog.New(slog.NewTextHandler(io.Discard, nil))); err != nil {
 				if JSONOutput {
 					printErrorJSON(err)
 					return err
@@ -369,40 +369,4 @@ func unlockPrivateKey(password []byte, resolvedPath string, isStdin bool) ([]byt
 		password = p
 	}
 	return password, nil
-}
-
-func finalizeDecryption(pr io.Reader, flags byte, outPath string) error {
-	decryptedReader := pr
-	if flags&crypto.FlagCompress != 0 {
-		zr, err := zstd.NewReader(pr)
-		if err != nil {
-			return fmt.Errorf("failed to initialize zstd reader: %w", err)
-		}
-		defer zr.Close()
-		decryptedReader = zr
-	}
-
-	if flags&crypto.FlagArchive != 0 {
-		if err := crypto.ExtractArchive(decryptedReader, outPath); err != nil {
-			return fmt.Errorf("failed to extract archive: %w", err)
-		}
-		return nil
-	}
-
-	var out io.Writer
-	if outPath == "-" {
-		out = os.Stdout
-	} else {
-		f, err := os.Create(outPath)
-		if err != nil {
-			return fmt.Errorf("failed to create output file: %w", err)
-		}
-		defer func() { _ = f.Close() }()
-		out = f
-	}
-
-	if _, err := io.Copy(out, decryptedReader); err != nil {
-		return fmt.Errorf("failed to write decrypted data: %w", err)
-	}
-	return nil
 }

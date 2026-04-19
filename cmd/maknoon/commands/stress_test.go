@@ -13,7 +13,7 @@ import (
 )
 
 func TestIntegrationSecurityScenarios(t *testing.T) {
-	JSONOutput = false
+	SetJSONOutput(false)
 	tmpDir := t.TempDir()
 
 	t.Run("Verification Failure on Tampered File", func(t *testing.T) {
@@ -138,7 +138,7 @@ func TestIntegrationSecurityScenarios(t *testing.T) {
 }
 
 func TestIntegrationLargeFileConcurrency(t *testing.T) {
-	JSONOutput = false
+	SetJSONOutput(false)
 	tmpDir := t.TempDir()
 	inputFile := filepath.Join(tmpDir, "large.bin")
 	data := make([]byte, 10*1024*1024) // 10MB
@@ -172,7 +172,7 @@ func TestIntegrationLargeFileConcurrency(t *testing.T) {
 }
 
 func TestIntegrationStealthMode(t *testing.T) {
-	JSONOutput = false
+	SetJSONOutput(false)
 	tmpDir := t.TempDir()
 	inputFile := filepath.Join(tmpDir, "secret.txt")
 	content := []byte("Stealth Mode Integration Test")
@@ -219,6 +219,9 @@ func TestIntegrationStealthMode(t *testing.T) {
 	info := InfoCmd()
 	info.SetArgs([]string{encryptedFile, "--stealth", "--json"})
 	output := CaptureOutput(func() {
+		// Manually sync since main.go isn't running
+		SetJSONOutput(true)
+		defer func() { SetJSONOutput(false) }()
 		_ = info.Execute()
 	})
 	if !strings.Contains(output, "\"is_stealth\":true") {

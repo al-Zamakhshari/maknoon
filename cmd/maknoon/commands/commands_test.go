@@ -13,7 +13,7 @@ import (
 )
 
 func TestGenCmd(t *testing.T) {
-	JSONOutput = false
+	SetJSONOutput(false)
 	t.Run("Default password", func(t *testing.T) {
 		cmd := GenCmd()
 		cmd.SetArgs([]string{"password"})
@@ -81,7 +81,7 @@ func TestResolveKeyPath(t *testing.T) {
 }
 
 func TestVaultGet(t *testing.T) {
-	JSONOutput = false
+	SetJSONOutput(false)
 	vaultName := "testvault_get"
 	passphrase := "testpass"
 
@@ -126,7 +126,7 @@ func TestVaultGet(t *testing.T) {
 }
 
 func TestVaultList(t *testing.T) {
-	JSONOutput = false
+	SetJSONOutput(false)
 	vaultName := "testvault_list_v2"
 	passphrase := "testpass"
 
@@ -168,7 +168,7 @@ func TestVaultList(t *testing.T) {
 }
 
 func TestDecryptFailures(t *testing.T) {
-	JSONOutput = false
+	SetJSONOutput(false)
 	tmpDir := t.TempDir()
 
 	t.Run("File not found", func(t *testing.T) {
@@ -208,7 +208,7 @@ func TestDecryptFailures(t *testing.T) {
 }
 
 func TestEncryptDecryptSymmetric(t *testing.T) {
-	JSONOutput = false
+	SetJSONOutput(false)
 	tmpDir := t.TempDir()
 	inputFile := filepath.Join(tmpDir, "input.txt")
 	content := []byte("Hello Maknoon Integration")
@@ -242,7 +242,7 @@ func TestEncryptDecryptSymmetric(t *testing.T) {
 }
 
 func TestKeygenAndAsymmetric(t *testing.T) {
-	JSONOutput = false
+	SetJSONOutput(false)
 	tmpDir := t.TempDir()
 	keyBase := filepath.Join(tmpDir, "id_test")
 
@@ -285,7 +285,7 @@ func TestKeygenAndAsymmetric(t *testing.T) {
 }
 
 func TestKeygenWithEnvPassphrase(t *testing.T) {
-	JSONOutput = false
+	SetJSONOutput(false)
 	tmpDir := t.TempDir()
 	keyBase := filepath.Join(tmpDir, "id_env_test")
 	passphrase := "env-pass-123"
@@ -326,7 +326,7 @@ func TestVaultJSON(t *testing.T) {
 	defer os.Remove(dbPath)
 
 	resetVaultGlobals := func() {
-		JSONOutput = false
+		SetJSONOutput(false)
 		if err := os.Unsetenv("MAKNOON_JSON"); err != nil {
 			t.Fatal(err)
 		}
@@ -338,6 +338,8 @@ func TestVaultJSON(t *testing.T) {
 		if err := os.Setenv("MAKNOON_JSON", "1"); err != nil {
 			t.Fatal(err)
 		}
+		// Manually sync since main.go isn't running
+		SetJSONOutput(true)
 		if err := os.Setenv("MAKNOON_PASSWORD", "pass1"); err != nil {
 			t.Fatal(err)
 		}
@@ -358,6 +360,8 @@ func TestVaultJSON(t *testing.T) {
 	// 2. Test triggering via FLAG
 	t.Run("Trigger via --json flag", func(t *testing.T) {
 		resetVaultGlobals()
+		// Manually sync since main.go isn't running
+		SetJSONOutput(true)
 		getCmd := VaultCmd()
 		getCmd.SetArgs([]string{"--vault", vaultName, "--passphrase", passphrase, "--json", "get", "service_env"})
 		output := CaptureOutput(func() {
@@ -376,6 +380,8 @@ func TestVaultJSON(t *testing.T) {
 		if err := os.Setenv("MAKNOON_JSON", "1"); err != nil {
 			t.Fatal(err)
 		}
+		// Manually sync since main.go isn't running
+		SetJSONOutput(true)
 		getCmdErr := VaultCmd()
 		getCmdErr.SetArgs([]string{"--vault", vaultName, "--passphrase", passphrase, "get", "nonexistent"})
 
@@ -399,7 +405,7 @@ func TestVaultJSON(t *testing.T) {
 }
 
 func TestSignVerify(t *testing.T) {
-	JSONOutput = false
+	SetJSONOutput(false)
 	tmpDir := t.TempDir()
 	keyBase := filepath.Join(tmpDir, "sig_test")
 
