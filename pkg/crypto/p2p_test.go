@@ -49,7 +49,7 @@ func TestP2PFlowCorruption(t *testing.T) {
 
 	pr, pw := io.Pipe()
 	var dErr error
-	
+
 	done := make(chan bool)
 	go func() {
 		_, dErr = DecryptStream(reader, pw, passphrase, 1, false)
@@ -59,7 +59,7 @@ func TestP2PFlowCorruption(t *testing.T) {
 
 	// Simulating finalizeDecryption from commands/decrypt.go (copied here for the test)
 	outBuf := new(bytes.Buffer)
-	
+
 	decReader := io.Reader(pr)
 	if recvFlags&FlagCompress != 0 {
 		zr, err := zstd.NewReader(pr)
@@ -76,7 +76,7 @@ func TestP2PFlowCorruption(t *testing.T) {
 	}
 
 	if !bytes.Equal(content, outBuf.Bytes()) {
-		t.Errorf("Corruption STILL detected!\nExpected: %s\nGot: %s\nFlags: %d", 
+		t.Errorf("Corruption STILL detected!\nExpected: %s\nGot: %s\nFlags: %d",
 			string(content), outBuf.String(), recvFlags)
 	}
 }
