@@ -103,9 +103,11 @@ jobs:
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
           echo "Syncing Wiki..."
+          rm -rf wiki_repo
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git clone https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.wiki.git wiki_repo
+          git config --global url."https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/".insteadOf "https://github.com/"
+          git clone https://github.com/${{ github.repository }}.wiki.git wiki_repo
           cp wiki/*.md wiki_repo/
           cd wiki_repo
           git add .
