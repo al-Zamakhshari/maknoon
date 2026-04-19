@@ -12,8 +12,8 @@ import (
 
 // ChatEvent represents an event in the chat stream.
 type ChatEvent struct {
-	Type      string `json:"type"`      // "message", "status", "error"
-	Sender    string `json:"sender"`    // "me", "peer", "system"
+	Type      string `json:"type"`   // "message", "status", "error"
+	Sender    string `json:"sender"` // "me", "peer", "system"
 	Text      string `json:"text,omitempty"`
 	Timestamp int64  `json:"timestamp"`
 	State     string `json:"state,omitempty"` // for status events
@@ -21,17 +21,17 @@ type ChatEvent struct {
 
 // ChatSession handles a P2P chat session using the wormhole infrastructure.
 type ChatSession struct {
-	Client  wormhole.Client
-	AppID   string
-	SideID  string
-	Code    string
-	
+	Client wormhole.Client
+	AppID  string
+	SideID string
+	Code   string
+
 	// Crypto
 	SharedKey []byte
 	Profile   Profile
-	
+
 	Rendezvous *rendezvous.Client
-	
+
 	Events chan ChatEvent
 	done   chan struct{}
 }
@@ -64,9 +64,9 @@ func (s *ChatSession) StartHost(ctx context.Context) (string, error) {
 	// For the Ghost Chat MVP, we use the mailbox directly for PAKE-less exchange.
 	// In a real implementation, we'd add PAKE here.
 	s.Code = nameplate + "-ghost-chat"
-	
+
 	go s.listenLoop(ctx)
-	
+
 	return s.Code, nil
 }
 
@@ -83,7 +83,7 @@ func (s *ChatSession) StartJoin(ctx context.Context, code string) error {
 	if len(parts) < 1 {
 		return fmt.Errorf("invalid code")
 	}
-	
+
 	err = s.Rendezvous.AttachMailbox(ctx, parts[0])
 	if err != nil {
 		return err

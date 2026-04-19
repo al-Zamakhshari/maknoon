@@ -168,7 +168,7 @@ func (m chatModel) View() string {
 		Render(" GHOST CHAT ")
 
 	status := fmt.Sprintf(" Code: %s", m.code)
-	
+
 	return header + status + "\n\n" +
 		m.viewport.View() + "\n\n" +
 		m.textarea.View()
