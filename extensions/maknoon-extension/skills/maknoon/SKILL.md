@@ -30,7 +30,17 @@ When asked to manage keys:
 *   Use `maknoon identity list --json` to discover available PQC identities.
 *   Use `maknoon keygen` to generate new Post-Quantum identities if none exist.
 
-### 3. Secret Management (Vault)
+### 3. File Inspection
+When asked to check a file's security or details:
+*   Run: `maknoon info <path> --json`
+*   If the user mentions "stealth" or "headerless", add `--stealth`.
+
+### 4. Credential Generation
+When asked to generate a password or passphrase:
+*   Password: `maknoon gen password --length <n> --json`
+*   Passphrase: `maknoon gen passphrase --words <n> --json`
+
+### 5. Secret Management (Vault)
 When asked to store or retrieve secrets:
 *   Use `maknoon vault list --json` to find existing entries.
 *   Use `maknoon vault get <service> --json` to retrieve secrets.

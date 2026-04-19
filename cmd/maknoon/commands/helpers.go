@@ -3,6 +3,7 @@ package commands
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/al-Zamakhshari/maknoon/pkg/crypto"
@@ -11,10 +12,13 @@ import (
 // JSONOutput triggers JSON-formatted output and suppresses all interactive prompts.
 var JSONOutput bool
 
-// printJSON outputs an interface as a JSON string to stdout.
+// JSONWriter is where printJSON sends its output.
+var JSONWriter io.Writer = os.Stdout
+
+// printJSON outputs an interface as a JSON string to JSONWriter.
 func printJSON(v interface{}) {
 	raw, _ := json.Marshal(v)
-	fmt.Println(string(raw))
+	fmt.Fprintln(JSONWriter, string(raw))
 }
 
 // printErrorJSON outputs an error as a JSON object to stderr.

@@ -81,6 +81,9 @@ def decrypt_maknoon_file(file_path: str, private_key_path: Optional[str] = None)
     env = {}
     if private_key_path:
         env["MAKNOON_PRIVATE_KEY"] = private_key_path
+    
+    # Disable global JSON mode for this specific command to get raw data
+    env["MAKNOON_JSON"] = "0"
 
     cmd = ["MAKNOON_PLACEHOLDER", "decrypt", file_path, "-o", "-", "--quiet"]
     result = _run_maknoon(cmd, env, timeout=30)
@@ -113,14 +116,31 @@ def encrypt_maknoon_file(
     return _parse_json_result(result)
 
 @tool
-def generate_maknoon_password(length: int = 32, no_symbols: bool = False) -> str:
+def generate_maknoon_password(length: int = 32, no_symbols: bool = False) -> Dict[str, Any]:
     """Generates a high-entropy secure password."""
     cmd = ["MAKNOON_PLACEHOLDER", "gen", "password", "--length", str(length)]
     if no_symbols:
         cmd.append("--no-symbols")
     
     result = _run_maknoon(cmd, {}, timeout=5)
-    return result.stdout.strip()
+    return _parse_json_result(result)
+
+@tool
+def generate_maknoon_passphrase(words: int = 4, separator: str = "-") -> Dict[str, Any]:
+    """Generates a mnemonic secure passphrase."""
+    cmd = ["MAKNOON_PLACEHOLDER", "gen", "passphrase", "--words", str(words), "--separator", separator]
+    result = _run_maknoon(cmd, {}, timeout=5)
+    return _parse_json_result(result)
+
+@tool
+def get_maknoon_file_info(file_path: str, stealth: bool = False) -> Dict[str, Any]:
+    """Inspects a Maknoon encrypted file's metadata and cryptographic details."""
+    cmd = ["MAKNOON_PLACEHOLDER", "info", file_path]
+    if stealth:
+        cmd.append("--stealth")
+    
+    result = _run_maknoon(cmd, {}, timeout=10)
+    return _parse_json_result(result)
 
 @tool
 def list_maknoon_services(vault_name: str = "default") -> Union[List[str], Dict[str, Any]]:

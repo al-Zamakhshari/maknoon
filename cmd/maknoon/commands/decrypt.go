@@ -192,6 +192,14 @@ func DecryptCmd() *cobra.Command {
 				_ = pw.CloseWithError(dErr)
 			}()
 
+			if outPath == "-" {
+				// If we are outputting to stdout, we MUST send JSON status to stderr
+				// to avoid corrupting the raw data stream.
+				oldWriter := JSONWriter
+				JSONWriter = os.Stderr
+				defer func() { JSONWriter = oldWriter }()
+			}
+
 			if err := finalizeDecryption(pr, flags, outPath); err != nil {
 				if JSONOutput {
 					printErrorJSON(err)
@@ -199,6 +207,11 @@ func DecryptCmd() *cobra.Command {
 				}
 				return err
 			}
+
+			if JSONOutput {
+				printJSON(map[string]string{"status": "success", "output": outPath})
+			}
+
 			return nil
 		},
 	}
