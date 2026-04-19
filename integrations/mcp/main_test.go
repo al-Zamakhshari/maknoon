@@ -90,7 +90,7 @@ func TestMCPServerTools(t *testing.T) {
 		inputPath := filepath.Join(tmpDir, "secret.txt")
 		_ = os.WriteFile(inputPath, []byte("hello-mcp"), 0644)
 		outputPath := inputPath + ".makn"
-		
+
 		pubKeyPath := filepath.Join(tmpDir, ".maknoon", "keys", "test-id.kem.pub")
 		privKeyPath := filepath.Join(tmpDir, ".maknoon", "keys", "test-id.kem.key")
 
@@ -108,7 +108,7 @@ func TestMCPServerTools(t *testing.T) {
 				}
 			}
 		}`, inputPath, outputPath, pubKeyPath))
-		
+
 		res := s.HandleMessage(ctx, encReq)
 		resRaw, _ := json.Marshal(res)
 		if !strings.Contains(string(resRaw), "success") {

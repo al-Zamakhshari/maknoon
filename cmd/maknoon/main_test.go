@@ -43,15 +43,19 @@ func runRootCmd(args ...string) string {
 	var buf bytes.Buffer
 	oldStdout := os.Stdout
 	oldStderr := os.Stderr
+	oldJSONWriter := commands.JSONWriter
+	
 	r, w, _ := os.Pipe()
 	os.Stdout = w
 	os.Stderr = w
+	commands.JSONWriter = w
 
 	_ = rootCmd.Execute()
 
 	w.Close()
 	os.Stdout = oldStdout
 	os.Stderr = oldStderr
+	commands.JSONWriter = oldJSONWriter
 	io.Copy(&buf, r)
 
 	return buf.String()
