@@ -80,3 +80,79 @@ func TestP2PFlowCorruption(t *testing.T) {
 			string(content), outBuf.String(), recvFlags)
 	}
 }
+
+func TestP2PDirectoryFlow(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "maknoon-p2p-dir-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	// 1. Setup a directory with multiple files
+	srcDir := filepath.Join(tmpDir, "source")
+	os.Mkdir(srcDir, 0755)
+	os.WriteFile(filepath.Join(srcDir, "file1.txt"), []byte("data1"), 0644)
+	os.Mkdir(filepath.Join(srcDir, "subdir"), 0755)
+	os.WriteFile(filepath.Join(srcDir, "subdir", "file2.txt"), []byte("data2"), 0644)
+
+	passphrase := []byte("dir-test-pass")
+	opts := Options{
+		Passphrase: passphrase,
+		IsArchive:  true,
+		Compress:   true,
+	}
+
+	// 2. Encrypt (Simulate 'send')
+	var encrypted bytes.Buffer
+	flags, err := Protect(srcDir, nil, &encrypted, opts)
+	if err != nil {
+		t.Fatalf("Protect failed: %v", err)
+	}
+
+	if flags&FlagArchive == 0 {
+		t.Fatal("Expected FlagArchive to be set")
+	}
+
+	// 3. Decrypt and Restore (Simulate 'receive')
+	// Peek flags first (as per our fix)
+	reader := bytes.NewReader(encrypted.Bytes())
+	_, _, recvFlags, err := ReadHeader(reader, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reader.Seek(0, 0)
+
+	restoredDir := filepath.Join(tmpDir, "restored")
+
+	pr, pw := io.Pipe()
+	go func() {
+		defer pw.Close()
+		_, dErr := DecryptStream(reader, pw, passphrase, 1, false)
+		if dErr != nil {
+			pw.CloseWithError(dErr)
+		}
+	}()
+
+	// Simulating finalizeDecryption with directory extraction
+	decReader := io.Reader(pr)
+	if recvFlags&FlagCompress != 0 {
+		zr, _ := zstd.NewReader(pr)
+		decReader = zr
+	}
+
+	if err := ExtractArchive(decReader, restoredDir); err != nil {
+		t.Fatalf("Extraction failed: %v", err)
+	}
+
+	// 4. Verify results
+	// Note: ExtractArchive puts files relative to outPath.
+	// Our source was "source", so it should be in restoredDir/source/...
+	f1, _ := os.ReadFile(filepath.Join(restoredDir, "source", "file1.txt"))
+	if string(f1) != "data1" {
+		t.Errorf("File1 mismatch: %s", string(f1))
+	}
+	f2, _ := os.ReadFile(filepath.Join(restoredDir, "source", "subdir", "file2.txt"))
+	if string(f2) != "data2" {
+		t.Errorf("File2 mismatch: %s", string(f2))
+	}
+}

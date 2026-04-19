@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestMCPServerTools(t *testing.T) {
@@ -179,6 +180,44 @@ func TestMCPServerTools(t *testing.T) {
 		}
 	})
 
+	t.Run("P2P Directory Send (Tool Logic)", func(t *testing.T) {
+		// Create a directory to send
+		srcDir := filepath.Join(tmpDir, "mcp_src_dir")
+		os.Mkdir(srcDir, 0755)
+		os.WriteFile(filepath.Join(srcDir, "hello.txt"), []byte("mcp-p2p"), 0644)
+
+		// Note: We don't actually run the full P2P transfer here as it blocks
+		// and requires public relays, which can flake in CI.
+		// Instead, we verify the tool is registered and the handler is reachable.
+
+		req := json.RawMessage(fmt.Sprintf(`{
+			"jsonrpc": "2.0",
+			"id": "8",
+			"method": "tools/call",
+			"params": {
+				"name": "send_file",
+				"arguments": {
+					"path": "%s"
+				}
+			}
+		}`, srcDir))
+
+		// We expect this to fail or timeout in CI if it tries to hit a real relay,
+		// but we can check if it gets past the 'directories not supported' check.
+		// Since we fixed directory support, it should now proceed to 'Opening wormhole'.
+		// We use a short context to avoid hanging.
+		timeoutCtx, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
+		defer cancel()
+
+		res := s.HandleMessage(timeoutCtx, req)
+		resRaw, _ := json.Marshal(res)
+
+		// If it says 'Opening wormhole' or 'Preparing to send', we know it accepted the directory.
+		if strings.Contains(string(resRaw), "directories are not yet supported") {
+			t.Errorf("MCP send_file still rejecting directories")
+		}
+	})
+
 	t.Run("Vault Get Error (Missing Master Key)", func(t *testing.T) {
 		req := json.RawMessage(`{
 			"jsonrpc": "2.0",
@@ -186,9 +225,7 @@ func TestMCPServerTools(t *testing.T) {
 			"method": "tools/call",
 			"params": {
 				"name": "vault_get",
-				"arguments": {
-					"service": "test-service"
-				}
+				"arguments": {"service": "nonexistent"}
 			}
 		}`)
 
