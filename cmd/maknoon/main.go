@@ -45,6 +45,14 @@ func main() {
 	decryptCmd.GroupID = "core"
 	rootCmd.AddCommand(decryptCmd)
 
+	sendCmd := commands.SendCmd()
+	sendCmd.GroupID = "core"
+	rootCmd.AddCommand(sendCmd)
+
+	receiveCmd := commands.ReceiveCmd()
+	receiveCmd.GroupID = "core"
+	rootCmd.AddCommand(receiveCmd)
+
 	infoCmd := commands.InfoCmd()
 	infoCmd.GroupID = "core"
 	rootCmd.AddCommand(infoCmd)

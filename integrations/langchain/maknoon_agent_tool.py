@@ -116,6 +116,29 @@ def encrypt_maknoon_file(
     return _parse_json_result(result)
 
 @tool
+def send_maknoon_file(file_path: str, stealth: bool = False) -> Dict[str, Any]:
+    """Sends a file via secure ephemeral P2P and returns a one-time code and passphrase."""
+    cmd = ["MAKNOON_PLACEHOLDER", "send", file_path, "--json"]
+    if stealth:
+        cmd.append("--stealth")
+    
+    # This is a blocking call that waits for the receiver
+    result = _run_maknoon(cmd, {}, timeout=300) # Longer timeout for P2P
+    return _parse_json_result(result)
+
+@tool
+def receive_maknoon_file(code: str, passphrase: str, output_path: Optional[str] = None, stealth: bool = False) -> Dict[str, Any]:
+    """Receives a file via secure ephemeral P2P using a code and passphrase."""
+    cmd = ["MAKNOON_PLACEHOLDER", "receive", code, "--passphrase", passphrase, "--json"]
+    if output_path:
+        cmd.extend(["--output", output_path])
+    if stealth:
+        cmd.append("--stealth")
+    
+    result = _run_maknoon(cmd, {}, timeout=300)
+    return _parse_json_result(result)
+
+@tool
 def generate_maknoon_password(length: int = 32, no_symbols: bool = False) -> Dict[str, Any]:
     """Generates a high-entropy secure password."""
     cmd = ["MAKNOON_PLACEHOLDER", "gen", "password", "--length", str(length)]

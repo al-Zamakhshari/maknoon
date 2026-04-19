@@ -124,6 +124,36 @@ func createServer() *server.MCPServer {
 	}
 	s.AddTool(inspectFile, inspectHandler)
 
+	// Tool: send_file
+	sendFile := mcp.NewTool("send_file",
+		mcp.WithDescription("Send a file via secure ephemeral P2P and return a code"),
+	)
+	sendFile.InputSchema = mcp.ToolInputSchema{
+		Type: "object",
+		Properties: map[string]interface{}{
+			"path":    map[string]interface{}{"type": "string", "description": "Path to the file to send"},
+			"stealth": map[string]interface{}{"type": "boolean", "description": "Enable stealth mode"},
+		},
+		Required: []string{"path"},
+	}
+	s.AddTool(sendFile, sendHandler)
+
+	// Tool: receive_file
+	receiveFile := mcp.NewTool("receive_file",
+		mcp.WithDescription("Receive a file via secure ephemeral P2P using a code"),
+	)
+	receiveFile.InputSchema = mcp.ToolInputSchema{
+		Type: "object",
+		Properties: map[string]interface{}{
+			"code":       map[string]interface{}{"type": "string", "description": "The receiver code from the sender"},
+			"passphrase": map[string]interface{}{"type": "string", "description": "The session passphrase from the sender"},
+			"output":     map[string]interface{}{"type": "string", "description": "Output path"},
+			"stealth":    map[string]interface{}{"type": "boolean", "description": "Enable stealth mode detection"},
+		},
+		Required: []string{"code", "passphrase"},
+	}
+	s.AddTool(receiveFile, receiveHandler)
+
 	// Tool: identity_active
 	identityActive := mcp.NewTool("identity_active",
 		mcp.WithDescription("List available Post-Quantum public keys on this system"),
@@ -286,6 +316,51 @@ func inspectHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.Call
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return mcp.NewToolResultError(fmt.Sprintf("File inspection failed: %s", string(out))), nil
+	}
+
+	return mcp.NewToolResultText(string(out)), nil
+}
+
+func sendHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	path := request.GetString("path", "")
+	stealth := request.GetBool("stealth", false)
+
+	args := []string{"send", path, "--json"}
+	if stealth {
+		args = append(args, "--stealth")
+	}
+
+	cmd := exec.CommandContext(ctx, getMaknoonBinary(), args...)
+	cmd.Env = getMaknoonEnv()
+
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Send failed: %s", string(out))), nil
+	}
+
+	return mcp.NewToolResultText(string(out)), nil
+}
+
+func receiveHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	code := request.GetString("code", "")
+	passphrase := request.GetString("passphrase", "")
+	output := request.GetString("output", "")
+	stealth := request.GetBool("stealth", false)
+
+	args := []string{"receive", code, "--passphrase", passphrase, "--json"}
+	if output != "" {
+		args = append(args, "--output", output)
+	}
+	if stealth {
+		args = append(args, "--stealth")
+	}
+
+	cmd := exec.CommandContext(ctx, getMaknoonBinary(), args...)
+	cmd.Env = getMaknoonEnv()
+
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Receive failed: %s", string(out))), nil
 	}
 
 	return mcp.NewToolResultText(string(out)), nil

@@ -79,35 +79,15 @@ func genPassphraseCmd() *cobra.Command {
 		Use:   "passphrase",
 		Short: "Generate a mnemonic passphrase",
 		RunE: func(_ *cobra.Command, _ []string) error {
-			if words <= 0 {
-				return fmt.Errorf("number of words must be greater than 0")
-			}
-			var passphrase []string
-			for i := 0; i < words; i++ {
-				num, err := rand.Int(rand.Reader, big.NewInt(int64(len(crypto.WordList))))
-				if err != nil {
-					return fmt.Errorf("entropy failure: %w", err)
-				}
-				passphrase = append(passphrase, crypto.WordList[num.Int64()])
-			}
-
-			result := ""
-			for i, word := range passphrase {
-				result += word
-				if i < len(passphrase)-1 {
-					result += separator
-				}
+			result, err := crypto.GeneratePassphrase(words, separator)
+			if err != nil {
+				return err
 			}
 
 			if JSONOutput {
 				printJSON(map[string]string{"passphrase": result})
 			} else {
 				fmt.Println(result)
-			}
-
-			// Clear the slice from memory
-			for i := range passphrase {
-				passphrase[i] = ""
 			}
 			return nil
 		},
