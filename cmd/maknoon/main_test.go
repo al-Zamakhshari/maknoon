@@ -44,7 +44,7 @@ func runRootCmd(args ...string) string {
 	oldStdout := os.Stdout
 	oldStderr := os.Stderr
 	oldJSONWriter := commands.JSONWriter
-	
+
 	r, w, _ := os.Pipe()
 	os.Stdout = w
 	os.Stderr = w

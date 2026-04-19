@@ -10,7 +10,7 @@ import (
 func CaptureOutput(f func()) string {
 	oldStdout := os.Stdout
 	oldJSONWriter := JSONWriter
-	
+
 	r, w, _ := os.Pipe()
 	os.Stdout = w
 	JSONWriter = w
