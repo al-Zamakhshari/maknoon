@@ -36,7 +36,7 @@ func TestChatSession_BasicFlow(t *testing.T) {
 
 	// Bidirectional Messaging Test
 	messages := []string{"hello", "hi", "how are you?", "doing great!", "bye", "ciao"}
-	
+
 	for i, m := range messages {
 		sender := host
 		receiver := peer
@@ -48,7 +48,7 @@ func TestChatSession_BasicFlow(t *testing.T) {
 		}
 
 		t.Logf("Testing message %d from %s: %s", i, senderName, m)
-		
+
 		if err := sender.Send(ctx, m); err != nil {
 			t.Fatalf("Send failed for message %d: %v", i, err)
 		}

@@ -15,8 +15,8 @@ import (
 // ChatEvent represents an event in the chat stream.
 type ChatEvent struct {
 	ID        string `json:"id"`
-	Type      string `json:"type"`            // "message", "status", "error"
-	Sender    string `json:"sender"`          // "me", "peer", "system"
+	Type      string `json:"type"`   // "message", "status", "error"
+	Sender    string `json:"sender"` // "me", "peer", "system"
 	Text      string `json:"text,omitempty"`
 	Timestamp int64  `json:"timestamp"`
 	State     string `json:"state,omitempty"` // for status events
@@ -157,6 +157,7 @@ func (s *ChatSession) Send(ctx context.Context, text string) error {
 
 	return s.Rendezvous.AddMessage(ctx, msgID, text)
 }
+
 // Close closes the session.
 func (s *ChatSession) Close() {
 	select {

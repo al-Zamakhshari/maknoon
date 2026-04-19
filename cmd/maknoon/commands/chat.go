@@ -147,14 +147,14 @@ func runLineChat(args []string) error {
 					return
 				}
 				if ev.Type == "status" && ev.State == "peer-joined" {
-					fmt.Fprintf(rl.Stdout(), "\r\033[2K%s\n💬 > %s", 
-						systemStyle.Render("⚡ Peer joined the room."), 
+					fmt.Fprintf(rl.Stdout(), "\r\033[2K%s\n💬 > %s",
+						systemStyle.Render("⚡ Peer joined the room."),
 						rl.Line())
 				} else if ev.Type == "message" {
 					// Cleanly print message using readline's internal buffer handling
-					fmt.Fprintf(rl.Stdout(), "\r\033[2K%s %s\n💬 > %s", 
-						peerStyle.Render("Peer:"), 
-						ev.Text, 
+					fmt.Fprintf(rl.Stdout(), "\r\033[2K%s %s\n💬 > %s",
+						peerStyle.Render("Peer:"),
+						ev.Text,
 						rl.Line())
 				}
 			}
