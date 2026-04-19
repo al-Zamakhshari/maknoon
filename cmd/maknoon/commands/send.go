@@ -60,7 +60,7 @@ func SendCmd() *cobra.Command {
 			}
 
 			fmt.Println("🔒 Encrypting...")
-			if err := crypto.Protect(path, nil, tmpEnc, opts); err != nil {
+			if _, err := crypto.Protect(path, nil, tmpEnc, opts); err != nil {
 				return err
 			}
 

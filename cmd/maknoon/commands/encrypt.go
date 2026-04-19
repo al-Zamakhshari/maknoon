@@ -126,13 +126,14 @@ func EncryptCmd() *cobra.Command {
 				fmt.Printf("Protecting '%s'...\n", inputName)
 			}
 
-			if err := crypto.Protect(inputName, input, out, opts); err != nil {
+			if _, err := crypto.Protect(inputPath, nil, out, opts); err != nil {
 				if JSONOutput {
 					printErrorJSON(err)
 					return nil
 				}
 				return err
 			}
+
 
 			if JSONOutput {
 				printJSON(map[string]string{"status": "success", "output": outPath})

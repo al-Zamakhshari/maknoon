@@ -18,7 +18,7 @@ func TestProtectFullFlow(t *testing.T) {
 	}
 
 	var encrypted bytes.Buffer
-	if err := Protect("test.txt", bytes.NewReader(data), &encrypted, opts); err != nil {
+	if _, err := Protect("test.txt", bytes.NewReader(data), &encrypted, opts); err != nil {
 		t.Fatalf("Protect failed: %v", err)
 	}
 

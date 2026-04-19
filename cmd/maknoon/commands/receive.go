@@ -83,31 +83,32 @@ func ReceiveCmd() *cobra.Command {
 				fmt.Scanln(&recvPassphrase)
 			}
 
-			// Set output name if not provided
-			finalOut := recvOutput
-			if finalOut == "" {
-				finalOut = strings.TrimSuffix(msg.Name, ".makn")
-			}
-
-			if !JSONOutput {
-				fmt.Println("🔓 Decrypting...")
-			}
+			fmt.Println("🔓 Decrypting...")
 
 			// We need to read from the start of the temp file
 			if _, err := tmpFile.Seek(0, 0); err != nil {
 				return err
 			}
 
-			// Open output file
-			outF, err := os.Create(finalOut)
-			if err != nil {
-				return err
+			// Set output name if not provided
+			finalOut := recvOutput
+			if finalOut == "" {
+				finalOut = strings.TrimSuffix(msg.Name, ".makn")
 			}
-			defer outF.Close()
 
-			// We need a profile or passphrase
-			// For simplicity, we use the standard symmetric flow
-			if _, err := crypto.DecryptStream(tmpFile, outF, []byte(recvPassphrase), 0, recvStealth); err != nil {
+			// Use pipe to bridge DecryptStream and finalizeDecryption
+			pr, pw := io.Pipe()
+			var flags byte
+			var dErr error
+			go func() {
+				defer pw.Close()
+				flags, dErr = crypto.DecryptStream(tmpFile, pw, []byte(recvPassphrase), 0, recvStealth)
+				if dErr != nil {
+					_ = pw.CloseWithError(dErr)
+				}
+			}()
+
+			if err := finalizeDecryption(pr, flags, finalOut); err != nil {
 				if JSONOutput {
 					printErrorJSON(err)
 					return nil
@@ -124,6 +125,7 @@ func ReceiveCmd() *cobra.Command {
 				fmt.Printf("\n✨ Success! File saved to: %s\n", finalOut)
 			}
 			return nil
+
 		},
 	}
 

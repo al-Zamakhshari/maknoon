@@ -29,7 +29,7 @@ type Options struct {
 }
 
 // Protect handles the full encryption pipeline for a source (file, directory, or reader).
-func Protect(inputName string, r io.Reader, w io.Writer, opts Options) error {
+func Protect(inputName string, r io.Reader, w io.Writer, opts Options) (byte, error) {
 	var logger *slog.Logger
 	if opts.Verbose {
 		logger = slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
@@ -45,12 +45,16 @@ func Protect(inputName string, r io.Reader, w io.Writer, opts Options) error {
 		flags |= FlagArchive
 		sourceReader = wrapWithArchiver(inputName, logger)
 	} else if sourceReader == nil {
-		f, err := os.Open(inputName)
-		if err != nil {
-			return fmt.Errorf("failed to open input file: %w", err)
+		if inputName == "-" {
+			sourceReader = os.Stdin
+		} else {
+			f, err := os.Open(inputName)
+			if err != nil {
+				return 0, fmt.Errorf("failed to open input file: %w", err)
+			}
+			defer func() { _ = f.Close() }()
+			sourceReader = f
 		}
-		defer func() { _ = f.Close() }()
-		sourceReader = f
 	}
 
 	if opts.ProgressReader != nil {
@@ -77,10 +81,10 @@ func Protect(inputName string, r io.Reader, w io.Writer, opts Options) error {
 
 	if len(allPublicKeys) > 0 {
 		logger.Info("starting asymmetric encryption", "recipients", len(allPublicKeys))
-		return EncryptStreamWithPublicKeysAndSigner(sourceReader, w, allPublicKeys, opts.SigningKey, flags, opts.Concurrency, opts.ProfileID)
+		return flags, EncryptStreamWithPublicKeysAndSigner(sourceReader, w, allPublicKeys, opts.SigningKey, flags, opts.Concurrency, opts.ProfileID)
 	}
 	logger.Info("starting symmetric encryption")
-	return EncryptStream(sourceReader, w, opts.Passphrase, flags, opts.Concurrency, opts.ProfileID)
+	return flags, EncryptStream(sourceReader, w, opts.Passphrase, flags, opts.Concurrency, opts.ProfileID)
 }
 
 func wrapWithArchiver(inputName string, logger *slog.Logger) io.Reader {
