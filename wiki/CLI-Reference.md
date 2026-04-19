@@ -29,6 +29,12 @@ Receives data from a peer using a wormhole code.
 -   `--output`, `-o`: Specify where to save the data (use `-` for raw output).
 -   `--private-key`, `-k`: Required for identity-based transfers.
 
+### `maknoon chat [code]`
+Opens a secure, real-time Ghost Chat session.
+-   If no code is provided, you act as the host.
+-   Supports TUI for human users.
+-   Supports JSONL for AI agents.
+
 ### `maknoon info [file]`
 Displays deep cryptographic metadata.
 -   Outputs: Profile ID, Type (Symmetric/Asymmetric), KEM, SIG, and KDF details.

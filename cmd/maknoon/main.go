@@ -54,6 +54,10 @@ func main() {
 	receiveCmd.GroupID = "core"
 	rootCmd.AddCommand(receiveCmd)
 
+	chatCmd := commands.ChatCmd()
+	chatCmd.GroupID = "core"
+	rootCmd.AddCommand(chatCmd)
+
 	infoCmd := commands.InfoCmd()
 	infoCmd.GroupID = "core"
 	rootCmd.AddCommand(infoCmd)

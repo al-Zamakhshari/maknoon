@@ -107,6 +107,17 @@ maknoon send data.bin -p alice.pub
 # Alice just runs: maknoon receive <code>
 ```
 
+### 👻 Ghost Chat (Zero-Trace P2P Messaging)
+Real-time, end-to-end encrypted messaging with no servers, no accounts, and zero logs. 
+
+```bash
+# Start a room
+maknoon chat
+
+# Join a room
+maknoon chat 4-giant-pigeon
+```
+
 ## 🤖 Agentic AI Integration
 Maknoon is **Agent-Ready** with strict JSON output, non-interactive environment triggers, and a comprehensive integration suite.
 

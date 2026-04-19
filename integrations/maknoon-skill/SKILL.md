@@ -51,7 +51,15 @@ When asked to receive a file:
 *   **Identity-Based**: `maknoon receive <code> --private-key <your_priv_key> --json`
 *   **Raw Output**: `maknoon receive <code> --json -o -`
 
-### 6. Secret Management (Vault)
+### 6. Ghost Chat (Real-time Messaging)
+When asked to start a real-time secure chat:
+*   **Host**: `maknoon chat --json` (Parses the `code` from the first status event).
+*   **Join**: `maknoon chat <code> --json`.
+*   **Workflow**:
+    1.  Listen for `{"event": "message", ...}` events.
+    2.  Send messages by writing `{"action": "send", "text": "..."}` to stdin.
+
+### 7. Secret Management (Vault)
 When asked to store or retrieve secrets:
 *   Use `maknoon vault list --json` to find existing entries.
 *   Use `maknoon vault get <service> --json` to retrieve secrets.

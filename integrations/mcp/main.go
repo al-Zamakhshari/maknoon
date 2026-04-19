@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"os"
@@ -159,6 +160,16 @@ func createServer() *server.MCPServer {
 		Required: []string{"code"},
 	}
 	s.AddTool(receiveFile, receiveHandler)
+
+	// Tool: start_chat
+	startChat := mcp.NewTool("start_chat",
+		mcp.WithDescription("Start a secure Ghost Chat session and return the join code"),
+	)
+	startChat.InputSchema = mcp.ToolInputSchema{
+		Type:       "object",
+		Properties: map[string]interface{}{},
+	}
+	s.AddTool(startChat, startChatHandler)
 
 	// Tool: identity_active
 	identityActive := mcp.NewTool("identity_active",
@@ -406,6 +417,33 @@ func receiveHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.Call
 	}
 
 	return mcp.NewToolResultText(string(out)), nil
+}
+
+func startChatHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	// We run 'chat --json' to get the code, then we can kill it.
+	// The agent will then use the code to join or the user will use it.
+	cmd := exec.CommandContext(ctx, getMaknoonBinary(), "chat", "--json")
+	cmd.Env = getMaknoonEnv()
+
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Failed to open pipe: %v", err)), nil
+	}
+
+	if err := cmd.Start(); err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Failed to start chat: %v", err)), nil
+	}
+
+	// Read the first JSON line (the established status with code)
+	scanner := bufio.NewScanner(stdout)
+	if scanner.Scan() {
+		line := scanner.Text()
+		// We have the code! Now we kill the process because this tool is just for starting.
+		_ = cmd.Process.Kill()
+		return mcp.NewToolResultText(line), nil
+	}
+
+	return mcp.NewToolResultError("Failed to get chat code"), nil
 }
 
 func identityActiveHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {

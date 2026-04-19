@@ -259,4 +259,23 @@ func TestMCPServerTools(t *testing.T) {
 			t.Errorf("Expected master key error, got: %s", string(resRaw))
 		}
 	})
+
+	t.Run("Start Chat Tool", func(t *testing.T) {
+		req := json.RawMessage(`{
+			"jsonrpc": "2.0",
+			"id": "10",
+			"method": "tools/call",
+			"params": {
+				"name": "start_chat",
+				"arguments": {}
+			}
+		}`)
+
+		res := s.HandleMessage(ctx, req)
+		resRaw, _ := json.Marshal(res)
+
+		if !strings.Contains(string(resRaw), "established") || !strings.Contains(string(resRaw), "ghost-chat") {
+			t.Errorf("Start chat tool failed. Result: %s", string(resRaw))
+		}
+	})
 }
