@@ -81,6 +81,12 @@ Show details for a specific identity, including hardware binding (FIDO2) status.
 .TP
 .B rename [old] [new]
 Rename an identity and its associated key files.
+.TP
+.B split [name]
+Shard a private identity using Shamir's Secret Sharing. Produces mnemonic shards.
+.TP
+.B combine [mnemonics...]
+Reconstruct a private identity from mnemonic shards. Use \-\-output to specify the new identity name.
 .RE
 .TP
 .B sign [file]
@@ -101,6 +107,12 @@ Retrieve a secret from the vault.
 .TP
 .B list
 List all services stored in the vault.
+.TP
+.B split
+Shard the vault's master access key into mnemonic parts.
+.TP
+.B recover [shards...]
+Recover vault contents using reconstructed access material. Use \-\-output to save as a new vault database.
 .RE
 .TP
 .B gen [subcommand]

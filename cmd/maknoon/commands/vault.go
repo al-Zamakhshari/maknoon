@@ -44,7 +44,164 @@ func VaultCmd() *cobra.Command {
 	cmd.AddCommand(vaultListCmd())
 	cmd.AddCommand(vaultRenameCmd())
 	cmd.AddCommand(vaultDeleteCmd())
+	cmd.AddCommand(vaultSplitCmd())
+	cmd.AddCommand(vaultRecoverCmd())
 
+	return cmd
+}
+
+func vaultSplitCmd() *cobra.Command {
+	var threshold, shares int
+	cmd := &cobra.Command{
+		Use:   "split",
+		Short: "Shard the vault's master access key",
+		RunE: func(_ *cobra.Command, _ []string) error {
+			// We need to get the raw passphrase used for the vault
+			db, key, err := openVault()
+			if err != nil {
+				return err
+			}
+			db.Close()
+			defer crypto.SafeClear(key)
+
+			// Wait, openVault returns the derived masterKey.
+			// We should shard the masterKey itself so it can unlock the vault directly.
+			shards, err := crypto.SplitSecret(key, threshold, shares)
+			if err != nil {
+				return err
+			}
+
+			if JSONOutput {
+				var jsonShards []string
+				for _, s := range shards {
+					jsonShards = append(jsonShards, s.ToMnemonic())
+				}
+				printJSON(map[string]interface{}{"vault": vaultName, "threshold": threshold, "shares": jsonShards})
+			} else {
+				fmt.Printf("🛡️  Vault '%s' access sharded into %d parts (Threshold: %d)\n", vaultName, shares, threshold)
+				fmt.Println("CRITICAL: These shards represent the derived MASTER KEY. Keep them safe.")
+				for i, s := range shards {
+					fmt.Printf("\nShare %d:\n%s\n", i+1, s.ToMnemonic())
+				}
+			}
+			return nil
+		},
+	}
+	cmd.Flags().IntVarP(&threshold, "threshold", "m", 2, "Minimum shares required for reconstruction")
+	cmd.Flags().IntVarP(&shares, "shares", "n", 3, "Total number of shares to generate")
+	return cmd
+}
+
+func vaultRecoverCmd() *cobra.Command {
+	var targetPath string
+	cmd := &cobra.Command{
+		Use:   "recover [shards...]",
+		Short: "Recover vault contents using shards and optionally save to a new vault",
+		RunE: func(_ *cobra.Command, args []string) error {
+			if len(args) == 0 {
+				return fmt.Errorf("at least one shard mnemonic is required")
+			}
+
+			var shards []crypto.Share
+			for _, m := range args {
+				s, err := crypto.FromMnemonic(m)
+				if err != nil {
+					return fmt.Errorf("invalid mnemonic: %w", err)
+				}
+				shards = append(shards, *s)
+			}
+
+			masterKey, err := crypto.CombineShares(shards)
+			if err != nil {
+				return err
+			}
+			defer crypto.SafeClear(masterKey)
+
+			dbPath, err := resolveVaultPath(vaultName)
+			if err != nil {
+				return err
+			}
+			db, err := bbolt.Open(dbPath, 0600, nil)
+			if err != nil {
+				return err
+			}
+			defer db.Close()
+
+			var entries []*crypto.VaultEntry
+			err = db.View(func(tx *bbolt.Tx) error {
+				b := tx.Bucket([]byte(vaultBucket))
+				if b == nil {
+					return nil
+				}
+				return b.ForEach(func(_ []byte, v []byte) error {
+					entry, err := crypto.OpenEntry(v, masterKey)
+					if err == nil {
+						entries = append(entries, entry)
+					}
+					return nil
+				})
+			})
+
+			if err != nil {
+				return err
+			}
+
+			if len(entries) == 0 {
+				return fmt.Errorf("no entries recovered. Check your shards and master key")
+			}
+
+			if targetPath != "" {
+				// Save to a new vault with a new passphrase
+				fmt.Printf("Recovered %d entries. Enter new master passphrase for recovery vault: ", len(entries))
+				p, err := term.ReadPassword(int(os.Stdin.Fd()))
+				fmt.Println()
+				if err != nil {
+					return err
+				}
+				defer crypto.SafeClear(p)
+
+				newVaultPath, err := resolveVaultPath(targetPath)
+				if err != nil {
+					return err
+				}
+				newDb, err := bbolt.Open(newVaultPath, 0600, nil)
+				if err != nil {
+					return err
+				}
+				defer newDb.Close()
+
+				salt := make([]byte, 32)
+				rand.Read(salt)
+				newMasterKey := crypto.DeriveVaultKey(p, salt)
+				defer crypto.SafeClear(newMasterKey)
+
+				err = newDb.Update(func(tx *bbolt.Tx) error {
+					meta, _ := tx.CreateBucketIfNotExists([]byte(metaBucket))
+					meta.Put([]byte(saltKey), salt)
+					b, _ := tx.CreateBucketIfNotExists([]byte(vaultBucket))
+					for _, e := range entries {
+						ciphertext, _ := crypto.SealEntry(e, newMasterKey)
+						h := sha256.Sum256([]byte(strings.ToLower(e.Service)))
+						b.Put([]byte(hex.EncodeToString(h[:])), ciphertext)
+					}
+					return nil
+				})
+				if err != nil {
+					return err
+				}
+				fmt.Printf("Success! Recovered vault saved to %s\n", newVaultPath)
+			} else {
+				fmt.Printf("🛡️  Recovered %d entries from vault '%s':\n", len(entries), vaultName)
+				for _, e := range entries {
+					fmt.Printf("  - %s (User: %s, Pass: %s)\n", e.Service, e.Username, string(e.Password))
+					crypto.SafeClear(e.Password)
+				}
+			}
+
+			return nil
+		},
+	}
+	cmd.Flags().StringVarP(&targetPath, "output", "o", "", "Path to save recovered entries as a new vault")
 	return cmd
 }
 

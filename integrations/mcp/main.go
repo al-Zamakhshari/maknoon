@@ -181,6 +181,37 @@ func createServer() *server.MCPServer {
 	}
 	s.AddTool(identityActive, identityActiveHandler)
 
+	// Tool: identity_split
+	identitySplit := mcp.NewTool("identity_split",
+		mcp.WithDescription("Shard a private identity into mnemonic parts (Agent Mode)"),
+	)
+	identitySplit.InputSchema = mcp.ToolInputSchema{
+		Type: "object",
+		Properties: map[string]interface{}{
+			"name":       map[string]interface{}{"type": "string", "description": "Identity name"},
+			"threshold":  map[string]interface{}{"type": "integer", "description": "Minimum shares required (default: 2)"},
+			"shares":     map[string]interface{}{"type": "integer", "description": "Total shares (default: 3)"},
+			"passphrase": map[string]interface{}{"type": "string", "description": "Unlock passphrase"},
+		},
+		Required: []string{"name"},
+	}
+	s.AddTool(identitySplit, identitySplitHandler)
+
+	// Tool: vault_split
+	vaultSplit := mcp.NewTool("vault_split",
+		mcp.WithDescription("Shard the vault's master access key (Agent Mode)"),
+	)
+	vaultSplit.InputSchema = mcp.ToolInputSchema{
+		Type: "object",
+		Properties: map[string]interface{}{
+			"vault":      map[string]interface{}{"type": "string", "description": "Vault name (default: 'default')"},
+			"threshold":  map[string]interface{}{"type": "integer", "description": "Minimum shares required"},
+			"shares":     map[string]interface{}{"type": "integer", "description": "Total shares"},
+			"passphrase": map[string]interface{}{"type": "string", "description": "Vault master passphrase"},
+		},
+	}
+	s.AddTool(vaultSplit, vaultSplitHandler)
+
 	return s
 }
 
@@ -453,6 +484,62 @@ func identityActiveHandler(ctx context.Context, request mcp.CallToolRequest) (*m
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return mcp.NewToolResultError(fmt.Sprintf("Identity active failed: %s", string(out))), nil
+	}
+
+	return mcp.NewToolResultText(string(out)), nil
+}
+
+func identitySplitHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	name := request.GetString("name", "")
+	threshold := request.GetInt("threshold", 0)
+	shares := request.GetInt("shares", 0)
+	passphrase := request.GetString("passphrase", "")
+
+	args := []string{"identity", "split", name, "--json"}
+	if threshold > 0 {
+		args = append(args, "--threshold", fmt.Sprintf("%d", threshold))
+	}
+	if shares > 0 {
+		args = append(args, "--shares", fmt.Sprintf("%d", shares))
+	}
+	if passphrase != "" {
+		args = append(args, "--passphrase", passphrase)
+	}
+
+	cmd := exec.CommandContext(ctx, getMaknoonBinary(), args...)
+	cmd.Env = getMaknoonEnv()
+
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Identity split failed: %s", string(out))), nil
+	}
+
+	return mcp.NewToolResultText(string(out)), nil
+}
+
+func vaultSplitHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	vault := request.GetString("vault", "default")
+	threshold := request.GetInt("threshold", 0)
+	shares := request.GetInt("shares", 0)
+	passphrase := request.GetString("passphrase", "")
+
+	args := []string{"vault", "split", "--vault", vault, "--json"}
+	if threshold > 0 {
+		args = append(args, "--threshold", fmt.Sprintf("%d", threshold))
+	}
+	if shares > 0 {
+		args = append(args, "--shares", fmt.Sprintf("%d", shares))
+	}
+	if passphrase != "" {
+		args = append(args, "--passphrase", passphrase)
+	}
+
+	cmd := exec.CommandContext(ctx, getMaknoonBinary(), args...)
+	cmd.Env = getMaknoonEnv()
+
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Vault split failed: %s", string(out))), nil
 	}
 
 	return mcp.NewToolResultText(string(out)), nil

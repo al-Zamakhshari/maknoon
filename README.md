@@ -90,6 +90,23 @@ maknoon vault rename default backup_vault
 maknoon vault delete old_vault
 ```
 
+### 5. M-of-N Secret Sharing (Break Glass)
+Shard high-value secrets (identities or vault master keys) into $N$ mnemonic parts. Requires a threshold of $M$ parts to reconstruct.
+
+```bash
+# Shard an identity into 3 parts (2 required to restore)
+maknoon identity split my_id -m 2 -n 3
+
+# Restore an identity from mnemonic shards
+maknoon identity combine "word1 word2..." "wordA wordB..." -o restored_id
+
+# Shard vault access
+maknoon vault split -v default -m 2 -n 3
+
+# Recover vault contents using shards
+maknoon vault recover "word1..." "word2..." -v default
+```
+
 ---
 
 ### 🚀 Quick Start (P2P Transfer)

@@ -213,6 +213,36 @@ def list_maknoon_services(vault_name: str = "default") -> Union[List[str], Dict[
     return parsed
 
 @tool
+def split_maknoon_identity(
+    name: str,
+    threshold: int = 2,
+    shares: int = 3,
+    passphrase: Optional[str] = None
+) -> Dict[str, Any]:
+    """Shards a private identity into mnemonic parts (Agent Mode)."""
+    cmd = ["MAKNOON_PLACEHOLDER", "identity", "split", name, "--threshold", str(threshold), "--shares", str(shares)]
+    if passphrase:
+        cmd.extend(["--passphrase", passphrase])
+    
+    result = _run_maknoon(cmd, {}, timeout=30)
+    return _parse_json_result(result)
+
+@tool
+def split_maknoon_vault(
+    vault_name: str = "default",
+    threshold: int = 2,
+    shares: int = 3,
+    passphrase: Optional[str] = None
+) -> Dict[str, Any]:
+    """Shards a vault's master access key into mnemonic parts (Agent Mode)."""
+    cmd = ["MAKNOON_PLACEHOLDER", "vault", "split", "--vault", vault_name, "--threshold", str(threshold), "--shares", str(shares)]
+    if passphrase:
+        cmd.extend(["--passphrase", passphrase])
+    
+    result = _run_maknoon(cmd, {}, timeout=30)
+    return _parse_json_result(result)
+
+@tool
 def list_maknoon_vaults() -> List[str]:
     """Lists the names of all available Maknoon vaults."""
     # Note: Using default path. Consider making this configurable or using identity logic.

@@ -50,6 +50,17 @@ Generates a NIST-standard Post-Quantum identity.
 ### `maknoon identity active`
 Lists all public keys available on the system. Optimized for AI agent discovery.
 
+### `maknoon identity split [name]`
+Shards a private identity using Shamir's Secret Sharing.
+-   `-m`, `--threshold`: Minimum shares required (default: 2).
+-   `-n`, `--shares`: Total shares to generate (default: 3).
+-   `-s`, `--passphrase`: Passphrase to unlock the identity.
+
+### `maknoon identity combine [mnemonics...]`
+Reconstructs a private identity from mnemonic shards.
+-   `-o`, `--output`: Name for the restored identity.
+-   `-s`, `--passphrase`: Passphrase to protect the restored identity.
+
 ## Secret Management (Vault)
 
 ### `maknoon vault set [service]`
@@ -62,3 +73,12 @@ Retrieves a secret.
 
 ### `maknoon vault list`
 Lists all stored services.
+
+### `maknoon vault split`
+Shards the vault's master access key.
+-   `-m`, `--threshold`: Minimum shares required.
+-   `-n`, `--shares`: Total shares to generate.
+
+### `maknoon vault recover [shards...]`
+Recovers vault contents using reconstructed access material.
+-   `-o`, `--output`: Path to save recovered entries as a new vault.
