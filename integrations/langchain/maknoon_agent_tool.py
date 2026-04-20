@@ -243,6 +243,44 @@ def split_maknoon_vault(
     return _parse_json_result(result)
 
 @tool
+def combine_maknoon_identity(
+    shards: List[str],
+    output_name: str = "restored_id",
+    passphrase: Optional[str] = None,
+    no_password: bool = False
+) -> Dict[str, Any]:
+    """Reconstructs a private identity from mnemonic shards (Agent Mode)."""
+    cmd = ["MAKNOON_PLACEHOLDER", "identity", "combine"] + shards + ["--output", output_name]
+    if no_password:
+        cmd.append("--no-password")
+    
+    env = {}
+    if passphrase:
+        env["MAKNOON_PASSPHRASE"] = passphrase
+        
+    result = _run_maknoon(cmd, env, timeout=30)
+    return _parse_json_result(result)
+
+@tool
+def recover_maknoon_vault(
+    shards: List[str],
+    vault_name: str = "default",
+    output_vault: Optional[str] = None,
+    passphrase: Optional[str] = None
+) -> Union[List[Dict[str, str]], Dict[str, Any]]:
+    """Recovers vault contents using mnemonic shards (Agent Mode)."""
+    cmd = ["MAKNOON_PLACEHOLDER", "vault", "recover"] + shards + ["--vault", vault_name]
+    if output_vault:
+        cmd.extend(["--output", output_vault])
+        
+    env = {}
+    if passphrase:
+        env["MAKNOON_PASSPHRASE"] = passphrase
+        
+    result = _run_maknoon(cmd, env, timeout=30)
+    return _parse_json_result(result)
+
+@tool
 def list_maknoon_vaults() -> List[str]:
     """Lists the names of all available Maknoon vaults."""
     # Note: Using default path. Consider making this configurable or using identity logic.

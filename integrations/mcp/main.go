@@ -212,6 +212,38 @@ func createServer() *server.MCPServer {
 	}
 	s.AddTool(vaultSplit, vaultSplitHandler)
 
+	// Tool: vault_recover
+	vaultRecover := mcp.NewTool("vault_recover",
+		mcp.WithDescription("Recover vault contents using shards (Agent Mode)"),
+	)
+	vaultRecover.InputSchema = mcp.ToolInputSchema{
+		Type: "object",
+		Properties: map[string]interface{}{
+			"shards":     map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}, "description": "List of mnemonic shards"},
+			"vault":      map[string]interface{}{"type": "string", "description": "Vault name (default: 'default')"},
+			"output":     map[string]interface{}{"type": "string", "description": "Optional path to save recovered entries as a new vault"},
+			"passphrase": map[string]interface{}{"type": "string", "description": "Passphrase for the new vault (if output is set)"},
+		},
+		Required: []string{"shards"},
+	}
+	s.AddTool(vaultRecover, vaultRecoverHandler)
+
+	// Tool: identity_combine
+	identityCombine := mcp.NewTool("identity_combine",
+		mcp.WithDescription("Reconstruct a private identity from shards (Agent Mode)"),
+	)
+	identityCombine.InputSchema = mcp.ToolInputSchema{
+		Type: "object",
+		Properties: map[string]interface{}{
+			"shards":      map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}, "description": "List of mnemonic shards"},
+			"output":      map[string]interface{}{"type": "string", "description": "Name for the restored identity (default: 'restored_id')"},
+			"passphrase":  map[string]interface{}{"type": "string", "description": "Passphrase to protect the restored identity"},
+			"no_password": map[string]interface{}{"type": "boolean", "description": "Save unprotected"},
+		},
+		Required: []string{"shards"},
+	}
+	s.AddTool(identityCombine, identityCombineHandler)
+
 	return s
 }
 
@@ -540,6 +572,64 @@ func vaultSplitHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.C
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return mcp.NewToolResultError(fmt.Sprintf("Vault split failed: %s", string(out))), nil
+	}
+
+	return mcp.NewToolResultText(string(out)), nil
+}
+
+func vaultRecoverHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	shards := request.Get("shards").([]interface{})
+	vault := request.GetString("vault", "default")
+	output := request.GetString("output", "")
+	passphrase := request.GetString("passphrase", "")
+
+	args := []string{"vault", "recover"}
+	for _, s := range shards {
+		args = append(args, s.(string))
+	}
+	args = append(args, "--vault", vault, "--json")
+	if output != "" {
+		args = append(args, "--output", output)
+	}
+
+	cmd := exec.CommandContext(ctx, getMaknoonBinary(), args...)
+	cmd.Env = getMaknoonEnv()
+	if passphrase != "" {
+		cmd.Env = append(cmd.Env, "MAKNOON_PASSPHRASE="+passphrase)
+	}
+
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Vault recover failed: %s", string(out))), nil
+	}
+
+	return mcp.NewToolResultText(string(out)), nil
+}
+
+func identityCombineHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	shards := request.Get("shards").([]interface{})
+	output := request.GetString("output", "restored_id")
+	passphrase := request.GetString("passphrase", "")
+	noPassword := request.GetBool("no_password", false)
+
+	args := []string{"identity", "combine"}
+	for _, s := range shards {
+		args = append(args, s.(string))
+	}
+	args = append(args, "--output", output, "--json")
+	if noPassword {
+		args = append(args, "--no-password")
+	}
+
+	cmd := exec.CommandContext(ctx, getMaknoonBinary(), args...)
+	cmd.Env = getMaknoonEnv()
+	if passphrase != "" {
+		cmd.Env = append(cmd.Env, "MAKNOON_PASSPHRASE="+passphrase)
+	}
+
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Identity combine failed: %s", string(out))), nil
 	}
 
 	return mcp.NewToolResultText(string(out)), nil

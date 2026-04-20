@@ -181,11 +181,19 @@ func identityCombineCmd() *cobra.Command {
 
 			pass, err := getInitialPassphrase(noPassword, protectPassphrase)
 			if err != nil {
+				if JSONOutput {
+					printErrorJSON(err)
+					return nil
+				}
 				return err
 			}
 			defer crypto.SafeClear(pass)
 
 			if err := writeIdentityKeys(basePath, baseName, kemPub, kemPriv, sigPub, sigPriv, pass, 1); err != nil {
+				if JSONOutput {
+					printErrorJSON(err)
+					return nil
+				}
 				return err
 			}
 

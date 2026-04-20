@@ -152,20 +152,38 @@ func vaultRecoverCmd() *cobra.Command {
 
 			if targetPath != "" {
 				// Save to a new vault with a new passphrase
-				fmt.Printf("Recovered %d entries. Enter new master passphrase for recovery vault: ", len(entries))
-				p, err := term.ReadPassword(int(os.Stdin.Fd()))
-				fmt.Println()
-				if err != nil {
-					return err
+				var p []byte
+				if env := os.Getenv("MAKNOON_PASSPHRASE"); env != "" {
+					p = []byte(env)
+				} else if JSONOutput {
+					err := fmt.Errorf("new master passphrase required via MAKNOON_PASSPHRASE for recovery vault in JSON mode")
+					printErrorJSON(err)
+					return nil
+				} else {
+					fmt.Printf("Recovered %d entries. Enter new master passphrase for recovery vault: ", len(entries))
+					p1, err := term.ReadPassword(int(os.Stdin.Fd()))
+					fmt.Println()
+					if err != nil {
+						return err
+					}
+					p = p1
 				}
 				defer crypto.SafeClear(p)
 
 				newVaultPath, err := resolveVaultPath(targetPath)
 				if err != nil {
+					if JSONOutput {
+						printErrorJSON(err)
+						return nil
+					}
 					return err
 				}
 				newDb, err := bbolt.Open(newVaultPath, 0600, nil)
 				if err != nil {
+					if JSONOutput {
+						printErrorJSON(err)
+						return nil
+					}
 					return err
 				}
 				defer newDb.Close()
@@ -187,14 +205,41 @@ func vaultRecoverCmd() *cobra.Command {
 					return nil
 				})
 				if err != nil {
+					if JSONOutput {
+						printErrorJSON(err)
+						return nil
+					}
 					return err
 				}
-				fmt.Printf("Success! Recovered vault saved to %s\n", newVaultPath)
+
+				if JSONOutput {
+					printJSON(map[string]interface{}{"status": "success", "recovered_entries": len(entries), "output": newVaultPath})
+				} else {
+					fmt.Printf("Success! Recovered vault saved to %s\n", newVaultPath)
+				}
 			} else {
-				fmt.Printf("🛡️  Recovered %d entries from vault '%s':\n", len(entries), vaultName)
-				for _, e := range entries {
-					fmt.Printf("  - %s (User: %s, Pass: %s)\n", e.Service, e.Username, string(e.Password))
-					crypto.SafeClear(e.Password)
+				if JSONOutput {
+					type recoveredEntry struct {
+						Service  string `json:"service"`
+						Username string `json:"username"`
+						Password string `json:"password"`
+					}
+					var recs []recoveredEntry
+					for _, e := range entries {
+						recs = append(recs, recoveredEntry{
+							Service:  e.Service,
+							Username: e.Username,
+							Password: string(e.Password),
+						})
+						crypto.SafeClear(e.Password)
+					}
+					printJSON(recs)
+				} else {
+					fmt.Printf("🛡️  Recovered %d entries from vault '%s':\n", len(entries), vaultName)
+					for _, e := range entries {
+						fmt.Printf("  - %s (User: %s, Pass: %s)\n", e.Service, e.Username, string(e.Password))
+						crypto.SafeClear(e.Password)
+					}
 				}
 			}
 

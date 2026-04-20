@@ -61,7 +61,8 @@ You are an expert in secure file handling and post-quantum cryptography using th
 ### 8. M-of-N Secret Sharing (Break Glass)
 *   **Shard Identity**: Use `mcp_maknoon_identity_split` to create mnemonic shares of a PQC identity.
 *   **Shard Vault**: Use `mcp_maknoon_vault_split` to shard the master access key of a vault.
-*   **Reconstruct**: Use `run_shell_command` with `maknoon identity combine` or `maknoon vault recover` for manual restoration.
+*   **Combine Identity**: Use `mcp_maknoon_identity_combine` to reconstruct a PQC identity from mnemonic shards.
+*   **Recover Vault**: Use `mcp_maknoon_vault_recover` to list or export vault contents using reconstructed access material.
 
 ## ⚠️ Security Mandates
 *   **NEVER** pass a secret password as a CLI argument. ALWAYS use the `MAKNOON_PASSWORD` environment variable.
