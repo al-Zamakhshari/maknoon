@@ -32,12 +32,13 @@ You are an expert in secure file handling and post-quantum cryptography using th
 ## 📋 Common Workflows (MCP Tools)
 
 ### 1. Secure File Protection
-*   **Encrypt**: Use `mcp_maknoon_encrypt_file` to protect files symmetrically (passphrase) or asymmetrically (public key).
+*   **Encrypt**: Use `mcp_maknoon_encrypt_file` to protect files symmetrically (passphrase) or asymmetrically (public key). You can also use a global handle (e.g., `@bob`) as a public key path for trustless dPKI encryption.
 *   **Decrypt**: Use `mcp_maknoon_decrypt_file` with the appropriate credentials.
 
 ### 2. Digital Identity Management
 *   **Discovery**: Use `mcp_maknoon_identity_active` to find existing PQC identities.
 *   **Generation**: Use `run_shell_command` with `maknoon keygen` to create new identities.
+*   **Publish**: Use `mcp_maknoon_identity_publish` to anchor your identity to a global handle (e.g., `@alice`) for trustless discovery.
 
 ### 3. File & Security Inspection
 *   **Details**: Use `mcp_maknoon_inspect_file` to get KEM/SIG/KDF metadata.

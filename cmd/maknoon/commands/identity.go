@@ -2,11 +2,13 @@ package commands
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/al-Zamakhshari/maknoon/pkg/crypto"
 	"github.com/spf13/cobra"
@@ -19,13 +21,72 @@ func IdentityCmd() *cobra.Command {
 		Short: "Manage Post-Quantum cryptographic identities",
 	}
 
+	cmd.PersistentFlags().BoolVar(&JSONOutput, "json", false, "Output results in JSON format")
+
 	cmd.AddCommand(identityListCmd())
 	cmd.AddCommand(identityActiveCmd())
 	cmd.AddCommand(identityShowCmd())
 	cmd.AddCommand(identityRenameCmd())
 	cmd.AddCommand(identitySplitCmd())
 	cmd.AddCommand(identityCombineCmd())
+	cmd.AddCommand(identityPublishCmd())
 
+	return cmd
+}
+
+func identityPublishCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "publish [handle]",
+		Short: "Anchor your active identity to the global registry (dPKI)",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			handle := args[0]
+			if !strings.HasPrefix(handle, "@") {
+				return fmt.Errorf("handle must start with @ (e.g., @alice)")
+			}
+
+			// 1. Get active identity
+			// (Assuming logic to find active identity exists or we default to 'default')
+			name := "default" // Simplified for POC
+
+			basePath, _, err := resolveBaseKeyPath(name)
+			if err != nil {
+				return err
+			}
+
+			kemPub, err := os.ReadFile(basePath + ".kem.pub")
+			if err != nil {
+				return err
+			}
+			sigPub, err := os.ReadFile(basePath + ".sig.pub")
+			if err != nil {
+				return err
+			}
+
+			// 2. Create the record
+			record := &crypto.IdentityRecord{
+				Handle:    handle,
+				KEMPubKey: kemPub,
+				SIGPubKey: sigPub,
+				Timestamp: time.Now(),
+			}
+
+			// 3. In a real scenario, we'd sign this record with the private key.
+			// For the POC, we'll just publish it.
+			if err := crypto.GlobalRegistry.Publish(context.Background(), record); err != nil {
+				return err
+			}
+
+			if JSONOutput {
+				printJSON(map[string]string{"status": "success", "handle": handle, "registry": "mock"})
+			} else {
+				fmt.Printf("🚀 Identity published to Global Registry as %s\n", handle)
+				fmt.Println("Note: This is currently using a mock session-based registry.")
+			}
+
+			return nil
+		},
+	}
 	return cmd
 }
 

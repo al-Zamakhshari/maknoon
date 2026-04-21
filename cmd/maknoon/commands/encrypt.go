@@ -1,10 +1,12 @@
 package commands
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	"github.com/al-Zamakhshari/maknoon/pkg/crypto"
 	"github.com/schollz/progressbar/v3"
@@ -224,7 +226,6 @@ func loadCustomProfile(path string, profileID *int) error {
 	}
 	return nil
 }
-
 func resolveEncryptionKeysMulti(opts *crypto.Options, pubKeyPaths []string, passphrase, inputPath string) error {
 	if len(pubKeyPaths) == 0 {
 		if env := os.Getenv("MAKNOON_PUBLIC_KEY"); env != "" {
@@ -233,6 +234,16 @@ func resolveEncryptionKeysMulti(opts *crypto.Options, pubKeyPaths []string, pass
 	}
 
 	for _, path := range pubKeyPaths {
+		if strings.HasPrefix(path, "@") {
+			// Resolve handle from Global Registry (dPKI POC)
+			record, err := crypto.GlobalRegistry.Resolve(context.Background(), path)
+			if err != nil {
+				return fmt.Errorf("failed to resolve handle %s: %w", path, err)
+			}
+			opts.PublicKeys = append(opts.PublicKeys, record.KEMPubKey)
+			continue
+		}
+
 		resolvedPath := crypto.ResolveKeyPath(path, "")
 		if resolvedPath == "" {
 			return fmt.Errorf("public key not found: %s", path)

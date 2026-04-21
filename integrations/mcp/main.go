@@ -244,6 +244,19 @@ func createServer() *server.MCPServer {
 	}
 	s.AddTool(identityCombine, identityCombineHandler)
 
+	// Tool: identity_publish
+	identityPublish := mcp.NewTool("identity_publish",
+		mcp.WithDescription("Anchor your active identity to the global registry (dPKI POC)"),
+	)
+	identityPublish.InputSchema = mcp.ToolInputSchema{
+		Type: "object",
+		Properties: map[string]interface{}{
+			"handle": map[string]interface{}{"type": "string", "description": "Global handle (e.g., @alice)"},
+		},
+		Required: []string{"handle"},
+	}
+	s.AddTool(identityPublish, identityPublishHandler)
+
 	return s
 }
 
@@ -578,14 +591,14 @@ func vaultSplitHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.C
 }
 
 func vaultRecoverHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	shards := request.Get("shards").([]interface{})
+	shards := request.GetStringSlice("shards", nil)
 	vault := request.GetString("vault", "default")
 	output := request.GetString("output", "")
 	passphrase := request.GetString("passphrase", "")
 
 	args := []string{"vault", "recover"}
 	for _, s := range shards {
-		args = append(args, s.(string))
+		args = append(args, s)
 	}
 	args = append(args, "--vault", vault, "--json")
 	if output != "" {
@@ -607,14 +620,14 @@ func vaultRecoverHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp
 }
 
 func identityCombineHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	shards := request.Get("shards").([]interface{})
+	shards := request.GetStringSlice("shards", nil)
 	output := request.GetString("output", "restored_id")
 	passphrase := request.GetString("passphrase", "")
 	noPassword := request.GetBool("no_password", false)
 
 	args := []string{"identity", "combine"}
 	for _, s := range shards {
-		args = append(args, s.(string))
+		args = append(args, s)
 	}
 	args = append(args, "--output", output, "--json")
 	if noPassword {
@@ -630,6 +643,20 @@ func identityCombineHandler(ctx context.Context, request mcp.CallToolRequest) (*
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return mcp.NewToolResultError(fmt.Sprintf("Identity combine failed: %s", string(out))), nil
+	}
+
+	return mcp.NewToolResultText(string(out)), nil
+}
+
+func identityPublishHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	handle := request.GetString("handle", "")
+
+	cmd := exec.CommandContext(ctx, getMaknoonBinary(), "identity", "publish", handle, "--json")
+	cmd.Env = getMaknoonEnv()
+
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Identity publish failed: %s", string(out))), nil
 	}
 
 	return mcp.NewToolResultText(string(out)), nil

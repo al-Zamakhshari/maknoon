@@ -262,6 +262,13 @@ def combine_maknoon_identity(
     return _parse_json_result(result)
 
 @tool
+def publish_maknoon_identity(handle: str) -> Dict[str, Any]:
+    """Anchors the active identity to the global registry (dPKI POC)."""
+    cmd = ["MAKNOON_PLACEHOLDER", "identity", "publish", handle]
+    result = _run_maknoon(cmd, {}, timeout=10)
+    return _parse_json_result(result)
+
+@tool
 def recover_maknoon_vault(
     shards: List[str],
     vault_name: str = "default",
