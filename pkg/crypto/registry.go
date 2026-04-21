@@ -210,4 +210,3 @@ func init() {
 	// 2. Fallback to MockRegistry (memory-only) for CI/Restricted environments.
 	GlobalRegistry = NewMockRegistry()
 }
-
