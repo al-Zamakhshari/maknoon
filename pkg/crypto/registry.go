@@ -182,11 +182,14 @@ func (r *BoltRegistry) Revoke(_ context.Context, handle string, proof []byte) er
 			return fmt.Errorf("handle '%s' not found", handle)
 		}
 		var record IdentityRecord
-		json.Unmarshal(v, &record)
+		if err := json.Unmarshal(v, &record); err != nil {
+			return err
+		}
 
 		// In a real scenario, 'proof' would be a signed revocation message.
 		// For POC, we verify the proof against the existing SIG key.
-		if !VerifySignature([]byte("REVOKE:"+handle), proof, record.SIGPubKey) {
+		lowerHandle := strings.ToLower(handle)
+		if !VerifySignature([]byte("REVOKE:"+lowerHandle), proof, record.SIGPubKey) {
 			return errors.New("invalid revocation proof")
 		}
 

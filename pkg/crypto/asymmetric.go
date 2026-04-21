@@ -56,7 +56,6 @@ func DeriveSIGPublic(privKeyBytes []byte) ([]byte, error) {
 
 // SignData signs a message using a Post-Quantum private key.
 func SignData(message []byte, privKeyBytes []byte) ([]byte, error) {
-	defer SafeClear(privKeyBytes)
 	return DefaultProfile().Sign(message, privKeyBytes)
 }
 
