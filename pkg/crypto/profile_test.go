@@ -49,7 +49,7 @@ func TestProfileV2RoundTrip(t *testing.T) {
 
 	// Decrypt
 	var decrypted bytes.Buffer
-	_, err := DecryptStream(bytes.NewReader(encrypted.Bytes()), &decrypted, passphrase, 1, false)
+	_, _, err := DecryptStream(bytes.NewReader(encrypted.Bytes()), &decrypted, passphrase, 1, false)
 	if err != nil {
 		t.Fatalf("V2 Decryption failed: %v", err)
 	}

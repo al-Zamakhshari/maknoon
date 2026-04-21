@@ -17,7 +17,7 @@ func TestSymmetricRoundTrip(t *testing.T) {
 
 	// 2. Decrypt
 	var decrypted bytes.Buffer
-	if _, err := DecryptStream(bytes.NewReader(encrypted.Bytes()), &decrypted, passphrase, 0, false); err != nil {
+	if _, _, err := DecryptStream(bytes.NewReader(encrypted.Bytes()), &decrypted, passphrase, 0, false); err != nil {
 		t.Fatalf("Decryption failed: %v", err)
 	}
 
@@ -27,7 +27,7 @@ func TestSymmetricRoundTrip(t *testing.T) {
 
 	// 3. Wrong passphrase should fail
 	var decryptedWrong bytes.Buffer
-	if _, err := DecryptStream(bytes.NewReader(encrypted.Bytes()), &decryptedWrong, []byte("wrong-pass"), 0, false); err == nil {
+	if _, _, err := DecryptStream(bytes.NewReader(encrypted.Bytes()), &decryptedWrong, []byte("wrong-pass"), 0, false); err == nil {
 		t.Error("Expected error with wrong passphrase, got nil")
 	}
 }
@@ -50,7 +50,7 @@ func TestAsymmetricRoundTrip(t *testing.T) {
 
 	// 2. Decrypt
 	var decrypted bytes.Buffer
-	if _, err := DecryptStreamWithPrivateKey(bytes.NewReader(encrypted.Bytes()), &decrypted, privBytes, 0, false); err != nil {
+	if _, _, err := DecryptStreamWithPrivateKey(bytes.NewReader(encrypted.Bytes()), &decrypted, privBytes, 0, false); err != nil {
 		t.Fatalf("Asymmetric decryption failed: %v", err)
 	}
 
@@ -79,14 +79,14 @@ func TestIntegratedSignThenEncryptUnit(t *testing.T) {
 	// 2. Decrypt and Verify
 	var decrypted bytes.Buffer
 	// Test failure without sender key
-	_, err := DecryptStreamWithPrivateKey(bytes.NewReader(encrypted.Bytes()), &decrypted, privBytes, 0, false)
+	_, _, err = DecryptStreamWithPrivateKey(bytes.NewReader(encrypted.Bytes()), &decrypted, privBytes, 0, false)
 	if err == nil || !bytes.Contains([]byte(err.Error()), []byte("sender public key not provided")) {
 		t.Errorf("Expected error for missing sender key, got: %v", err)
 	}
 
 	// Test success with sender key
 	decrypted.Reset()
-	_, err = DecryptStreamWithPrivateKeyAndVerifier(bytes.NewReader(encrypted.Bytes()), &decrypted, privBytes, spub, 0, false)
+	_, _, err = DecryptStreamWithPrivateKeyAndVerifier(bytes.NewReader(encrypted.Bytes()), &decrypted, privBytes, spub, 0, false)
 	if err != nil {
 		t.Fatalf("Integrated decryption failed: %v", err)
 	}
@@ -113,7 +113,7 @@ func TestDecryptEdgeCases(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			var decrypted bytes.Buffer
-			_, err := DecryptStream(bytes.NewReader(tc.input), &decrypted, passphrase, 1, false)
+			_, _, err := DecryptStream(bytes.NewReader(tc.input), &decrypted, passphrase, 1, false)
 			if (err != nil) != tc.expectError {
 				t.Fatalf("Expected error: %v, got: %v", tc.expectError, err)
 			}
@@ -130,7 +130,7 @@ func TestEncryptEdgeCases(t *testing.T) {
 	}
 
 	var decrypted bytes.Buffer
-	_, err = DecryptStream(bytes.NewReader(encrypted.Bytes()), &decrypted, []byte("pass"), 1, false)
+	_, _, err = DecryptStream(bytes.NewReader(encrypted.Bytes()), &decrypted, []byte("pass"), 1, false)
 	if err != nil {
 		t.Fatalf("Zero-byte decryption failed: %v", err)
 	}
@@ -158,7 +158,7 @@ func TestStealthSymmetricRoundTrip(t *testing.T) {
 
 	// 2. Decrypt with Stealth
 	var decrypted bytes.Buffer
-	_, err = DecryptStream(bytes.NewReader(encrypted.Bytes()), &decrypted, passphrase, 1, true)
+	_, _, err = DecryptStream(bytes.NewReader(encrypted.Bytes()), &decrypted, passphrase, 1, true)
 	if err != nil {
 		t.Fatalf("Decryption failed: %v", err)
 	}
@@ -192,7 +192,7 @@ func TestStealthAsymmetricRoundTrip(t *testing.T) {
 
 	// 2. Decrypt with Stealth
 	var decrypted bytes.Buffer
-	_, err = DecryptStreamWithPrivateKey(bytes.NewReader(encrypted.Bytes()), &decrypted, privBytes, 1, true)
+	_, _, err = DecryptStreamWithPrivateKey(bytes.NewReader(encrypted.Bytes()), &decrypted, privBytes, 1, true)
 	if err != nil {
 		t.Fatalf("Decryption failed: %v", err)
 	}
@@ -201,3 +201,4 @@ func TestStealthAsymmetricRoundTrip(t *testing.T) {
 		t.Errorf("Content mismatch. Got %q", decrypted.String())
 	}
 }
+

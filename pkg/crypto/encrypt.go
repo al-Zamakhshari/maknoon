@@ -128,7 +128,7 @@ func EncryptStreamWithPublicKeysAndSigner(r io.Reader, w io.Writer, pubKeys [][]
 			return fmt.Errorf("failed to encapsulate for a recipient: %w", err)
 		}
 
-		h := sha256Sum(pkBytes)[:4]
+		h := Sha256Sum(pkBytes)[:4]
 		recs = append(recs, recipientHeader{
 			pubKeyHash: h,
 			ciphertext: wrappedMaterial,

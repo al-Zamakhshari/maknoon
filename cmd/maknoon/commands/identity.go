@@ -77,7 +77,7 @@ func identityPublishCmd() *cobra.Command {
 					return err
 				}
 				var unlocked bytes.Buffer
-				if _, err := crypto.DecryptStream(bytes.NewReader(sigKeyBytes), &unlocked, pass, 1, false); err != nil {
+				if _, _, err := crypto.DecryptStream(bytes.NewReader(sigKeyBytes), &unlocked, pass, 1, false); err != nil {
 					return err
 				}
 				sigPriv = unlocked.Bytes()
@@ -146,7 +146,7 @@ func identitySplitCmd() *cobra.Command {
 						return nil, err
 					}
 					var unlocked bytes.Buffer
-					if _, err := crypto.DecryptStream(bytes.NewReader(keyBytes), &unlocked, pass, 1, false); err != nil {
+					if _, _, err := crypto.DecryptStream(bytes.NewReader(keyBytes), &unlocked, pass, 1, false); err != nil {
 						return nil, err
 					}
 					return unlocked.Bytes(), nil

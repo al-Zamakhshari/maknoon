@@ -312,6 +312,31 @@ def recover_maknoon_vault(
     return _parse_json_result(result)
 
 @tool
+def decrypt_maknoon_file(
+    input_path: str,
+    output_path: str,
+    passphrase: Optional[str] = None,
+    private_key: Optional[str] = None,
+    sender_key: Optional[str] = None,
+    trust_on_first_use: bool = False
+) -> Dict[str, Any]:
+    """Decrypts a .makn file or directory (Agent Mode)."""
+    cmd = ["MAKNOON_PLACEHOLDER", "decrypt", input_path, "-o", output_path]
+    if private_key:
+        cmd.extend(["--private-key", private_key])
+    if sender_key:
+        cmd.extend(["--sender-key", sender_key])
+    if trust_on_first_use:
+        cmd.append("--trust-on-first-use")
+    
+    env = {}
+    if passphrase:
+        env["MAKNOON_PASSPHRASE"] = passphrase
+        
+    result = _run_maknoon(cmd, env, timeout=60)
+    return _parse_json_result(result)
+
+@tool
 def list_maknoon_vaults() -> List[str]:
     """Lists the names of all available Maknoon vaults."""
     # Note: Using default path. Consider making this configurable or using identity logic.

@@ -54,7 +54,7 @@ func TestP2PFlowCorruption(t *testing.T) {
 
 	done := make(chan bool)
 	go func() {
-		_, dErr = DecryptStream(reader, pw, passphrase, 1, false)
+		_, _, dErr = DecryptStream(reader, pw, passphrase, 1, false)
 		pw.Close()
 		done <- true
 	}()
@@ -129,7 +129,7 @@ func TestP2PDirectoryFlow(t *testing.T) {
 	pr, pw := io.Pipe()
 	go func() {
 		defer pw.Close()
-		_, dErr := DecryptStream(reader, pw, passphrase, 1, false)
+		_, _, dErr := DecryptStream(reader, pw, passphrase, 1, false)
 		if dErr != nil {
 			pw.CloseWithError(dErr)
 		}
@@ -179,7 +179,7 @@ func TestP2PTextTransfer(t *testing.T) {
 	// 3. Decrypt from memory buffer (Simulate 'receive')
 	var decrypted bytes.Buffer
 	// Symmetric flow
-	recvFlags, err := DecryptStream(&encrypted, &decrypted, passphrase, 1, false)
+	recvFlags, _, err := DecryptStream(&encrypted, &decrypted, passphrase, 1, false)
 	if err != nil {
 		t.Fatalf("Decryption failed: %v", err)
 	}
@@ -235,7 +235,7 @@ func TestP2PAsymmetric(t *testing.T) {
 
 	var decrypted bytes.Buffer
 	// Asymmetric flow
-	recvFlags, err := DecryptStreamWithPrivateKey(reader, &decrypted, privBytes, 1, false)
+	recvFlags, _, err := DecryptStreamWithPrivateKey(reader, &decrypted, privBytes, 1, false)
 	if err != nil {
 		t.Fatalf("Asymmetric decryption failed: %v", err)
 	}

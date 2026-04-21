@@ -77,9 +77,10 @@ func createServer() *server.MCPServer {
 	decryptFile.InputSchema = mcp.ToolInputSchema{
 		Type: "object",
 		Properties: map[string]interface{}{
-			"input":       map[string]interface{}{"type": "string", "description": "Path to the .makn file"},
-			"output":      map[string]interface{}{"type": "string", "description": "Path for the decrypted output (use '-' for stdout)"},
-			"private_key": map[string]interface{}{"type": "string", "description": "Path to your private key"},
+			"input":              map[string]interface{}{"type": "string", "description": "Path to the .makn file"},
+			"output":             map[string]interface{}{"type": "string", "description": "Path for the decrypted output (use '-' for stdout)"},
+			"private_key":        map[string]interface{}{"type": "string", "description": "Path to your private key"},
+			"trust_on_first_use": map[string]interface{}{"type": "boolean", "description": "Automatically add unknown signers to contacts"},
 		},
 		Required: []string{"input", "output"},
 	}
@@ -341,17 +342,22 @@ func vaultSetHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.Cal
 	return mcp.NewToolResultText(string(out)), nil
 }
 
-func encryptHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+func decryptHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	input := request.GetString("input", "")
 	output := request.GetString("output", "")
-	publicKey := request.GetString("public_key", "")
+	privKey := request.GetString("private_key", "")
+	tofu := request.GetBool("trust_on_first_use", false)
 
-	args := []string{"encrypt", input, "-o", output, "--json", "--quiet"}
-	if publicKey != "" {
-		args = append(args, "-p", publicKey)
+	args := []string{"decrypt", input, "-o", output, "--json"}
+	if privKey != "" {
+		args = append(args, "-k", privKey)
+	}
+	if tofu {
+		args = append(args, "--trust-on-first-use")
 	}
 
 	cmd := exec.CommandContext(ctx, getMaknoonBinary(), args...)
+
 	cmd.Env = getMaknoonEnv()
 
 	out, err := cmd.CombinedOutput()

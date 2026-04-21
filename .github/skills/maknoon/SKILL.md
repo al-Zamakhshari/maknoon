@@ -34,6 +34,8 @@ You are an expert in secure file handling and post-quantum cryptography using th
 ### 1. Secure File Protection
 *   **Encrypt**: Use `mcp_maknoon_encrypt_file` to protect files symmetrically (passphrase) or asymmetrically (public key). You can also use a global handle (e.g., `@bob`) as a public key path for trustless dPKI encryption.
 *   **Decrypt**: Use `mcp_maknoon_decrypt_file` with the appropriate credentials.
+    *   **Trust Evidence**: In Agent Mode (`--json`), successful decryption returns a `signed_by` object with the signer's GID and `is_trusted` status.
+    *   **TOFU**: Use the `trust_on_first_use` parameter to automatically add unknown signers to the local address book.
 
 ### 2. Digital Identity Management
 *   **Discovery**: Use `mcp_maknoon_identity_active` to find existing PQC identities.

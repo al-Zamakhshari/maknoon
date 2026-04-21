@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/al-Zamakhshari/maknoon/pkg/crypto"
 	"github.com/schollz/progressbar/v3"
@@ -28,6 +29,7 @@ func DecryptCmd() *cobra.Command {
 	var profileFile string
 	var overwrite bool
 	var stealth bool
+	var tofu bool
 
 	cmd := &cobra.Command{
 		Use:   "decrypt [file]",
@@ -183,12 +185,14 @@ func DecryptCmd() *cobra.Command {
 			go func() {
 				var dErr error
 				var f byte
+				var spk []byte
 				if magic == crypto.MagicHeader {
-					f, dErr = crypto.DecryptStream(proxyIn, pw, finalKey, concurrency, stealth)
+					f, spk, dErr = crypto.DecryptStream(proxyIn, pw, finalKey, concurrency, stealth)
 				} else {
-					f, dErr = crypto.DecryptStreamWithPrivateKeyAndVerifier(proxyIn, pw, finalKey, senderKey, concurrency, stealth)
+					f, spk, dErr = crypto.DecryptStreamWithPrivateKeyAndVerifier(proxyIn, pw, finalKey, senderKey, concurrency, stealth)
 				}
 				_ = f
+				_ = spk
 				_ = pw.CloseWithError(dErr)
 			}()
 
@@ -208,8 +212,64 @@ func DecryptCmd() *cobra.Command {
 				return err
 			}
 
+			// 6. Handle Trust Evidence and TOFU
+			var trustInfo map[string]interface{}
+			if senderKey != nil {
+				gid := fmt.Sprintf("mk1_%x", crypto.Sha256Sum(senderKey)[:16])
+				isTrusted := false
+				var existingContact *crypto.Contact
+
+				cm, err := crypto.NewContactManager()
+				if err == nil {
+					// We search by GID or we could search by fingerprint.
+					contacts, _ := cm.List()
+					for _, c := range contacts {
+						if bytes.Equal(c.KEMPubKey, senderKey) || bytes.Equal(c.SIGPubKey, senderKey) {
+							isTrusted = true
+							existingContact = c
+							break
+						}
+					}
+
+					if !isTrusted && tofu {
+						// Auto-learn contact
+						newContact := &crypto.Contact{
+							Petname:   "@" + gid[:12],
+							SIGPubKey: senderKey,
+							AddedAt:   time.Now(),
+							Notes:     "Auto-learned via TOFU",
+						}
+						_ = cm.Add(newContact)
+						isTrusted = true
+						existingContact = newContact
+					}
+					cm.Close()
+				}
+
+				trustInfo = map[string]interface{}{
+					"gid":        gid,
+					"is_trusted": isTrusted,
+				}
+				if existingContact != nil {
+					trustInfo["petname"] = existingContact.Petname
+				}
+			}
+
 			if JSONOutput {
-				printJSON(map[string]string{"status": "success", "output": outPath})
+				res := map[string]interface{}{
+					"status": "success",
+					"output": outPath,
+				}
+				if trustInfo != nil {
+					res["signed_by"] = trustInfo
+				}
+				printJSON(res)
+			} else if trustInfo != nil {
+				status := "UNKNOWN (Untrusted)"
+				if trustInfo["is_trusted"].(bool) {
+					status = fmt.Sprintf("TRUSTED (%s)", trustInfo["petname"])
+				}
+				fmt.Printf("✔ Successfully verified signature from: %s [%s]\n", trustInfo["gid"], status)
 			}
 
 			return nil
@@ -225,6 +285,7 @@ func DecryptCmd() *cobra.Command {
 	cmd.Flags().BoolVarP(&quiet, "quiet", "q", false, "Suppress progress bars and informational messages")
 	cmd.Flags().BoolVar(&verbose, "verbose", false, "Enable internal pipeline tracing (slog)")
 	cmd.Flags().BoolVar(&stealth, "stealth", false, "Enable fingerprint resistance (headerless)")
+	cmd.Flags().BoolVar(&tofu, "trust-on-first-use", false, "Automatically add unknown signers to contacts")
 	cmd.Flags().StringVar(&profileFile, "profile-file", "", "Path to a custom profile JSON file")
 	cmd.Flags().BoolVar(&overwrite, "overwrite", false, "Overwrite existing files")
 	return cmd
@@ -328,7 +389,7 @@ func resolveAsymmetricKey(password []byte, keyPath string, isStdin bool) ([]byte
 		}
 
 		var unlockedKey bytes.Buffer
-		if _, err := crypto.DecryptStream(bytes.NewReader(keyBytes), &unlockedKey, password, 1, false); err != nil {
+		if _, _, err := crypto.DecryptStream(bytes.NewReader(keyBytes), &unlockedKey, password, 1, false); err != nil {
 			return nil, nil, fmt.Errorf("failed to unlock private key: %w", err)
 		}
 		return password, unlockedKey.Bytes(), nil

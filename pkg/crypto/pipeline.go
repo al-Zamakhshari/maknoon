@@ -119,17 +119,19 @@ func Unprotect(r io.Reader, w io.Writer, outPath string, opts Options) (byte, er
 	go func() {
 		defer pw.Close()
 		var dFlags byte
+		var spk []byte
 		if len(opts.PublicKeys) > 0 || len(opts.PublicKey) > 0 {
 			// Asymmetric
 			// Note: Current core API for asymmetric decrypt expects a single priv key.
 			// Pipeline 'Restore' assumes the caller provided the correct single key in Passphrase or similar.
 			// For now, assume symmetric or simple asymmetric bypass.
-			dFlags, dErr = DecryptStreamWithPrivateKeyAndVerifier(fullIn, pw, opts.Passphrase, opts.PublicKey, opts.Concurrency, opts.Stealth)
+			dFlags, spk, dErr = DecryptStreamWithPrivateKeyAndVerifier(fullIn, pw, opts.Passphrase, opts.PublicKey, opts.Concurrency, opts.Stealth)
 		} else {
 			// Symmetric
-			dFlags, dErr = DecryptStream(fullIn, pw, opts.Passphrase, opts.Concurrency, opts.Stealth)
+			dFlags, spk, dErr = DecryptStream(fullIn, pw, opts.Passphrase, opts.Concurrency, opts.Stealth)
 		}
 		_ = dFlags
+		_ = spk
 		if dErr != nil {
 			_ = pw.CloseWithError(dErr)
 		}
@@ -295,7 +297,7 @@ func ExtractArchive(r io.Reader, outputDir string) error {
 	return nil
 }
 
-func sha256Sum(data []byte) []byte {
+func Sha256Sum(data []byte) []byte {
 	h := sha256.New()
 	h.Write(data)
 	return h.Sum(nil)

@@ -14,24 +14,24 @@ import (
 )
 
 // DecryptStream decrypts data from r to w using a passphrase.
-func DecryptStream(r io.Reader, w io.Writer, password []byte, concurrency int, isStealth bool) (byte, error) {
+func DecryptStream(r io.Reader, w io.Writer, password []byte, concurrency int, isStealth bool) (byte, []byte, error) {
 	magic, profileID, flags, err := ReadHeader(r, isStealth)
 	if err != nil {
-		return 0, err
+		return 0, nil, err
 	}
 
 	if !isStealth && magic != MagicHeader {
-		return 0, errors.New("not a valid Maknoon file (symmetric)")
+		return 0, nil, errors.New("not a valid Maknoon file (symmetric)")
 	}
 
 	profile, err := GetProfile(profileID, r)
 	if err != nil {
-		return 0, err
+		return 0, nil, err
 	}
 
 	salt := make([]byte, profile.SaltSize())
 	if _, err := io.ReadFull(r, salt); err != nil {
-		return 0, err
+		return 0, nil, err
 	}
 
 	key := profile.DeriveKey(password, salt)
@@ -39,15 +39,15 @@ func DecryptStream(r io.Reader, w io.Writer, password []byte, concurrency int, i
 
 	aead, err := profile.NewAEAD(key)
 	if err != nil {
-		return 0, err
+		return 0, nil, err
 	}
 
 	baseNonce := make([]byte, aead.NonceSize())
 	if _, err := io.ReadFull(r, baseNonce); err != nil {
-		return 0, err
+		return 0, nil, err
 	}
 
-	return flags, streamDecrypt(r, w, aead, baseNonce, concurrency)
+	return flags, nil, streamDecrypt(r, w, aead, baseNonce, concurrency)
 }
 
 // ReadHeader reads the magic bytes (if not stealth) and the profile/flags header.
@@ -70,25 +70,25 @@ func ReadHeader(r io.Reader, isStealth bool) (magic string, profileID byte, flag
 }
 
 // DecryptStreamWithPrivateKey decrypts data from r to w using a private key.
-func DecryptStreamWithPrivateKey(r io.Reader, w io.Writer, privKeyBytes []byte, concurrency int, isStealth bool) (byte, error) {
+func DecryptStreamWithPrivateKey(r io.Reader, w io.Writer, privKeyBytes []byte, concurrency int, isStealth bool) (byte, []byte, error) {
 	return DecryptStreamWithPrivateKeyAndVerifier(r, w, privKeyBytes, nil, concurrency, isStealth)
 }
 
 // DecryptStreamWithPrivateKeyAndVerifier is the internal implementation supporting optional signature verification.
-func DecryptStreamWithPrivateKeyAndVerifier(r io.Reader, w io.Writer, privKeyBytes []byte, senderPubKey []byte, concurrency int, isStealth bool) (byte, error) {
+func DecryptStreamWithPrivateKeyAndVerifier(r io.Reader, w io.Writer, privKeyBytes []byte, senderPubKey []byte, concurrency int, isStealth bool) (byte, []byte, error) {
 	if !isStealth {
 		magic := make([]byte, 4)
 		if _, err := io.ReadFull(r, magic); err != nil {
-			return 0, err
+			return 0, nil, err
 		}
 		if string(magic) != MagicHeaderAsym {
-			return 0, errors.New("not a valid Maknoon file (asymmetric)")
+			return 0, nil, errors.New("not a valid Maknoon file (asymmetric)")
 		}
 	}
 
 	header := make([]byte, 3)
 	if _, err := io.ReadFull(r, header); err != nil {
-		return 0, err
+		return 0, nil, err
 	}
 	profileID := header[0]
 	flags := header[1]
@@ -96,7 +96,7 @@ func DecryptStreamWithPrivateKeyAndVerifier(r io.Reader, w io.Writer, privKeyByt
 
 	profile, err := GetProfile(profileID, r)
 	if err != nil {
-		return 0, err
+		return 0, nil, err
 	}
 
 	kem := hpke.MLKEM768X25519()
@@ -106,7 +106,7 @@ func DecryptStreamWithPrivateKeyAndVerifier(r io.Reader, w io.Writer, privKeyByt
 
 	privKey, err := kem.NewPrivateKey(privKeyBytes)
 	if err != nil {
-		return 0, fmt.Errorf("invalid private key: %w", err)
+		return 0, nil, fmt.Errorf("invalid private key: %w", err)
 	}
 
 	var fekEnclave *memguard.Enclave
@@ -114,17 +114,17 @@ func DecryptStreamWithPrivateKeyAndVerifier(r io.Reader, w io.Writer, privKeyByt
 	// Search for our recipient block
 	found := false
 	pubKeyBytes := privKey.PublicKey().Bytes()
-	myHash := sha256Sum(pubKeyBytes)[:4]
+	myHash := Sha256Sum(pubKeyBytes)[:4]
 
 	for i := 0; i < recipientCount; i++ {
 		h := make([]byte, 4)
 		if _, err := io.ReadFull(r, h); err != nil {
-			return 0, err
+			return 0, nil, err
 		}
 
 		payload := make([]byte, recipientPayloadSize)
 		if _, err := io.ReadFull(r, payload); err != nil {
-			return 0, err
+			return 0, nil, err
 		}
 
 		if !found && string(h) == string(myHash) {
@@ -137,7 +137,7 @@ func DecryptStreamWithPrivateKeyAndVerifier(r io.Reader, w io.Writer, privKeyByt
 	}
 
 	if !found {
-		return 0, errors.New("no matching recipient block found or decryption failed")
+		return 0, nil, errors.New("no matching recipient block found or decryption failed")
 	}
 
 	// Signature verification
@@ -145,31 +145,31 @@ func DecryptStreamWithPrivateKeyAndVerifier(r io.Reader, w io.Writer, privKeyByt
 	if flags&FlagSigned != 0 {
 		sig := make([]byte, profile.SIGSize())
 		if _, err := io.ReadFull(r, sig); err != nil {
-			return 0, err
+			return 0, nil, err
 		}
 		signature = sig
 	}
 
 	baseNonce := make([]byte, profile.NonceSize())
 	if _, err := io.ReadFull(r, baseNonce); err != nil {
-		return 0, err
+		return 0, nil, err
 	}
 
 	// Open enclave to get AEAD
 	fekBuf, err := fekEnclave.Open()
 	if err != nil {
-		return 0, err
+		return 0, nil, err
 	}
 	aead, err := profile.NewAEAD(fekBuf.Bytes())
 	if err != nil {
 		fekBuf.Destroy()
-		return 0, err
+		return 0, nil, err
 	}
 
 	if flags&FlagSigned != 0 {
 		if senderPubKey == nil {
 			fekBuf.Destroy()
-			return 0, errors.New("sender public key not provided for signed file")
+			return 0, nil, errors.New("sender public key not provided for signed file")
 		}
 		commitment := make([]byte, 0, 4+1+1+32+len(baseNonce))
 		commitment = append(commitment, []byte(MagicHeaderAsym)...)
@@ -179,12 +179,12 @@ func DecryptStreamWithPrivateKeyAndVerifier(r io.Reader, w io.Writer, privKeyByt
 
 		if !profile.Verify(commitment, signature, senderPubKey) {
 			fekBuf.Destroy()
-			return 0, errors.New("integrated signature verification failed")
+			return 0, nil, errors.New("integrated signature verification failed")
 		}
 	}
 	fekBuf.Destroy()
 
-	return flags, streamDecrypt(r, w, aead, baseNonce, concurrency)
+	return flags, senderPubKey, streamDecrypt(r, w, aead, baseNonce, concurrency)
 }
 
 func streamDecrypt(r io.Reader, w io.Writer, aead cipher.AEAD, baseNonce []byte, concurrency int) error {

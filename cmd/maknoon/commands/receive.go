@@ -177,9 +177,9 @@ func ReceiveCmd() *cobra.Command {
 			go func() {
 				defer pw.Close()
 				if isAsymmetric {
-					_, dErr = crypto.DecryptStreamWithPrivateKeyAndVerifier(tmpFile, pw, privKeyBytes, nil, 0, recvStealth)
+					_, _, dErr = crypto.DecryptStreamWithPrivateKeyAndVerifier(tmpFile, pw, privKeyBytes, nil, 0, recvStealth)
 				} else {
-					_, dErr = crypto.DecryptStream(tmpFile, pw, passBytes, 0, recvStealth)
+					_, _, dErr = crypto.DecryptStream(tmpFile, pw, passBytes, 0, recvStealth)
 				}
 				if dErr != nil {
 					_ = pw.CloseWithError(dErr)
