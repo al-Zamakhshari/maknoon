@@ -7,6 +7,9 @@ Maknoon is a high-performance, post-quantum CLI encryption tool. It focuses on e
 - **`cmd/maknoon/`**: Entry point (`main.go`) and CLI command definitions using Cobra. CLI commands should remain "thin," delegating logic to the service layer.
 - **`pkg/crypto/`**: Core library implementing the cryptographic pipeline, streaming logic, and FIDO2 integration.
 - **`integrations/`**: Third-party wrappers and tools (e.g., Python/LangChain, MCP Server).
+- **`pkg/crypto/shares.go`**: Core Shamir's Secret Sharing engine with mnemonic support.
+- **`pkg/crypto/registry.go`**: dPKI Identity Bridge and Bolt-based persistent ledger simulation.
+- **`pkg/crypto/contacts.go`**: Local Petname system for trusted peer management.
 
 ## 🛡 Cryptographic Stack
 
@@ -14,7 +17,10 @@ Maknoon is a high-performance, post-quantum CLI encryption tool. It focuses on e
 - **Asymmetric Encryption (KEM)**: ML-KEM / Kyber1024 (NIST Standard).
 - **Digital Signatures**: ML-DSA-87 / Dilithium (NIST Standard).
 - **Key Derivation (KDF)**: Argon2id (Time: 3, Memory: 64MB).
-- **P2P Transport**: Magic Wormhole (SPAKE2 PAKE) layered with Maknoon Symmetric PQC. Supports **Identity-Based** (Asymmetric) handshakes, **Zero-Disk** text transport, and a **Sequenced Chat Protocol** with reordering buffers for rock-solid synchronization.
+- **Secret Sharing**: Shamir's SSS over $GF(2^8)$ with BIP-39 style mnemonics.
+- **Identity Discovery**: dPKI handle resolution (`@name`) with local Petname prioritization and self-signed record verification.
+- **P2P Transport**: Magic Wormhole (SPAKE2 PAKE) layered with Maknoon Symmetric PQC.
+ Supports **Identity-Based** (Asymmetric) handshakes, **Zero-Disk** text transport, and a **Sequenced Chat Protocol** with reordering buffers for rock-solid synchronization.
 
 ## 🤖 Agent Integration & Skills
 
@@ -38,8 +44,10 @@ Avoid global variables for execution state. Use the `commands.Context` struct to
 All file system operations MUST be validated using `crypto.ValidatePath(path, restricted)`.
 - **Restricted Mode**: (Triggered in Agent/JSON mode) Limits access to the user's Home and System Temp directories to prevent path traversal.
 
-### 4. Identity Management API
-Use the `crypto.IdentityManager` struct for key discovery and resolution. Avoid manual path concatenation in CLI commands.
+### 4. Identity & Contact Management
+Use `crypto.ContactManager` for local address book operations and `crypto.IdentityRegistry` for global handle discovery.
+- **Rule**: Always resolve local Petnames *before* falling back to the global dPKI registry.
+- **Verification**: All remote identity records MUST be self-signed by the user's ML-DSA key and verified locally before use.
 
 ### 5. Memory Hygiene
 Use `crypto.SafeClear` (aliased to `memguard.WipeBytes`) immediately after sensitive data use.
@@ -70,7 +78,9 @@ All cryptographic operations MUST support `io.Reader` and `io.Writer` to allow p
 
 ## 🚀 Pre-Release Checklist
 
-1.  **Security Audit (v1.4 Status: COMPLETED)**:
+1.  **Security Audit (v1.5 Status: COMPLETED)**:
+    *   **Sharding Security**: Verified that $M-1$ shards yield zero information and that reconstructed buffers are wiped.
+    *   **dPKI Integrity**: Confirmed that all published records are self-signed and verified via ML-DSA.
     *   **Path Traversal**: Verified that `ValidatePath` is applied to all file I/O commands (`encrypt`, `decrypt`, `info`, `sign`, `verify`).
     *   **Agent Isolation**: Confirmed that in Agent mode, all file operations are restricted to `~/` and system temp directories.
     *   **Zip Slip**: Verified protection in `ExtractArchive`.

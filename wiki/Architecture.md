@@ -17,3 +17,9 @@ In version 3, Maknoon solidified the **Hybrid Key Encapsulation Mechanism** via 
 
 ## 📦 Directory Streaming
 When a directory is provided as input, Maknoon streams it through an internal **TAR encoder** on-the-fly. This allows for seamless encryption of entire file structures into a single `.makn` file without creating temporary archives on disk.
+
+## 🛡 Global Identity & Recovery (v1.5)
+The architecture includes a decentralized discovery and recovery layer:
+*   **dPKI Bridge**: An abstract registry interface that maps human-readable handles (`@name`) to PQC public keys. It enforces local **Petname** overrides for zero-server trust.
+*   **Self-Signed Records**: All identity records are signed using **ML-DSA-87**, providing cryptographic proof of ownership that persists even on untrusted discovery layers (like Nostr or IPFS).
+*   **Shamir's Recovery**: High-value secrets are sharded using SSS over $GF(2^8)$. Shards are encoded as **BIP-39 mnemonics**, enabling offline "Break Glass" recovery of identities and vaults.
