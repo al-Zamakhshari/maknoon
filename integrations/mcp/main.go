@@ -628,9 +628,7 @@ func vaultRecoverHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp
 	passphrase := request.GetString("passphrase", "")
 
 	args := []string{"vault", "recover"}
-	for _, s := range shards {
-		args = append(args, s)
-	}
+	args = append(args, shards...)
 	args = append(args, "--vault", vault, "--json")
 	if output != "" {
 		args = append(args, "--output", output)
@@ -657,9 +655,7 @@ func identityCombineHandler(ctx context.Context, request mcp.CallToolRequest) (*
 	noPassword := request.GetBool("no_password", false)
 
 	args := []string{"identity", "combine"}
-	for _, s := range shards {
-		args = append(args, s)
-	}
+	args = append(args, shards...)
 	args = append(args, "--output", output, "--json")
 	if noPassword {
 		args = append(args, "--no-password")
