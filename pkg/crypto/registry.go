@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"go.etcd.io/bbolt"
@@ -62,6 +63,40 @@ type IdentityRegistry interface {
 
 	// Revoke marks an identity as compromised or inactive.
 	Revoke(ctx context.Context, handle string, proof []byte) error
+}
+
+// MockRegistry is a memory-based implementation for development and CI.
+type MockRegistry struct {
+	records map[string]*IdentityRecord
+	mu      sync.RWMutex
+}
+
+func NewMockRegistry() *MockRegistry {
+	return &MockRegistry{records: make(map[string]*IdentityRecord)}
+}
+
+func (r *MockRegistry) Resolve(_ context.Context, handle string) (*IdentityRecord, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	record, ok := r.records[strings.ToLower(handle)]
+	if !ok {
+		return nil, fmt.Errorf("handle '%s' not found", handle)
+	}
+	return record, nil
+}
+
+func (r *MockRegistry) Publish(_ context.Context, record *IdentityRecord) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.records[strings.ToLower(record.Handle)] = record
+	return nil
+}
+
+func (r *MockRegistry) Revoke(_ context.Context, handle string, _ []byte) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	delete(r.records, strings.ToLower(handle))
+	return nil
 }
 
 // BoltRegistry is a persistent, bbolt-based implementation simulating a blockchain ledger.
@@ -165,10 +200,14 @@ func (r *BoltRegistry) Revoke(_ context.Context, handle string, proof []byte) er
 var GlobalRegistry IdentityRegistry
 
 func init() {
-	// Attempt to initialize the Bolt registry.
-	// If it fails (e.g. permission issues in restricted environments), we could fallback.
+	// 1. Attempt to initialize the Bolt registry.
 	reg, err := NewBoltRegistry()
 	if err == nil {
 		GlobalRegistry = reg
+		return
 	}
+
+	// 2. Fallback to MockRegistry (memory-only) for CI/Restricted environments.
+	GlobalRegistry = NewMockRegistry()
 }
+
