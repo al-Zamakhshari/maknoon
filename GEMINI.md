@@ -60,6 +60,7 @@ Maknoon MUST remain self-describing for autonomous agents.
 - **The `schema` Command**: Every new CLI command or flag MUST be automatically discoverable via `maknoon schema`. 
 - **Metadata Requirement**: All commands MUST provide a concise `Short` description and a well-formed `Use` string (e.g., `command [optional] <required>`). 
 - **Verification**: Changes to the CLI tree MUST be verified by running `go test ./cmd/maknoon/commands/schema_test.go`.
+- **Documentation Sync**: Any change to `cmd/` or `pkg/` that alters user-facing behavior MUST be accompanied by an update to `README.md` or `wiki/`. The pre-commit hook enforces this heuristic.
 
 ## 🛠 Building and Running
 

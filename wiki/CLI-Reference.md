@@ -94,9 +94,11 @@ Recovers vault contents using reconstructed access material.
 ## System Utilities
 
 ### `maknoon config [subcommand]`
-Manages global Maknoon settings (relays, gateways, default identity).
+Manages global Maknoon settings (relays, default identity).
 -   `list`: View active settings.
 -   `set [key] [value]`: Update a specific setting.
+    -   `default_identity`: Name of the default identity.
+    -   `nostr.relays`: Comma-separated Nostr relays.
 -   `init`: Initialize default config file.
 
 ### `maknoon schema`

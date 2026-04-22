@@ -15,17 +15,11 @@ const (
 type Config struct {
 	DefaultIdentity string      `json:"default_identity"`
 	Nostr           NostrConfig `json:"nostr"`
-	IPFS            IPFSConfig  `json:"ipfs"`
 }
 
 type NostrConfig struct {
 	Relays          []string `json:"relays"`
 	BootstrapRelays []string `json:"bootstrap_relays"`
-}
-
-type IPFSConfig struct {
-	Gateway string `json:"gateway"`
-	Api     string `json:"api"`
 }
 
 var (
@@ -47,10 +41,6 @@ func DefaultConfig() *Config {
 				"wss://relay.damus.io",
 				"wss://nos.lol",
 			},
-		},
-		IPFS: IPFSConfig{
-			Gateway: "https://ipfs.io",
-			Api:     "http://127.0.0.1:5001",
 		},
 	}
 }

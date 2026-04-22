@@ -36,9 +36,6 @@ func configListCmd() *cobra.Command {
 				fmt.Printf("  Default Identity: %s\n", conf.DefaultIdentity)
 				fmt.Println("  Nostr:")
 				fmt.Printf("    Relays: %s\n", strings.Join(conf.Nostr.Relays, ", "))
-				fmt.Println("  IPFS:")
-				fmt.Printf("    Gateway: %s\n", conf.IPFS.Gateway)
-				fmt.Printf("    API:     %s\n", conf.IPFS.Api)
 			}
 		},
 	}
@@ -51,9 +48,7 @@ func configSetCmd() *cobra.Command {
 		Long: `Update a configuration setting.
 Keys:
   default_identity   - The name of the default identity to use
-  nostr.relays       - Comma-separated list of Nostr relays
-  ipfs.gateway       - IPFS gateway URL
-  ipfs.api           - IPFS API URL`,
+  nostr.relays       - Comma-separated list of Nostr relays`,
 		Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			checkJSONMode(cmd)
@@ -69,10 +64,6 @@ Keys:
 				for i := range conf.Nostr.Relays {
 					conf.Nostr.Relays[i] = strings.TrimSpace(conf.Nostr.Relays[i])
 				}
-			case "ipfs.gateway":
-				conf.IPFS.Gateway = val
-			case "ipfs.api":
-				conf.IPFS.Api = val
 			default:
 				return fmt.Errorf("unknown configuration key: %s", key)
 			}
