@@ -13,13 +13,34 @@ const (
 
 // Config represents the global settings for Maknoon.
 type Config struct {
-	DefaultIdentity string      `json:"default_identity"`
-	Nostr           NostrConfig `json:"nostr"`
+	DefaultIdentity string            `json:"default_identity"`
+	Security        SecurityConfig    `json:"security"`
+	Performance     PerformanceConfig `json:"performance"`
+	Nostr           NostrConfig       `json:"nostr"`
+	Paths           PathConfig        `json:"paths"`
+}
+
+type SecurityConfig struct {
+	ArgonTime    uint32 `json:"argon_time"`
+	ArgonMemory  uint32 `json:"argon_memory"`
+	ArgonThreads uint8  `json:"argon_threads"`
+}
+
+type PerformanceConfig struct {
+	Concurrency      int  `json:"concurrency"`
+	CompressionLevel int  `json:"compression_level"`
+	DefaultStealth   bool `json:"default_stealth"`
 }
 
 type NostrConfig struct {
 	Relays          []string `json:"relays"`
 	BootstrapRelays []string `json:"bootstrap_relays"`
+	PublishMetadata bool     `json:"publish_metadata"` // Toggle the "Maknoon Enabled" about note
+}
+
+type PathConfig struct {
+	KeysDir   string `json:"keys_dir"`
+	VaultsDir string `json:"vaults_dir"`
 }
 
 var (
@@ -29,8 +50,19 @@ var (
 
 // DefaultConfig returns the standard fallback settings.
 func DefaultConfig() *Config {
+	home, _ := os.UserHomeDir()
 	return &Config{
 		DefaultIdentity: "default",
+		Security: SecurityConfig{
+			ArgonTime:    3,
+			ArgonMemory:  64 * 1024, // 64MB
+			ArgonThreads: 4,
+		},
+		Performance: PerformanceConfig{
+			Concurrency:      0, // Auto
+			CompressionLevel: 3, // Zstd default
+			DefaultStealth:   false,
+		},
 		Nostr: NostrConfig{
 			Relays: []string{
 				"wss://relay.damus.io",
@@ -41,6 +73,11 @@ func DefaultConfig() *Config {
 				"wss://relay.damus.io",
 				"wss://nos.lol",
 			},
+			PublishMetadata: true,
+		},
+		Paths: PathConfig{
+			KeysDir:   filepath.Join(home, MaknoonDir, KeysDir),
+			VaultsDir: filepath.Join(home, MaknoonDir, VaultsDir),
 		},
 	}
 }

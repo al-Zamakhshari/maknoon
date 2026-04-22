@@ -147,6 +147,9 @@ maknoon config list
 
 # Customize Nostr relays
 maknoon config set nostr.relays "wss://my-relay.com,wss://nos.lol"
+
+# Harden Argon2id security
+maknoon config set security.memory 131072 # 128MB
 ```
 
 ## 🤖 Agentic AI Integration

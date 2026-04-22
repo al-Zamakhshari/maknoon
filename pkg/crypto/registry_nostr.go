@@ -148,16 +148,17 @@ func (r *NostrRegistry) PublishWithKey(ctx context.Context, record *IdentityReco
 	}
 	metadata["maknoon"] = recordStr[dataIdx+5:]
 
-	// Add a note about Maknoon in the about section if it doesn't mention it
-	about, _ := metadata["about"].(string)
-	if !strings.Contains(strings.ToLower(about), "maknoon") {
-		if about != "" {
-			about += "\n"
+	// Optional: Add a note about Maknoon in the about section
+	if GetGlobalConfig().Nostr.PublishMetadata {
+		about, _ := metadata["about"].(string)
+		if !strings.Contains(strings.ToLower(about), "maknoon") {
+			if about != "" {
+				about += "\n"
+			}
+			about += "PQC Encryption Enabled (Maknoon)"
+			metadata["about"] = about
 		}
-		about += "PQC Encryption Enabled (Maknoon)"
-		metadata["about"] = about
 	}
-
 	content, _ := json.Marshal(metadata)
 
 	// 3. Create and sign Nostr event

@@ -94,11 +94,19 @@ Recovers vault contents using reconstructed access material.
 ## System Utilities
 
 ### `maknoon config [subcommand]`
-Manages global Maknoon settings (relays, default identity).
+Manages global Maknoon settings (relays, security, performance).
 -   `list`: View active settings.
 -   `set [key] [value]`: Update a specific setting.
-    -   `default_identity`: Name of the default identity.
+    -   `default_identity`: Default identity name.
+    -   `security.time`: Argon2id iterations.
+    -   `security.memory`: Argon2id memory (KB).
+    -   `security.threads`: Argon2id threads.
+    -   `perf.concurrency`: Default parallel workers.
+    -   `perf.stealth`: Default stealth mode.
     -   `nostr.relays`: Comma-separated Nostr relays.
+    -   `nostr.metadata`: Toggle "Maknoon Enabled" note.
+    -   `paths.keys`: Custom keys directory.
+    -   `paths.vaults`: Custom vaults directory.
 -   `init`: Initialize default config file.
 
 ### `maknoon schema`
