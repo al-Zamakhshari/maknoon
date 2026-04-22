@@ -16,11 +16,12 @@ const (
 
 // Config represents the global settings for Maknoon.
 type Config struct {
-	DefaultIdentity string            `json:"default_identity"`
-	Security        SecurityConfig    `json:"security"`
-	Performance     PerformanceConfig `json:"performance"`
-	Nostr           NostrConfig       `json:"nostr"`
-	Paths           PathConfig        `json:"paths"`
+	DefaultIdentity string                     `json:"default_identity"`
+	Security        SecurityConfig             `json:"security"`
+	Performance     PerformanceConfig          `json:"performance"`
+	Nostr           NostrConfig                `json:"nostr"`
+	Paths           PathConfig                 `json:"paths"`
+	Profiles        map[string]*DynamicProfile `json:"profiles,omitempty"`
 }
 
 type SecurityConfig struct {
@@ -82,6 +83,7 @@ func DefaultConfig() *Config {
 			KeysDir:   filepath.Join(home, MaknoonDir, KeysDir),
 			VaultsDir: filepath.Join(home, MaknoonDir, VaultsDir),
 		},
+		Profiles: make(map[string]*DynamicProfile),
 	}
 }
 
@@ -140,6 +142,11 @@ func LoadConfig() (*Config, error) {
 	// Validate the loaded config
 	if err := conf.Validate(); err != nil {
 		return nil, fmt.Errorf("config validation failed: %w", err)
+	}
+
+	// Register custom profiles
+	for _, dp := range conf.Profiles {
+		RegisterProfile(dp)
 	}
 
 	globalConfig = conf

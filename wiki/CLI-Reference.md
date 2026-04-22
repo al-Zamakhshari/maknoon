@@ -111,5 +111,11 @@ Manages global Maknoon settings (relays, security, performance).
     -   `paths.vaults`: Custom vaults directory.
 -   `init`: Initialize default config file.
 
+### `maknoon profiles [subcommand]`
+Manages custom cryptographic profiles (cipher, KDF, salt parameters).
+-   `list`: View built-in and custom profiles with detailed parameters.
+-   `gen [name]`: Generates a random, validated, and smoke-tested profile and saves it to the global config.
+-   `rm [name]`: Removes a custom profile from the configuration.
+
 ### `maknoon schema`
 Outputs a recursive JSON-Schema of every command and flag. Designed for autonomous AI agents to dynamically discover Maknoon's capabilities.

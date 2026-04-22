@@ -68,14 +68,19 @@ func resolveProfile(p string) (byte, error) {
 		return 2, nil
 	case "3", "conservative", "hardened":
 		return 3, nil
-	default:
-		// Attempt to parse as direct ID
-		var id byte
-		if _, err := fmt.Sscanf(p, "%d", &id); err == nil {
-			return id, nil
-		}
-		return 0, fmt.Errorf("unknown profile: %s (supported: nist, aes, conservative)", p)
 	}
+
+	// Check config for custom profile name
+	if dp, ok := crypto.GetGlobalConfig().Profiles[p]; ok {
+		return dp.ID(), nil
+	}
+
+	// Attempt to parse as direct ID
+	var id byte
+	if _, err := fmt.Sscanf(p, "%d", &id); err == nil {
+		return id, nil
+	}
+	return 0, fmt.Errorf("unknown profile: %s (supported: nist, aes, conservative, or custom name in config)", p)
 }
 
 // validatePath ensures a path is safe to use.

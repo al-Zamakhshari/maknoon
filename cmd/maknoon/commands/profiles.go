@@ -1,112 +1,245 @@
 package commands
 
 import (
-	"crypto/rand"
-	"encoding/json"
+	"bytes"
 	"fmt"
-	"math/big"
-	"os"
+	"sort"
 
 	"github.com/al-Zamakhshari/maknoon/pkg/crypto"
 	"github.com/spf13/cobra"
 )
 
-// ProfilesCmd returns the cobra command for listing or generating cryptographic profiles.
+// ProfilesCmd returns the cobra command for managing cryptographic profiles.
 func ProfilesCmd() *cobra.Command {
-	var generate bool
-	var secret bool
-	var output string
-
 	cmd := &cobra.Command{
 		Use:   "profiles",
-		Short: "List built-in profiles or generate a random custom profile",
-		RunE: func(_ *cobra.Command, _ []string) error {
-			if generate {
-				var id byte
-				if secret {
-					// Secret ID between 3 and 127
-					r, _ := rand.Int(rand.Reader, big.NewInt(125))
-					id = 3 + byte(r.Uint64())
-				} else {
-					// Portable ID between 128 and 255
-					r, _ := rand.Int(rand.Reader, big.NewInt(128))
-					id = 128 + byte(r.Uint64())
-				}
-
-				dp := crypto.GenerateRandomProfile(id)
-				raw, _ := json.MarshalIndent(dp, "", "  ")
-
-				if output != "" {
-					if err := validatePath(output); err != nil {
-						return err
-					}
-					if _, err := os.Stat(output); err == nil {
-						err := fmt.Errorf("output file already exists: %s (delete it first or use a different name)", output)
-						if JSONOutput {
-							printErrorJSON(err)
-							return err
-						}
-						return err
-					}
-					return os.WriteFile(output, raw, 0644)
-				}
-
-				if JSONOutput {
-					printJSON(dp)
-				} else {
-					fmt.Println(string(raw))
-				}
-				return nil
-			}
-
-			if JSONOutput {
-				type profileInfo struct {
-					ID          byte   `json:"id"`
-					Description string `json:"description"`
-				}
-				list := []profileInfo{
-					{ID: 1, Description: "NIST PQC (Kyber1024 + Dilithium87) + XChaCha20-Poly1305 (Default)"},
-					{ID: 2, Description: "NIST PQC (Kyber1024 + Dilithium87) + AES-256-GCM"},
-				}
-				printJSON(list)
-				return nil
-			}
-
-			fmt.Println("🛡️  Maknoon Cryptographic Profiles")
-			fmt.Println("\nBuilt-in Profiles:")
-			fmt.Println("  ID 1: NIST PQC (Kyber1024 + Dilithium87) + XChaCha20-Poly1305 (Default)")
-			fmt.Println("  ID 2: NIST PQC (Kyber1024 + Dilithium87) + AES-256-GCM")
-
-			fmt.Println("\n🛠️  Custom Profile Construction (JSON Schema)")
-			fmt.Println("  {")
-			fmt.Println("    \"id\": 3-255,")
-			fmt.Println("    \"cipher\": <0, 1, or 2>,")
-			fmt.Println("    \"kdf\": 0,")
-			fmt.Println("    \"kdf_iterations\": <min 1>,")
-			fmt.Println("    \"kdf_memory\": <min 1024 KB>,")
-			fmt.Println("    \"kdf_threads\": <1-N>,")
-			fmt.Println("    \"salt_size\": <min 8>,")
-			fmt.Println("    \"nonce_size\": <required by cipher>")
-			fmt.Println("  }")
-
-			fmt.Println("\nAvailable Algorithms:")
-			fmt.Println("  Ciphers:")
-			fmt.Printf("    %d: XChaCha20-Poly1305 (nonce_size: 24)\n", crypto.AlgoXChaCha20Poly1305)
-			fmt.Printf("    %d: AES-256-GCM         (nonce_size: 12)\n", crypto.AlgoAES256GCM)
-			fmt.Printf("    %d: AES-256-GCM-SIV     (nonce_size: 12)\n", crypto.AlgoAES256GCMSIV)
-			fmt.Println("  KDFs:")
-			fmt.Printf("    %d: Argon2id\n", crypto.KdfArgon2id)
-
-			fmt.Println("\nStorage Modes:")
-			fmt.Println("  IDs 3-127:   'Secret' mode (profile file required for decryption)")
-			fmt.Println("  IDs 128-255: 'Portable' mode (profile parameters stored in file header)")
-			fmt.Println("\nUse --generate to create a random custom profile.")
-			return nil
+		Short: "Manage and list cryptographic profiles",
+		Run: func(cmd *cobra.Command, args []string) {
+			// Default behavior: list built-in and custom profiles
+			printProfiles()
 		},
 	}
 
-	cmd.Flags().BoolVarP(&generate, "generate", "g", false, "Generate a random secure custom profile JSON")
-	cmd.Flags().BoolVar(&secret, "secret", false, "Generate a 'Secret' profile (ID < 128) instead of a 'Portable' one")
-	cmd.Flags().StringVarP(&output, "output", "o", "", "Write the generated profile to a file")
+	cmd.AddCommand(profilesListCmd())
+	cmd.AddCommand(profilesGenCmd())
+	cmd.AddCommand(profilesRmCmd())
+
 	return cmd
+}
+
+func printProfiles() {
+	fmt.Println("🛡️  Maknoon Cryptographic Profiles")
+	fmt.Println("\nBuilt-in Profiles:")
+	fmt.Println("  nist (1):         NIST PQC (Kyber1024 + Dilithium87) + XChaCha20-Poly1305 (Default)")
+	fmt.Println("  aes (2):          NIST PQC (Kyber1024 + Dilithium87) + AES-256-GCM")
+	fmt.Println("  conservative (3): FrodoKEM-640 + SLH-DSA-SHA2-128s (Non-Lattice)")
+
+	conf := crypto.GetGlobalConfig()
+	if len(conf.Profiles) > 0 {
+		fmt.Println("\nCustom Profiles (Stored in Config):")
+		var names []string
+		for name := range conf.Profiles {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+
+		for _, name := range names {
+			p := conf.Profiles[name]
+			cipherName := "XChaCha20"
+			if p.CipherType == crypto.AlgoAES256GCM {
+				cipherName = "AES-GCM"
+			} else if p.CipherType == crypto.AlgoAES256GCMSIV {
+				cipherName = "AES-GCM-SIV"
+			}
+			fmt.Printf("  %-15s (%d): %s + Argon2id\n", name, p.CustomID, cipherName)
+		}
+	}
+
+	fmt.Println("\nUse 'maknoon profiles gen <name>' to create a new random, validated profile.")
+}
+
+func profilesListCmd() *cobra.Command {
+	var verbose bool
+	cmd := &cobra.Command{
+		Use:   "list",
+		Short: "List all available profiles with detailed parameters",
+		Run: func(_ *cobra.Command, _ []string) {
+			conf := crypto.GetGlobalConfig()
+
+			if JSONOutput {
+				type profileInfo struct {
+					Name        string                 `json:"name"`
+					ID          byte                   `json:"id"`
+					Description string                 `json:"description,omitempty"`
+					Details     *crypto.DynamicProfile `json:"details,omitempty"`
+				}
+				var list []profileInfo
+				list = append(list, profileInfo{Name: "nist", ID: 1, Description: "NIST PQC (Lattice-based)"})
+				list = append(list, profileInfo{Name: "aes", ID: 2, Description: "NIST PQC + AES-GCM"})
+				list = append(list, profileInfo{Name: "conservative", ID: 3, Description: "Non-Lattice PQC"})
+
+				for name, p := range conf.Profiles {
+					list = append(list, profileInfo{Name: name, ID: p.CustomID, Details: p})
+				}
+				printJSON(list)
+				return
+			}
+
+			fmt.Printf("%-20s %-5s %-15s %-30s\n", "NAME", "ID", "CIPHER", "KDF SETTINGS")
+			fmt.Println("------------------------------------------------------------------------------------------")
+			fmt.Printf("%-20s %-5d %-15s %-30s\n", "nist", 1, "XChaCha20", "Argon2id (Default)")
+			fmt.Printf("%-20s %-5d %-15s %-30s\n", "aes", 2, "AES-GCM", "Argon2id (Default)")
+			fmt.Printf("%-20s %-5d %-15s %-30s\n", "conservative", 3, "XChaCha20", "Argon2id (Default)")
+
+			var names []string
+			for name := range conf.Profiles {
+				names = append(names, name)
+			}
+			sort.Strings(names)
+
+			for _, name := range names {
+				p := conf.Profiles[name]
+				cipherName := "XChaCha20"
+				if p.CipherType == crypto.AlgoAES256GCM {
+					cipherName = "AES-GCM"
+				} else if p.CipherType == crypto.AlgoAES256GCMSIV {
+					cipherName = "AES-GCM-SIV"
+				}
+
+				kdfStr := fmt.Sprintf("Argon2id (t=%d, m=%dKB, p=%d)", p.ArgonTime, p.ArgonMem, p.ArgonThrd)
+				fmt.Printf("%-20s %-5d %-15s %-30s\n", name, p.CustomID, cipherName, kdfStr)
+			}
+		},
+	}
+	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "Show detailed parameters")
+	return cmd
+}
+
+func profilesGenCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "gen <name>",
+		Short: "Generate a new random, validated profile and save it to config",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			name := args[0]
+			conf := crypto.GetGlobalConfig()
+
+			// Check for reserved names
+			reserved := map[string]bool{"nist": true, "aes": true, "conservative": true, "pq": true, "legacy": true, "hardened": true}
+			if reserved[name] {
+				return fmt.Errorf("name '%s' is reserved", name)
+			}
+
+			if _, exists := conf.Profiles[name]; exists {
+				return fmt.Errorf("profile '%s' already exists", name)
+			}
+
+			// Find next available ID (4-127)
+			usedIDs := make(map[byte]bool)
+			usedIDs[1] = true
+			usedIDs[2] = true
+			usedIDs[3] = true
+			for _, p := range conf.Profiles {
+				usedIDs[p.CustomID] = true
+			}
+
+			var nextID byte = 0
+			for i := byte(4); i < 128; i++ {
+				if !usedIDs[i] {
+					nextID = i
+					break
+				}
+			}
+
+			if nextID == 0 {
+				return fmt.Errorf("no available profile IDs (4-127 reached limit)")
+			}
+
+			// Generate random profile
+			dp := crypto.GenerateRandomProfile(nextID)
+
+			// 1. Static Validation
+			if err := dp.Validate(); err != nil {
+				return fmt.Errorf("generated invalid profile: %w", err)
+			}
+
+			// 2. Runtime Smoke Test (Ultimate Validation)
+			if err := verifyProfile(dp); err != nil {
+				return fmt.Errorf("profile failed functional smoke test (impossible combination): %w", err)
+			}
+
+			// Save to config
+			if conf.Profiles == nil {
+				conf.Profiles = make(map[string]*crypto.DynamicProfile)
+			}
+			conf.Profiles[name] = dp
+			if err := conf.Save(); err != nil {
+				return fmt.Errorf("failed to save config: %w", err)
+			}
+
+			if JSONOutput {
+				printJSON(dp)
+			} else {
+				fmt.Printf("Successfully generated and saved profile '%s' (ID: %d)\n", name, nextID)
+				fmt.Println("Review the parameters in ~/.maknoon/config.json or using 'maknoon profiles list'.")
+			}
+			return nil
+		},
+	}
+}
+
+func profilesRmCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "rm <name>",
+		Short: "Remove a custom profile from config",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			name := args[0]
+			conf := crypto.GetGlobalConfig()
+
+			if _, exists := conf.Profiles[name]; !exists {
+				return fmt.Errorf("profile '%s' not found", name)
+			}
+
+			delete(conf.Profiles, name)
+			if err := conf.Save(); err != nil {
+				return fmt.Errorf("failed to save config: %w", err)
+			}
+
+			if JSONOutput {
+				printJSON(map[string]string{"status": "success", "removed": name})
+			} else {
+				fmt.Printf("Successfully removed profile '%s' from config.\n", name)
+			}
+			return nil
+		},
+	}
+}
+
+// verifyProfile performs an end-to-end encryption/decryption round-trip to ensure the profile is functional.
+func verifyProfile(p *crypto.DynamicProfile) error {
+	// Temporarily register the profile so the crypto engine can find it
+	crypto.RegisterProfile(p)
+
+	canary := []byte("ultimate-validation-canary-data")
+	passphrase := []byte("smoke-test-pass")
+
+	// 1. Encrypt
+	var encrypted bytes.Buffer
+	if err := crypto.EncryptStream(bytes.NewReader(canary), &encrypted, passphrase, crypto.FlagNone, 1, p.ID()); err != nil {
+		return fmt.Errorf("encryption failed: %w", err)
+	}
+
+	// 2. Decrypt
+	var decrypted bytes.Buffer
+	if _, _, err := crypto.DecryptStream(bytes.NewReader(encrypted.Bytes()), &decrypted, passphrase, 1, false); err != nil {
+		return fmt.Errorf("decryption failed: %w", err)
+	}
+
+	// 3. Verify
+	if !bytes.Equal(canary, decrypted.Bytes()) {
+		return fmt.Errorf("data corruption detected during smoke test")
+	}
+
+	return nil
 }
