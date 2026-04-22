@@ -34,25 +34,31 @@ func IdentityCmd() *cobra.Command {
 
 func identityPublishCmd() *cobra.Command {
 	var passphrase string
+	var identityName string
+	var useDNS bool
+	var useDesec bool
+	var useNostr bool
+	var useLocal bool
+	var desecToken string
+
 	cmd := &cobra.Command{
 		Use:   "publish [handle]",
-		Short: "Anchor your active identity to the global registry (dPKI)",
+		Short: "Anchor your active identity to a global registry (Nostr/DNS/dPKI)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			checkJSONMode(cmd)
 			handle := args[0]
 			if !strings.HasPrefix(handle, "@") {
-				return fmt.Errorf("handle must start with @ (e.g., @alice)")
+				return fmt.Errorf("handle must start with @ (e.g., @alice.com or @nostr:<pubkey>)")
 			}
 
 			// 1. Get active identity
-			name := "default" // Simplified for POC
-
-			m := crypto.NewIdentityManager()
-			if _, _, err := m.ResolveBaseKeyPath(name); err != nil {
-				return err
+			name := "default"
+			if identityName != "" {
+				name = identityName
 			}
 
+			m := crypto.NewIdentityManager()
 			id, err := m.LoadIdentity(name, []byte(passphrase), false)
 			if err != nil {
 				return err
@@ -71,7 +77,102 @@ func identityPublishCmd() *cobra.Command {
 				return fmt.Errorf("failed to sign identity record: %w", err)
 			}
 
-			// 4. Publish to Registry
+			domain := strings.TrimPrefix(handle, "@")
+
+			// 4. Handle Local publishing
+			if useLocal {
+				if err := crypto.GlobalRegistry.Publish(context.Background(), record); err != nil {
+					return err
+				}
+
+				if JSONOutput {
+					printJSON(crypto.IdentityResult{
+						Status:   "success",
+						Handle:   handle,
+						Registry: "bolt",
+					})
+				} else {
+					fmt.Printf("🚀 Identity published to Local Registry as %s\n", handle)
+				}
+				return nil
+			}
+
+			// 5. Handle Nostr publishing (Default)
+			if useNostr || (!useDNS && !useDesec) {
+				nostrReg := crypto.NewNostrRegistry()
+				if len(id.NostrPriv) == 0 {
+					return fmt.Errorf("nostr private key not found in identity")
+				}
+				if err := nostrReg.PublishWithKey(context.Background(), record, id.NostrPriv); err != nil {
+					return fmt.Errorf("nostr publishing failed: %w", err)
+				}
+
+				pubHex := string(id.NostrPub)
+				if JSONOutput {
+					printJSON(map[string]string{
+						"status":   "success",
+						"registry": "nostr",
+						"handle":   "@nostr:" + pubHex,
+					})
+				} else {
+					fmt.Printf("🚀 Identity successfully published to Nostr relays!\n")
+					fmt.Printf("Your Nostr handle is: @nostr:%s\n", pubHex)
+				}
+				return nil
+			}
+
+			// 6. Handle deSEC automation
+			if useDesec {
+				token := desecToken
+				if token == "" {
+					token = os.Getenv("DESEC_TOKEN")
+				}
+				if token == "" {
+					return fmt.Errorf("deSEC token is required (use --desec-token or DESEC_TOKEN env)")
+				}
+
+				dnsReg := crypto.NewDNSRegistry()
+				if err := dnsReg.PublishToDesec(context.Background(), domain, token, record); err != nil {
+					return fmt.Errorf("deSEC publishing failed: %w", err)
+				}
+
+				if JSONOutput {
+					printJSON(map[string]string{
+						"status":   "success",
+						"registry": "desec",
+						"domain":   domain,
+					})
+				} else {
+					fmt.Printf("🚀 Identity successfully published to deSEC.io for %s\n", handle)
+				}
+				return nil
+			}
+
+			// 6. Handle DNS mode (Manual)
+			if useDNS {
+				txt, err := crypto.GetDNSRecordString(record)
+				if err != nil {
+					return err
+				}
+
+				if JSONOutput {
+					printJSON(map[string]string{
+						"status":   "success",
+						"registry": "dns",
+						"hostname": "_maknoon." + domain,
+						"record":   txt,
+					})
+				} else {
+					fmt.Printf("🛡️  DNS Discovery Record for %s:\n\n", handle)
+					fmt.Printf("Hostname: _maknoon.%s\n", domain)
+					fmt.Printf("Type:     TXT\n")
+					fmt.Printf("Value:    %s\n\n", txt)
+					fmt.Println("Note: You must manually add this record to your DNS provider.")
+				}
+				return nil
+			}
+
+			// 7. Publish to local Bolt Registry (POC)
 			if err := crypto.GlobalRegistry.Publish(context.Background(), record); err != nil {
 				return err
 			}
@@ -83,7 +184,7 @@ func identityPublishCmd() *cobra.Command {
 					Registry: "bolt",
 				})
 			} else {
-				fmt.Printf("🚀 Identity published to Global Registry as %s\n", handle)
+				fmt.Printf("🚀 Identity published to Local Registry as %s\n", handle)
 				fmt.Println("Note: This is currently using a local persistent bbolt database.")
 			}
 
@@ -91,6 +192,12 @@ func identityPublishCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVarP(&passphrase, "passphrase", "s", "", "Passphrase to unlock your signing key")
+	cmd.Flags().StringVarP(&identityName, "name", "i", "", "Name of the local identity to publish")
+	cmd.Flags().BoolVar(&useDNS, "dns", false, "Generate a DNS TXT record for decentralized discovery")
+	cmd.Flags().BoolVar(&useDesec, "desec", false, "Automatically publish to deSEC.io (requires --desec-token or DESEC_TOKEN)")
+	cmd.Flags().BoolVar(&useNostr, "nostr", false, "Automatically publish to Nostr relays (Default)")
+	cmd.Flags().BoolVar(&useLocal, "local", false, "Publish to local persistent registry only")
+	cmd.Flags().StringVar(&desecToken, "desec-token", "", "deSEC.io API token")
 	return cmd
 }
 
@@ -112,12 +219,20 @@ func identitySplitCmd() *cobra.Command {
 			}
 			defer id.Wipe()
 
-			// Combine keys into a single blob: [len_kem_4_bytes][kem_priv][len_sig_4_bytes][sig_priv]
-			blob := make([]byte, 8+len(id.KEMPriv)+len(id.SIGPriv))
-			binary.BigEndian.PutUint32(blob[0:4], uint32(len(id.KEMPriv)))
-			copy(blob[4:4+len(id.KEMPriv)], id.KEMPriv)
-			binary.BigEndian.PutUint32(blob[4+len(id.KEMPriv):8+len(id.KEMPriv)], uint32(len(id.SIGPriv)))
-			copy(blob[8+len(id.KEMPriv):], id.SIGPriv)
+			// Combine keys into a single blob: [len_kem_4][kem_priv][len_sig_4][sig_priv][len_nostr_4][nostr_priv]
+			blob := make([]byte, 12+len(id.KEMPriv)+len(id.SIGPriv)+len(id.NostrPriv))
+			offset := 0
+			binary.BigEndian.PutUint32(blob[offset:offset+4], uint32(len(id.KEMPriv)))
+			copy(blob[offset+4:offset+4+len(id.KEMPriv)], id.KEMPriv)
+			offset += 4 + len(id.KEMPriv)
+
+			binary.BigEndian.PutUint32(blob[offset:offset+4], uint32(len(id.SIGPriv)))
+			copy(blob[offset+4:offset+4+len(id.SIGPriv)], id.SIGPriv)
+			offset += 4 + len(id.SIGPriv)
+
+			binary.BigEndian.PutUint32(blob[offset:offset+4], uint32(len(id.NostrPriv)))
+			copy(blob[offset+4:], id.NostrPriv)
+
 			defer crypto.SafeClear(blob)
 
 			shards, err := crypto.SplitSecret(blob, threshold, shares)
@@ -189,16 +304,26 @@ func identityCombineCmd() *cobra.Command {
 			}
 
 			kemLen := binary.BigEndian.Uint32(blob[0:4])
-			if uint32(len(blob)) < 8+kemLen {
+			if uint32(len(blob)) < 4+kemLen {
 				return fmt.Errorf("reconstructed blob corrupted (invalid KEM length)")
 			}
 			kemPriv := blob[4 : 4+kemLen]
+			offset := 4 + kemLen
 
-			sigLen := binary.BigEndian.Uint32(blob[4+kemLen : 8+kemLen])
-			if uint32(len(blob)) != 8+kemLen+sigLen {
+			sigLen := binary.BigEndian.Uint32(blob[offset : offset+4])
+			if uint32(len(blob)) < offset+4+sigLen {
 				return fmt.Errorf("reconstructed blob corrupted (invalid SIG length)")
 			}
-			sigPriv := blob[8+kemLen:]
+			sigPriv := blob[offset+4 : offset+4+sigLen]
+			offset += 4 + sigLen
+
+			var nostrPriv []byte
+			if uint32(len(blob)) >= offset+4 {
+				nostrLen := binary.BigEndian.Uint32(blob[offset : offset+4])
+				if uint32(len(blob)) == offset+4+nostrLen {
+					nostrPriv = blob[offset+4:]
+				}
+			}
 
 			// Derive public keys from private keys.
 			kemPub, err := crypto.DeriveKEMPublic(kemPriv)
@@ -208,6 +333,10 @@ func identityCombineCmd() *cobra.Command {
 			sigPub, err := crypto.DeriveSIGPublic(sigPriv)
 			if err != nil {
 				return fmt.Errorf("failed to derive SIG public key: %w", err)
+			}
+			var nostrPub []byte
+			if len(nostrPriv) > 0 {
+				nostrPub, _ = crypto.DeriveNostrPublic(nostrPriv)
 			}
 
 			m := crypto.NewIdentityManager()
@@ -226,7 +355,7 @@ func identityCombineCmd() *cobra.Command {
 			}
 			defer crypto.SafeClear(pass)
 
-			if err := writeIdentityKeys(basePath, baseName, kemPub, kemPriv, sigPub, sigPriv, pass, 1); err != nil {
+			if err := writeIdentityKeys(basePath, baseName, kemPub, kemPriv, sigPub, sigPriv, nostrPub, nostrPriv, pass, 1); err != nil {
 				if JSONOutput {
 					printErrorJSON(err)
 					return nil

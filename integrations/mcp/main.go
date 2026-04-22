@@ -247,12 +247,18 @@ func createServer() *server.MCPServer {
 
 	// Tool: identity_publish
 	identityPublish := mcp.NewTool("identity_publish",
-		mcp.WithDescription("Anchor your active identity to the global registry (dPKI POC)"),
+		mcp.WithDescription("Anchor your active identity globally (Nostr/DNS) or locally"),
 	)
 	identityPublish.InputSchema = mcp.ToolInputSchema{
 		Type: "object",
 		Properties: map[string]interface{}{
-			"handle": map[string]interface{}{"type": "string", "description": "Global handle (e.g., @alice)"},
+			"handle":      map[string]interface{}{"type": "string", "description": "Global handle (e.g., @alice or @domain.com)"},
+			"name":        map[string]interface{}{"type": "string", "description": "Name of the local identity to publish"},
+			"nostr":       map[string]interface{}{"type": "boolean", "description": "Publish to Nostr relays (Default)"},
+			"dns":         map[string]interface{}{"type": "boolean", "description": "Generate DNS TXT record"},
+			"local":       map[string]interface{}{"type": "boolean", "description": "Publish to local registry only"},
+			"desec":       map[string]interface{}{"type": "boolean", "description": "Automatically publish to deSEC.io"},
+			"desec_token": map[string]interface{}{"type": "string", "description": "deSEC.io API token"},
 		},
 		Required: []string{"handle"},
 	}
@@ -677,8 +683,34 @@ func identityCombineHandler(ctx context.Context, request mcp.CallToolRequest) (*
 
 func identityPublishHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	handle := request.GetString("handle", "")
+	name := request.GetString("name", "")
+	nostr := request.GetBool("nostr", false)
+	dns := request.GetBool("dns", false)
+	local := request.GetBool("local", false)
+	desec := request.GetBool("desec", false)
+	desecToken := request.GetString("desec_token", "")
 
-	cmd := exec.CommandContext(ctx, getMaknoonBinary(), "identity", "publish", handle, "--json")
+	args := []string{"identity", "publish", handle, "--json"}
+	if name != "" {
+		args = append(args, "--name", name)
+	}
+	if nostr {
+		args = append(args, "--nostr")
+	}
+	if dns {
+		args = append(args, "--dns")
+	}
+	if local {
+		args = append(args, "--local")
+	}
+	if desec {
+		args = append(args, "--desec")
+	}
+	if desecToken != "" {
+		args = append(args, "--desec-token", desecToken)
+	}
+
+	cmd := exec.CommandContext(ctx, getMaknoonBinary(), args...)
 	cmd.Env = getMaknoonEnv()
 
 	out, err := cmd.CombinedOutput()

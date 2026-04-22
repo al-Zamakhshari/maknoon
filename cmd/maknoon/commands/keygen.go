@@ -83,14 +83,14 @@ func KeygenCmd() *cobra.Command {
 			}
 
 			if !JSONOutput && !quiet {
-				fmt.Println("Generating bleeding-edge Hybrid Post-Quantum identity (ML-KEM-768-X25519 + ML-DSA-87)...")
+				fmt.Println("Generating bleeding-edge Hybrid Post-Quantum identity (ML-KEM-768-X25519 + ML-DSA-87 + Nostr)...")
 			}
-			kemPub, kemPriv, sigPub, sigPriv, err := crypto.GeneratePQKeyPair()
+			kemPub, kemPriv, sigPub, sigPriv, nostrPub, nostrPriv, err := crypto.GeneratePQKeyPair()
 			if err != nil {
 				err := fmt.Errorf("failed to generate keypairs: %w", err)
 				if JSONOutput {
 					printErrorJSON(err)
-					return err
+					return nil
 				}
 				return err
 			}
@@ -98,6 +98,7 @@ func KeygenCmd() *cobra.Command {
 			defer func() {
 				crypto.SafeClear(kemPriv)
 				crypto.SafeClear(sigPriv)
+				crypto.SafeClear(nostrPriv)
 			}()
 
 			im := crypto.NewIdentityManager()
@@ -105,11 +106,11 @@ func KeygenCmd() *cobra.Command {
 			if err != nil {
 				if JSONOutput {
 					printErrorJSON(err)
-					return err
+					return nil
 				}
 				return err
 			}
-			if err := writeIdentityKeys(basePath, baseName, kemPub, kemPriv, sigPub, sigPriv, password, byte(profile)); err != nil {
+			if err := writeIdentityKeys(basePath, baseName, kemPub, kemPriv, sigPub, sigPriv, nostrPub, nostrPriv, password, byte(profile)); err != nil {
 				if JSONOutput {
 					printErrorJSON(err)
 					return err
@@ -141,6 +142,7 @@ func KeygenCmd() *cobra.Command {
 				fmt.Printf("Success! Identity generated in %s\n", filepath.Dir(basePath))
 				fmt.Printf("  - Encryption Keys: %s.kem.{key,pub}\n", baseName)
 				fmt.Printf("  - Signing Keys:    %s.sig.{key,pub}\n", baseName)
+				fmt.Printf("  - Nostr Keys:      %s.nostr.{key,pub}\n", baseName)
 			}
 
 			if JSONOutput {
@@ -214,8 +216,11 @@ func getInitialPassphrase(noPassword bool, manual string) ([]byte, error) {
 	return p, nil
 }
 
-func writeIdentityKeys(basePath, baseName string, kemPub, kemPriv, sigPub, sigPriv, password []byte, profileID byte) error {
+func writeIdentityKeys(basePath, baseName string, kemPub, kemPriv, sigPub, sigPriv, nostrPub, nostrPriv, password []byte, profileID byte) error {
 	writeKey := func(path string, data []byte, isPrivate bool) error {
+		if len(data) == 0 {
+			return nil
+		}
 		finalData := data
 		if isPrivate && len(password) > 0 {
 			var b bytes.Buffer
@@ -241,6 +246,12 @@ func writeIdentityKeys(basePath, baseName string, kemPub, kemPriv, sigPub, sigPr
 		return err
 	}
 	if err := writeKey(basePath+".sig.pub", sigPub, false); err != nil {
+		return err
+	}
+	if err := writeKey(basePath+".nostr.key", nostrPriv, true); err != nil {
+		return err
+	}
+	if err := writeKey(basePath+".nostr.pub", nostrPub, false); err != nil {
 		return err
 	}
 	return nil

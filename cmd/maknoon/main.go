@@ -86,9 +86,17 @@ func main() {
 	genCmd.GroupID = "utils"
 	rootCmd.AddCommand(genCmd)
 
+	configCmd := commands.ConfigCmd()
+	configCmd.GroupID = "utils"
+	rootCmd.AddCommand(configCmd)
+
 	profilesCmd := commands.ProfilesCmd()
 	profilesCmd.GroupID = "utils"
 	rootCmd.AddCommand(profilesCmd)
+
+	schemaCmd := commands.SchemaCmd()
+	schemaCmd.GroupID = "utils"
+	rootCmd.AddCommand(schemaCmd)
 
 	contactCmd := commands.ContactCmd()
 	contactCmd.GroupID = "identity"

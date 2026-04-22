@@ -2,6 +2,7 @@ package commands
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -98,7 +99,7 @@ func TestDPKIPocCLI(t *testing.T) {
 
 	// 2. Publish handle
 	pub := IdentityCmd()
-	pub.SetArgs([]string{"publish", "@tester"})
+	pub.SetArgs([]string{"publish", "@tester", "--local"})
 	var pubOut bytes.Buffer
 	GlobalContext.JSONWriter = &pubOut
 	SetJSONOutput(true)
@@ -107,8 +108,13 @@ func TestDPKIPocCLI(t *testing.T) {
 	}
 	SetJSONOutput(false)
 
-	if !strings.Contains(pubOut.String(), "@tester") {
-		t.Errorf("Expected @tester in publish output, got: %s", pubOut.String())
+	var pubResult map[string]string
+	if err := json.Unmarshal(pubOut.Bytes(), &pubResult); err != nil {
+		t.Fatalf("Failed to parse publish output: %v", err)
+	}
+	handle := pubResult["handle"]
+	if handle == "" {
+		t.Fatalf("No handle returned in publish output: %s", pubOut.String())
 	}
 
 	// 3. Encrypt using handle
@@ -116,7 +122,7 @@ func TestDPKIPocCLI(t *testing.T) {
 	os.WriteFile(inputFile, []byte("dpki test"), 0644)
 
 	enc := EncryptCmd()
-	enc.SetArgs([]string{inputFile, "-o", inputFile + ".makn", "-p", "@tester", "--quiet"})
+	enc.SetArgs([]string{inputFile, "-o", inputFile + ".makn", "-p", handle, "--quiet"})
 	if err := enc.Execute(); err != nil {
 		t.Fatalf("Encryption via handle failed: %v", err)
 	}

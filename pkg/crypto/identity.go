@@ -24,18 +24,21 @@ const (
 	ProfilesDir = "profiles"
 )
 
-// Identity represents a full PQC keypair (KEM + SIG).
+// Identity represents a full PQC keypair (KEM + SIG) + DHT metadata.
 type Identity struct {
-	Name    string
-	KEMPub  []byte
-	KEMPriv []byte
-	SIGPub  []byte
-	SIGPriv []byte
+	Name      string
+	KEMPub    []byte
+	KEMPriv   []byte
+	SIGPub    []byte
+	SIGPriv   []byte
+	NostrPub  []byte // Secp256k1 for Nostr
+	NostrPriv []byte
 }
 
 func (id *Identity) Wipe() {
 	SafeClear(id.KEMPriv)
 	SafeClear(id.SIGPriv)
+	SafeClear(id.NostrPriv)
 }
 
 // IdentityManager handles resolution and discovery of cryptographic identities.
@@ -95,7 +98,14 @@ func (m *IdentityManager) ResolveBaseKeyPath(output string) (string, string, err
 
 // LoadIdentity handles the full flow of resolving and unlocking an identity.
 func (m *IdentityManager) LoadIdentity(name string, passphrase []byte, isStdin bool) (*Identity, error) {
+	if name == "" {
+		name = GetGlobalConfig().DefaultIdentity
+	}
+	if name == "" {
+		name = "default"
+	}
 	basePath, _, err := m.ResolveBaseKeyPath(name)
+
 	if err != nil {
 		return nil, err
 	}
@@ -105,6 +115,7 @@ func (m *IdentityManager) LoadIdentity(name string, passphrase []byte, isStdin b
 	// Load Public Keys
 	id.KEMPub, _ = os.ReadFile(basePath + ".kem.pub")
 	id.SIGPub, _ = os.ReadFile(basePath + ".sig.pub")
+	id.NostrPub, _ = os.ReadFile(basePath + ".nostr.pub")
 
 	// Load and Unlock KEM Private Key
 	id.KEMPriv, err = m.LoadPrivateKey(basePath+".kem.key", passphrase, isStdin)
@@ -117,6 +128,12 @@ func (m *IdentityManager) LoadIdentity(name string, passphrase []byte, isStdin b
 	if err != nil {
 		id.Wipe()
 		return nil, fmt.Errorf("failed to load SIG key: %w", err)
+	}
+
+	// Load and Unlock Nostr Private Key (Optional)
+	nostrPath := basePath + ".nostr.key"
+	if _, err := os.Stat(nostrPath); err == nil {
+		id.NostrPriv, _ = m.LoadPrivateKey(nostrPath, passphrase, isStdin)
 	}
 
 	return id, nil
@@ -187,7 +204,7 @@ func (m *IdentityManager) UnlockPrivateKeyWithFIDOOrPass(password []byte, resolv
 // ResolvePublicKey handles handle resolution (@name) and local file paths.
 func (m *IdentityManager) ResolvePublicKey(input string) ([]byte, error) {
 	if strings.HasPrefix(input, "@") {
-		// 1. Check local contacts
+		// 1. Check local contacts (Petnames)
 		cm, err := NewContactManager()
 		if err == nil {
 			contact, err := cm.Get(input)
@@ -198,14 +215,32 @@ func (m *IdentityManager) ResolvePublicKey(input string) ([]byte, error) {
 			cm.Close()
 		}
 
-		// 2. Fallback to Global Registry
+		// 2. Fallback to Global Registry (Local Bolt Prototype)
 		if GlobalRegistry != nil {
 			record, err := GlobalRegistry.Resolve(context.Background(), input)
 			if err == nil {
 				return record.KEMPubKey, nil
 			}
 		}
-		return nil, fmt.Errorf("failed to resolve handle: %s", input)
+
+		// 3. Try Nostr if it's a nostr handle
+		if strings.HasPrefix(input, "@nostr:") || strings.HasPrefix(input, "npub1") {
+			nostrReg := NewNostrRegistry()
+			record, err := nostrReg.Resolve(context.Background(), input)
+			if err == nil {
+				return record.KEMPubKey, nil
+			}
+			return nil, fmt.Errorf("failed to resolve nostr handle: %w", err)
+		}
+
+		// 4. Last resort: Try DNS resolution directly
+		dnsReg := NewDNSRegistry()
+		record, err := dnsReg.Resolve(context.Background(), input)
+		if err == nil {
+			return record.KEMPubKey, nil
+		}
+
+		return nil, fmt.Errorf("failed to resolve handle: %s (tried local, registry, and dns)", input)
 	}
 
 	resolvedPath := m.ResolveKeyPath(input, "")

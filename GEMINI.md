@@ -8,7 +8,9 @@ Maknoon is a high-performance, post-quantum CLI encryption tool. It focuses on e
 - **`pkg/crypto/`**: Core library implementing the cryptographic pipeline, streaming logic, and FIDO2 integration.
 - **`integrations/`**: Third-party wrappers and tools (e.g., Python/LangChain, MCP Server).
 - **`pkg/crypto/shares.go`**: Core Shamir's Secret Sharing engine with mnemonic support.
-- **`pkg/crypto/registry.go`**: dPKI Identity Bridge and Bolt-based persistent ledger simulation.
+- **`pkg/crypto/registry.go`**: Identity Bridge interface and Bolt-based local registry.
+- **`pkg/crypto/registry_nostr.go`**: Global discovery via Nostr Kind 0 metadata events.
+- **`pkg/crypto/registry_dns.go`**: Global discovery via DNS TXT records (with deSEC support).
 - **`pkg/crypto/contacts.go`**: Local Petname system for trusted peer management.
 
 ## 🛡 Cryptographic Stack
@@ -17,8 +19,8 @@ Maknoon is a high-performance, post-quantum CLI encryption tool. It focuses on e
 - **Asymmetric Encryption (KEM)**: ML-KEM / Kyber1024 (NIST Standard).
 - **Digital Signatures**: ML-DSA-87 / Dilithium (NIST Standard).
 - **Key Derivation (KDF)**: Argon2id (Time: 3, Memory: 64MB).
-- **Secret Sharing**: Shamir's SSS over $GF(2^8)$ with BIP-39 style mnemonics.
-- **Identity Discovery**: dPKI handle resolution (`@name`) with local Petname prioritization and self-signed record verification.
+- **Secret Sharing**: Shamir's SSS over $GF(2^8)$ with BIP-39 style mnemonics. Includes KEM, SIG, and Nostr keys.
+- **Identity Discovery**: Global resolution via Nostr (`@nostr:npub...`) and DNS (`@domain.com`) with local Petname prioritization and self-signed record verification.
 - **P2P Transport**: Magic Wormhole (SPAKE2 PAKE) layered with Maknoon Symmetric PQC.
  Supports **Identity-Based** (Asymmetric) handshakes, **Zero-Disk** text transport, and a **Sequenced Chat Protocol** with reordering buffers for rock-solid synchronization.
 
@@ -53,8 +55,11 @@ Use `crypto.ContactManager` for local address book operations and `crypto.Identi
 Use `crypto.SafeClear` (aliased to `memguard.WipeBytes`) immediately after sensitive data use.
 - **Critical**: Go's GC does not guarantee immediate erasure; deterministic wiping is mandatory for FEKs and passphrases.
 
-### 6. Streaming & Pipes
-All cryptographic operations MUST support `io.Reader` and `io.Writer` to allow processing of files larger than available RAM.
+### 7. Agentic Self-Description (Mandatory)
+Maknoon MUST remain self-describing for autonomous agents. 
+- **The `schema` Command**: Every new CLI command or flag MUST be automatically discoverable via `maknoon schema`. 
+- **Metadata Requirement**: All commands MUST provide a concise `Short` description and a well-formed `Use` string (e.g., `command [optional] <required>`). 
+- **Verification**: Changes to the CLI tree MUST be verified by running `go test ./cmd/maknoon/commands/schema_test.go`.
 
 ## 🛠 Building and Running
 

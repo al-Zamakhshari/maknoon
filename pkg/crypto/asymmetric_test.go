@@ -6,20 +6,21 @@ import (
 )
 
 func TestPublicKeyDerivation(t *testing.T) {
-	kpub, kpriv, spub, spriv, err := GeneratePQKeyPair()
+	kpub, kpriv, spub, spriv, _, npriv, err := GeneratePQKeyPair()
 	if err != nil {
 		t.Fatalf("GeneratePQKeyPair failed: %v", err)
 	}
 	defer SafeClear(kpriv)
 	defer SafeClear(spriv)
+	defer SafeClear(npriv)
 
 	t.Run("DeriveKEMPublic", func(t *testing.T) {
 		derived, err := DeriveKEMPublic(kpriv)
 		if err != nil {
 			t.Fatalf("DeriveKEMPublic failed: %v", err)
 		}
-		if !bytes.Equal(kpub, derived) {
-			t.Errorf("Derived KEM public key does not match original")
+		if !bytes.Equal(derived, kpub) {
+			t.Error("Derived KEM public key mismatch")
 		}
 	})
 
@@ -28,8 +29,8 @@ func TestPublicKeyDerivation(t *testing.T) {
 		if err != nil {
 			t.Fatalf("DeriveSIGPublic failed: %v", err)
 		}
-		if !bytes.Equal(spub, derived) {
-			t.Errorf("Derived SIG public key does not match original")
+		if !bytes.Equal(derived, spub) {
+			t.Error("Derived SIG public key mismatch")
 		}
 	})
 

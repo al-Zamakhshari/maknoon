@@ -32,23 +32,26 @@ You are an expert in secure file handling and post-quantum cryptography using th
 ## 📋 Common Workflows (MCP Tools)
 
 ### 1. Secure File Protection
-*   **Encrypt**: Use `mcp_maknoon_encrypt_file` to protect files symmetrically (passphrase) or asymmetrically (public key). You can also use a global handle (e.g., `@bob`) as a public key path for trustless dPKI encryption.
+*   **Encrypt**: Use `mcp_maknoon_encrypt_file` to protect files symmetrically (passphrase) or asymmetrically (public key). You can also use a global handle (e.g., `@alice.com` or `@nostr:<pubkey>`) as a public key path for trustless discovery.
 *   **Decrypt**: Use `mcp_maknoon_decrypt_file` with the appropriate credentials.
-    *   **Trust Evidence**: In Agent Mode (`--json`), successful decryption returns a `signed_by` object with the signer's GID and `is_trusted` status.
-    *   **TOFU**: Use the `trust_on_first_use` parameter to automatically add unknown signers to the local address book.
 
 ### 2. Digital Identity Management
 *   **Discovery**: Use `mcp_maknoon_identity_active` to find existing PQC identities.
-*   **Generation**: Use `run_shell_command` with `maknoon keygen` to create new identities.
-*   **Publish**: Use `mcp_maknoon_identity_publish` to anchor your identity to a global handle (e.g., `@alice`) for trustless discovery.
+*   **Generation**: Use `run_shell_command` with `maknoon keygen` to create new identities (includes PQC and Nostr keys).
+*   **Publish**: Use `mcp_maknoon_identity_publish` to anchor your identity to a global handle (Nostr or DNS) for trustless discovery.
 *   **Contacts**: Use `mcp_maknoon_contact_add` to save trusted public keys as petnames (e.g., `@boss`) and `mcp_maknoon_contact_list` to view them.
 
 ### 3. File & Security Inspection
-*   **Details**: Use `mcp_maknoon_inspect_file` to get KEM/SIG/KDF metadata.
+*   **Details**: Use `mcp_maknoon_inspect_file` or `maknoon info` to get KEM/SIG/KDF metadata.
+*   **Verify**: Use `maknoon verify` to check a file's ML-DSA signature and cryptographic integrity.
 
 ### 4. Credential Generation
 *   **Passwords**: Use `mcp_maknoon_gen_password`.
 *   **Passphrases**: Use `mcp_maknoon_gen_passphrase`.
+*   **Profiles**: Use `maknoon profiles` to manage or generate custom cryptographic profiles.
+
+### 5. System Configuration
+*   **Configuration**: Use `maknoon config` to manage global settings like Nostr relays or default identities.
 
 ### 5. Secure P2P Transfer (Magic Wormhole)
 *   **Send**: Use `mcp_maknoon_send_file` to generate a one-time code.

@@ -278,4 +278,26 @@ func TestMCPServerTools(t *testing.T) {
 			t.Errorf("Start chat tool failed. Result: %s", string(resRaw))
 		}
 	})
+
+	t.Run("Identity Publish Local", func(t *testing.T) {
+		req := json.RawMessage(`{
+			"jsonrpc": "2.0",
+			"id": "11",
+			"method": "tools/call",
+			"params": {
+				"name": "identity_publish",
+				"arguments": {
+					"handle": "@mcp",
+					"name": "test-id",
+					"local": true
+				}
+			}
+		}`)
+
+		res := s.HandleMessage(ctx, req)
+		resRaw, _ := json.Marshal(res)
+		if !strings.Contains(string(resRaw), "success") || !strings.Contains(string(resRaw), "bolt") {
+			t.Errorf("Identity publish local failed. Result: %s", string(resRaw))
+		}
+	})
 }

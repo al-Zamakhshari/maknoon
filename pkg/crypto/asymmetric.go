@@ -7,31 +7,51 @@ import (
 	"fmt"
 
 	"github.com/cloudflare/circl/sign/mldsa/mldsa87"
+	"github.com/nbd-wtf/go-nostr"
 )
 
-// GeneratePQKeyPair generates a fresh Hybrid (ML-KEM + X25519) and ML-DSA keypair using the default profile.
-// The KEM keys are returned as marshaled binary for storage compatibility.
-func GeneratePQKeyPair() (kemPub, kemPriv, sigPub, sigPriv []byte, err error) {
+// GeneratePQKeyPair generates a fresh Hybrid (ML-KEM + X25519), ML-DSA, and Secp256k1 (Nostr) keypair.
+func GeneratePQKeyPair() (kemPub, kemPriv, sigPub, sigPriv, nostrPub, nostrPriv []byte, err error) {
 	profile := DefaultProfile()
 
 	priv, pub, err := profile.GenerateHybridKeyPair()
 	if err != nil {
-		return nil, nil, nil, nil, err
+		return nil, nil, nil, nil, nil, nil, err
 	}
 
 	kemPriv, err = priv.Bytes()
 	if err != nil {
-		return nil, nil, nil, nil, err
+		return nil, nil, nil, nil, nil, nil, err
 	}
 	kemPub = pub.Bytes()
 
 	sigPub, sigPriv, err = profile.GenerateSIGKeyPair()
 	if err != nil {
 		SafeClear(kemPriv)
-		return nil, nil, nil, nil, err
+		return nil, nil, nil, nil, nil, nil, err
 	}
 
+	// Generate Secp256k1 for Nostr
+	nostrPrivStr := nostr.GeneratePrivateKey()
+	nostrPubStr, err := nostr.GetPublicKey(nostrPrivStr)
+	if err != nil {
+		SafeClear(kemPriv)
+		SafeClear(sigPriv)
+		return nil, nil, nil, nil, nil, nil, err
+	}
+	nostrPriv = []byte(nostrPrivStr)
+	nostrPub = []byte(nostrPubStr)
+
 	return
+}
+
+// DeriveNostrPublic derives the hex public key from a Nostr private key hex string.
+func DeriveNostrPublic(privKeyBytes []byte) ([]byte, error) {
+	pub, err := nostr.GetPublicKey(string(privKeyBytes))
+	if err != nil {
+		return nil, err
+	}
+	return []byte(pub), nil
 }
 
 // DeriveKEMPublic derives the public key from a Hybrid KEM private key.
