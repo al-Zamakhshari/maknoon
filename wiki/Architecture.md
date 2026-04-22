@@ -23,4 +23,16 @@ The architecture includes a decentralized discovery and recovery layer:
 *   **dPKI Bridge**: An abstract registry interface that maps human-readable handles (`@name`) to PQC public keys. It enforces local **Petname** overrides for zero-server trust.
 *   **Self-Signed Records**: All identity records are signed using **ML-DSA-87**, providing cryptographic proof of ownership that persists even on untrusted discovery layers.
 *   **Nostr Discovery**: Maknoon leverages the global **Nostr** relay network as its primary decentralized discovery layer. Because PQC keys are large (~5KB), Nostr's metadata events (Kind 0) provide a much more robust transport than traditional DHTs.
-*   **Shamir's Recovery**: High-value secrets are sharded using SSS over $GF(2^8)$. Shards are encoded as **BIP-39 mnemonics**, enabling offline "Break Glass" recovery of identities (including PQC and Nostr keys) and vaults.
+## 📜 The Maknoon Philosophy (Modern Unix)
+
+Maknoon is designed as a **Modern Unix Utility**. We apply the Unix philosophy where it enhances security and efficiency, but we consciously deviate where modern requirements (like PQC and AI Agents) demand more structure.
+
+### 1. Unix Alignment
+*   **The Rule of Composition**: Almost every core function in `pkg/crypto` takes an `io.Reader` and `io.Writer`. Maknoon can stream a 100GB file through a 64KB RAM window.
+*   **The Rule of Separability**: Core cryptographic logic is strictly isolated in `pkg/crypto`, while CLI policy is managed in `cmd/maknoon`.
+*   **The Rule of Representation**: Knowledge is folded into data. CLI capabilities are described via `maknoon schema`, and file metadata is bound into headers.
+
+### 2. Modern Deviations
+*   **Structured Output (JSON)**: While classic Unix favors raw text, Maknoon treats **JSON** as the "universal text" for AI Agents and automated pipelines.
+*   **Post-Quantum Payload Scale**: PQC keys and signatures are physically large (~5KB). We deviate from "small is beautiful" to ensure nation-state level security.
+*   **Decentralized Discovery**: We break the "hermetic filter" model of Unix by integrating **Nostr** for global, serverless identity discovery, acknowledging that modern identity is global, not local.
