@@ -65,6 +65,9 @@ maknoon encrypt secret.pdf -p user1.pub -p user2.pub -p user3.pub
 
 # Inspect file metadata without decrypting
 maknoon info secret.pdf.makn
+
+# Securely delete original file after successful encryption
+maknoon encrypt secret.pdf -s "my-pass" --shred
 ```
 
 ### 3. Fingerprint Resistance (Stealth Mode)

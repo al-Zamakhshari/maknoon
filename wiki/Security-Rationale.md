@@ -21,3 +21,14 @@ Standard encrypted files often contain "Magic Bytes" (e.g., `MAKN`) that identif
 *   **AEAD**: XChaCha20-Poly1305 (192-bit extended nonces).
 *   **KDF**: Argon2id (Memory-hard key derivation).
 *   **Signatures**: ML-DSA-87 (Quantum-resistant authentication).
+
+## 5. File Lifecycle & Secure Deletion
+Encryption only protects the ciphertext. To protect the original plaintext, Maknoon provides an optional `--shred` flag during encryption.
+
+### The Shredding Reality
+On modern storage media, "Secure Deletion" is a best-effort operation:
+*   **SSD Wear Leveling**: SSD controllers remap writes to different physical cells to ensure even wear. Overwriting a file may not touch the original physical blocks.
+*   **Copy-on-Write (COW)**: Filesystems like APFS, ZFS, and Btrfs create new versions of files instead of overwriting in place.
+*   **TRIM/UNMAP**: While Maknoon overwrites data and calls `sync`, the actual physical erasure depends on the OS and hardware implementing TRIM commands.
+
+**Recommendation**: Use `--shred` for immediate local hygiene, but rely on **Full Disk Encryption (FDE)** as your primary defense against physical forensics.

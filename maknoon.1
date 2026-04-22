@@ -154,6 +154,9 @@ Force overwrite of existing files during decryption or profile generation.
 .B \-q, \-\-quiet
 Suppress progress bars and informational messages.
 .TP
+.B \-\-shred
+Securely delete the original plaintext file after successful encryption. This performs a single-pass overwrite and calls sync, but note that modern SSDs and COW filesystems may still retain physical traces.
+.TP
 .B \-\-json
 Output command results in strict JSON format. Suppresses interactive prompts and returns errors as JSON on stderr. In this mode, vault database paths are strictly restricted to the default directory for security.
 .TP
