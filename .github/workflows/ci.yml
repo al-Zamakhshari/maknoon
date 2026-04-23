@@ -93,7 +93,7 @@ jobs:
           fi
           echo "Syncing manifest to version: $VERSION"
           sed -i "s/\"version\": \".*\"/\"version\": \"$VERSION\"/" extensions/maknoon-extension/gemini-extension.json
-          cp integrations/maknoon-skill/SKILL.md extensions/maknoon-extension/skills/maknoon/SKILL.md
+          cp .agents/skills/maknoon/SKILL.md extensions/maknoon-extension/skills/maknoon/SKILL.md
           
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -115,7 +115,7 @@ jobs:
           cd wiki_repo
           git add .
           git commit -m "docs: automated sync from main [skip ci]" || echo "No wiki changes"
-          git push origin master
+          git push origin master || git push origin main
 
       - name: Bump version and push tag
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
