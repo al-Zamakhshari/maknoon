@@ -131,7 +131,7 @@ maknoon send data.bin -p alice.pub
 # Alice just runs: maknoon receive <code>
 ```
 
-### 👻 Ghost Chat (Zero-Trace P2P Messaging)
+### Ghost Chat (Zero-Trace P2P Messaging)
 Real-time, end-to-end encrypted messaging with no servers, no accounts, and zero logs. 
 
 ```bash
@@ -140,6 +140,21 @@ maknoon chat
 
 # Join a room
 maknoon chat 4-giant-pigeon
+```
+
+### 🏛️ Enterprise Compliance & Auditing
+For organizations requiring strict accountability, Maknoon supports transparent audit logging. Using a **Pluggable Decorator** architecture, Maknoon can record structured JSON metadata for every encryption, decryption, and vault operation without compromising the core cryptographic pipeline.
+
+*   **Stealth-First:** Logging is **disabled by default**. 
+*   **Zero-Trace for Agents:** Audit logging is automatically bypassed in Agent/JSON mode to maintain sandbox integrity.
+*   **Structured Output:** Logs include timestamps, operation duration, identity hashes, and outcome (success or specific typed error).
+
+```bash
+# Enable audit logging
+maknoon config set audit.enabled true
+
+# View audit logs
+cat ~/.maknoon/audit.log
 ```
 
 ### ⚙️ Universal Configuration

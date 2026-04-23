@@ -17,7 +17,7 @@ func getPIN() (string, error) {
 	if env := os.Getenv("MAKNOON_FIDO2_PIN"); env != "" {
 		return env, nil
 	}
-	if GlobalContext.Engine != nil && GlobalContext.Engine.Policy.IsAgent() {
+	if GlobalContext.Engine != nil && GlobalContext.Engine.GetPolicy().IsAgent() {
 		return "", nil // Library will handle the "PIN required" error if needed
 	}
 
@@ -36,7 +36,7 @@ func getPassphrase(prompt string) ([]byte, bool, error) {
 	if env := os.Getenv("MAKNOON_PASSPHRASE"); env != "" {
 		return []byte(env), false, nil
 	}
-	if GlobalContext.Engine != nil && GlobalContext.Engine.Policy.IsAgent() {
+	if GlobalContext.Engine != nil && GlobalContext.Engine.GetPolicy().IsAgent() {
 		return nil, false, fmt.Errorf("passphrase required via MAKNOON_PASSPHRASE (interaction prohibited in agent mode)")
 	}
 
@@ -87,7 +87,7 @@ func handleEngineEvents(events <-chan crypto.EngineEvent, quiet bool) {
 type Context struct {
 	JSONOutput bool
 	JSONWriter io.Writer
-	Engine     *crypto.Engine
+	Engine     crypto.MaknoonEngine
 }
 
 // GlobalContext is the default context for CLI execution.
@@ -162,21 +162,38 @@ func SetJSONOutput(enabled bool) {
 	GlobalContext.JSONOutput = enabled
 }
 
-// InitEngine initializes the GlobalContext's Engine with the appropriate policy.
+// InitEngine initializes the GlobalContext's Engine with the appropriate policy and audit logging.
 func InitEngine() error {
 	crypto.ResetGlobalConfig()
 	var policy crypto.SecurityPolicy
-	if crypto.IsAgentMode() {
+	isAgent := crypto.IsAgentMode() || JSONOutput
+
+	if isAgent {
 		policy = &crypto.AgentPolicy{}
 	} else {
 		policy = &crypto.HumanPolicy{}
 	}
 
-	engine, err := crypto.NewEngine(policy)
+	core, err := crypto.NewEngine(policy)
 	if err != nil {
 		return err
 	}
-	GlobalContext.Engine = engine
+
+	// Setup Audit Logging
+	var logger crypto.AuditLogger = &crypto.NoopLogger{}
+	if core.Config.Audit.Enabled && !isAgent {
+		// Only enable rich auditing in non-agent/human modes
+		l, err := crypto.NewJSONFileLogger(core.Config.Audit.LogFile)
+		if err == nil {
+			logger = l
+		}
+	}
+
+	GlobalContext.Engine = &crypto.AuditEngine{
+		Engine: core,
+		Logger: logger,
+	}
+
 	return nil
 }
 
@@ -209,7 +226,7 @@ func validatePath(path string) error {
 	if GlobalContext.Engine == nil {
 		return nil
 	}
-	return GlobalContext.Engine.Policy.ValidatePath(path)
+	return GlobalContext.Engine.GetPolicy().ValidatePath(path)
 }
 
 func checkJSONMode(cmd *cobra.Command) {

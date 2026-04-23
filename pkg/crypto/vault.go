@@ -2,9 +2,171 @@ package crypto
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+
+	"go.etcd.io/bbolt"
 )
+
+const (
+	vaultBucket = "secrets"
+	metaBucket  = "metadata"
+	saltKey     = "salt"
+)
+
+// VaultSet encrypts and saves a vault entry to disk.
+func (e *Engine) VaultSet(vaultPath string, entry *VaultEntry, passphrase []byte, pin string) error {
+	if vaultPath == "" {
+		vaultPath = filepath.Join(e.Config.Paths.VaultsDir, "default.vault")
+	}
+
+	if err := e.Policy.ValidatePath(vaultPath); err != nil {
+		return err
+	}
+
+	return SetVaultEntry(vaultPath, entry, passphrase)
+}
+
+// VaultGet reads and decrypts a vault entry from disk.
+func (e *Engine) VaultGet(vaultPath string, service string, passphrase []byte, pin string) (*VaultEntry, error) {
+	if vaultPath == "" {
+		vaultPath = filepath.Join(e.Config.Paths.VaultsDir, "default.vault")
+	}
+
+	if err := e.Policy.ValidatePath(vaultPath); err != nil {
+		return nil, err
+	}
+
+	return GetVaultEntry(vaultPath, service, passphrase)
+}
+
+func (e *Engine) VaultDelete(name string) error {
+	path, err := e.resolveVaultPath(name)
+	if err != nil {
+		return err
+	}
+	if err := e.Policy.ValidatePath(path); err != nil {
+		return err
+	}
+	return SecureDelete(path)
+}
+
+func (e *Engine) VaultRename(oldName, newName string) error {
+	oldPath, err := e.resolveVaultPath(oldName)
+	if err != nil {
+		return err
+	}
+	newPath, err := e.resolveVaultPath(newName)
+	if err != nil {
+		return err
+	}
+
+	if err := e.Policy.ValidatePath(oldPath); err != nil {
+		return err
+	}
+	if err := e.Policy.ValidatePath(newPath); err != nil {
+		return err
+	}
+
+	if _, err := os.Stat(oldPath); err != nil {
+		return fmt.Errorf("vault '%s' not found", oldName)
+	}
+	if _, err := os.Stat(newPath); err == nil {
+		return fmt.Errorf("target vault '%s' already exists", newName)
+	}
+
+	return os.Rename(oldPath, newPath)
+}
+
+func (e *Engine) resolveVaultPath(name string) (string, error) {
+	if strings.Contains(name, string(os.PathSeparator)) {
+		return name, nil
+	}
+	return filepath.Join(e.Config.Paths.VaultsDir, name+".db"), nil
+}
+
+// GetVaultEntry reads a single encrypted entry from a bbolt database.
+func GetVaultEntry(path string, service string, passphrase []byte) (*VaultEntry, error) {
+	if len(passphrase) == 0 {
+		return nil, &ErrAuthentication{Reason: "vault master passphrase required"}
+	}
+
+	db, err := bbolt.Open(path, 0600, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer db.Close()
+
+	var ciphertext []byte
+	var salt []byte
+	err = db.View(func(tx *bbolt.Tx) error {
+		meta := tx.Bucket([]byte(metaBucket))
+		if meta != nil {
+			salt = meta.Get([]byte(saltKey))
+		}
+		b := tx.Bucket([]byte(vaultBucket))
+		if b == nil {
+			return nil
+		}
+		h := sha256.Sum256([]byte(strings.ToLower(service)))
+		ciphertext = b.Get([]byte(hex.EncodeToString(h[:])))
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	if salt == nil {
+		return nil, &ErrState{Reason: "vault is uninitialized (missing salt)"}
+	}
+
+	masterKey := DeriveVaultKey(passphrase, salt)
+	defer SafeClear(masterKey)
+
+	if ciphertext == nil {
+		return nil, fmt.Errorf("service not found")
+	}
+
+	return OpenEntry(ciphertext, masterKey)
+}
+
+// SetVaultEntry encrypts and saves a single entry to a bbolt database.
+func SetVaultEntry(path string, entry *VaultEntry, passphrase []byte) error {
+	db, err := bbolt.Open(path, 0600, nil)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	return db.Update(func(tx *bbolt.Tx) error {
+		meta, _ := tx.CreateBucketIfNotExists([]byte(metaBucket))
+		salt := meta.Get([]byte(saltKey))
+		if salt == nil {
+			salt = make([]byte, 32)
+			if _, err := rand.Read(salt); err != nil {
+				return err
+			}
+			meta.Put([]byte(saltKey), salt)
+		}
+
+		masterKey := DeriveVaultKey(passphrase, salt)
+		defer SafeClear(masterKey)
+
+		ciphertext, err := SealEntry(entry, masterKey)
+		if err != nil {
+			return err
+		}
+
+		b, _ := tx.CreateBucketIfNotExists([]byte(vaultBucket))
+		h := sha256.Sum256([]byte(strings.ToLower(entry.Service)))
+		return b.Put([]byte(hex.EncodeToString(h[:])), ciphertext)
+	})
+}
 
 // DeriveVaultKey derives a 32-byte master key from a password and salt using the default profile.
 func DeriveVaultKey(password, salt []byte) []byte {

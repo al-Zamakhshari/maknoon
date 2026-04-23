@@ -48,10 +48,13 @@ Avoid generic errors. All new failure modes must be defined as typed structs in 
 ### 5. Registry Factory (Extensibility)
 Identity Discovery is pluggable. New registry types (e.g., LDAP, Keybase) should be implemented as an `IdentityRegistry` and registered via `RegisterRegistry` in an `init()` function.
 
-### 6. Policy Provider Pattern
-Avoid "Mode-Based" logic (`if IsAgentMode`). Instead, query the `engine.Policy` object for permissions (e.g., `engine.Policy.ValidatePath(path)`).
+### 6. Pluggable Audit Decorator
+Enterprise logging is implemented via the Decorator and Strategy patterns. The `AuditEngine` wraps the core `Engine` to intercept operations and delegate structured logging to pluggable sinks (`JSONFileLogger`, `NoopLogger`). This ensures zero bloat in the cryptographic core and zero overhead for stealth users.
 
-### 7. Centralized Security Validation
+### 7. Policy Provider Pattern
+Avoid "Mode-Based" logic (if IsAgentMode). Instead, query the engine.Policy object for permissions (e.g., engine.Policy.ValidatePath(path)).
+
+### 8. Centralized Security Validation
 All file system operations MUST be validated using the engine's policy. The sandbox is enforced at the entry point of the `Engine` methods.
 
 ### 8. Memory Hygiene

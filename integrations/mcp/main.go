@@ -3,22 +3,85 @@ package main
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
 
+	"github.com/al-Zamakhshari/maknoon/pkg/crypto"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 )
 
+var engine crypto.MaknoonEngine
+
 func main() {
+	if err := initEngine(); err != nil {
+		fmt.Printf("Engine initialization failed: %v\n", err)
+		os.Exit(1)
+	}
 	s := createServer()
 	if err := server.ServeStdio(s); err != nil {
 		fmt.Printf("Server error: %v\n", err)
 	}
 }
 
+func initEngine() error {
+	policy := &crypto.AgentPolicy{}
+	core, err := crypto.NewEngine(policy)
+	if err != nil {
+		return err
+	}
+
+	// MCP server always uses NoopLogger (Stealth) for now to avoid polluting logs
+	// unless specifically requested by user in future.
+	engine = &crypto.AuditEngine{
+		Engine: core,
+		Logger: &crypto.NoopLogger{},
+	}
+	return nil
+}
+
+func formatError(err error, toolName string) (*mcp.CallToolResult, error) {
+	resp := map[string]interface{}{
+		"error": err.Error(),
+		"tool":  toolName,
+	}
+
+	var policyErr *crypto.ErrPolicyViolation
+	var authErr *crypto.ErrAuthentication
+	var cryptoErr *crypto.ErrCrypto
+	var stateErr *crypto.ErrState
+
+	if crypto.As(err, &policyErr) {
+		resp["type"] = "security_policy_violation"
+		resp["is_security_violation"] = true
+		resp["code"] = 403
+	} else if crypto.As(err, &authErr) {
+		resp["type"] = "authentication_failed"
+		resp["code"] = 401
+	} else if crypto.As(err, &cryptoErr) {
+		resp["type"] = "cryptographic_failure"
+		resp["code"] = 500
+	} else if crypto.As(err, &stateErr) {
+		resp["type"] = "system_state_error"
+		resp["code"] = 503
+	}
+
+	raw, _ := json.Marshal(resp)
+	return mcp.NewToolResultError(string(raw)), nil
+}
+
 func createServer() *server.MCPServer {
+	// Ensure engine is initialized
+	if engine == nil {
+		if err := initEngine(); err != nil {
+			// In a real server this might be handled better, but for MCP
+			// we must have an engine to proceed.
+			panic(fmt.Sprintf("failed to initialize engine: %v", err))
+		}
+	}
+
 	s := server.NewMCPServer(
 		"Maknoon PQC Server",
 		"1.3.2",
@@ -336,39 +399,45 @@ func getMaknoonEnv() []string {
 
 func vaultGetHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	service := request.GetString("service", "")
-	vault := request.GetString("vault", "default")
+	_ = request.GetString("vault", "default")
 
-	cmd := exec.CommandContext(ctx, getMaknoonBinary(), "vault", "get", service, "--vault", vault, "--json")
-	cmd.Env = getMaknoonEnv()
+	// Get master passphrase from environment (Agent convention)
+	passphrase := []byte(os.Getenv("MAKNOON_PASSPHRASE"))
 
-	out, err := cmd.CombinedOutput()
+	entry, err := engine.VaultGet("", service, passphrase, "")
 	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("Vault get failed: %s", string(out))), nil
+		return formatError(err, "vault_get")
 	}
 
-	return mcp.NewToolResultText(string(out)), nil
+	if entry == nil {
+		return mcp.NewToolResultError(`{"error":"service not found","code":404}`), nil
+	}
+
+	raw, _ := json.Marshal(entry)
+	return mcp.NewToolResultText(string(raw)), nil
 }
 
 func vaultSetHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	service := request.GetString("service", "")
 	password := request.GetString("password", "")
 	username := request.GetString("username", "")
-	vault := request.GetString("vault", "default")
+	_ = request.GetString("vault", "default")
 
-	args := []string{"vault", "set", service, "--json", "--vault", vault}
-	if username != "" {
-		args = append(args, "--user", username)
+	// Get master passphrase from environment
+	passphrase := []byte(os.Getenv("MAKNOON_PASSPHRASE"))
+
+	entry := &crypto.VaultEntry{
+		Service:  service,
+		Username: username,
+		Password: []byte(password),
 	}
 
-	cmd := exec.CommandContext(ctx, getMaknoonBinary(), args...)
-	cmd.Env = append(getMaknoonEnv(), "MAKNOON_PASSWORD="+password)
-
-	out, err := cmd.CombinedOutput()
+	err := engine.VaultSet("", entry, passphrase, "")
 	if err != nil {
-		return mcp.NewToolResultError(fmt.Sprintf("Vault set failed: %s", string(out))), nil
+		return formatError(err, "vault_set")
 	}
 
-	return mcp.NewToolResultText(string(out)), nil
+	return mcp.NewToolResultText(fmt.Sprintf(`{"status":"success","service":"%s"}`, service)), nil
 }
 
 func encryptHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {

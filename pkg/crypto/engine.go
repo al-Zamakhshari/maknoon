@@ -2,6 +2,7 @@ package crypto
 
 import (
 	"fmt"
+	"io"
 )
 
 // EngineEvent is the base interface for all telemetry emitted by the Engine.
@@ -36,12 +37,31 @@ type EventHandshakeComplete struct{}
 
 func (e EventHandshakeComplete) String() string { return "handshake complete" }
 
+// MaknoonEngine defines the high-level operations for the Maknoon system.
+type MaknoonEngine interface {
+	Protect(inputName string, r io.Reader, w io.Writer, opts Options) (byte, error)
+	Unprotect(r io.Reader, w io.Writer, outPath string, opts Options) (byte, error)
+	LoadCustomProfile(path string) (*DynamicProfile, error)
+	GenerateRandomProfile(id byte) *DynamicProfile
+	ValidateProfile(p *DynamicProfile) error
+	ValidateWormholeURL(u string) error
+	VaultGet(vaultPath string, service string, passphrase []byte, pin string) (*VaultEntry, error)
+	VaultSet(vaultPath string, entry *VaultEntry, passphrase []byte, pin string) error
+	VaultRename(oldName, newName string) error
+	VaultDelete(name string) error
+	GetPolicy() SecurityPolicy
+	GetConfig() *Config
+}
+
 // Engine is the central stateful service for Maknoon operations.
 type Engine struct {
 	Policy     SecurityPolicy
 	Config     *Config
 	Identities *IdentityManager
 }
+
+func (e *Engine) GetPolicy() SecurityPolicy { return e.Policy }
+func (e *Engine) GetConfig() *Config        { return e.Config }
 
 // NewEngine creates a new Engine with the specified policy and loaded config.
 func NewEngine(policy SecurityPolicy) (*Engine, error) {

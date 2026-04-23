@@ -18,6 +18,7 @@ const (
 type Config struct {
 	DefaultIdentity    string                     `json:"default_identity"`
 	IdentityRegistries []string                   `json:"identity_registries,omitempty"`
+	Audit              AuditConfig                `json:"audit,omitempty"`
 	Security           SecurityConfig             `json:"security"`
 	Performance        PerformanceConfig          `json:"performance"`
 	AgentLimits        AgentLimitsConfig          `json:"agent_limits"`
@@ -25,6 +26,11 @@ type Config struct {
 	Nostr              NostrConfig                `json:"nostr"`
 	Paths              PathConfig                 `json:"paths"`
 	Profiles           map[string]*DynamicProfile `json:"profiles,omitempty"`
+}
+
+type AuditConfig struct {
+	Enabled bool   `json:"enabled"`
+	LogFile string `json:"log_file"`
 }
 
 type AgentLimitsConfig struct {
@@ -83,6 +89,10 @@ func DefaultConfig() *Config {
 	return &Config{
 		DefaultIdentity:    "default",
 		IdentityRegistries: []string{"dns", "nostr"},
+		Audit: AuditConfig{
+			Enabled: false,
+			LogFile: filepath.Join(home, MaknoonDir, "audit.log"),
+		},
 		Security: SecurityConfig{
 			ArgonTime:    3,
 			ArgonMemory:  64 * 1024,

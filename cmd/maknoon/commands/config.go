@@ -90,8 +90,8 @@ Keys:
 		Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			checkJSONMode(cmd)
-			if !GlobalContext.Engine.Policy.AllowConfigModification() {
-				return fmt.Errorf("config modification is prohibited under the active security policy (%s)", GlobalContext.Engine.Policy.Name())
+			if !GlobalContext.Engine.GetPolicy().AllowConfigModification() {
+				return fmt.Errorf("config modification is prohibited under the active security policy (%s)", GlobalContext.Engine.GetPolicy().Name())
 			}
 			conf, err := crypto.LoadConfig()
 			if err != nil {
@@ -172,8 +172,8 @@ func configInitCmd() *cobra.Command {
 		Short: "Initialize default configuration file",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			checkJSONMode(cmd)
-			if !GlobalContext.Engine.Policy.AllowConfigModification() {
-				return fmt.Errorf("config initialization is prohibited under the active security policy (%s)", GlobalContext.Engine.Policy.Name())
+			if !GlobalContext.Engine.GetPolicy().AllowConfigModification() {
+				return fmt.Errorf("config initialization is prohibited under the active security policy (%s)", GlobalContext.Engine.GetPolicy().Name())
 			}
 			conf := crypto.DefaultConfig()
 			if err := conf.Save(); err != nil {

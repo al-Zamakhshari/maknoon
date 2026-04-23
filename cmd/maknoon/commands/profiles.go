@@ -168,12 +168,12 @@ func profilesGenCmd() *cobra.Command {
 				return fmt.Errorf("profile failed functional smoke test (impossible combination): %w", err)
 			}
 
-			if !GlobalContext.Engine.Policy.AllowConfigModification() && !JSONOutput {
-				return fmt.Errorf("saving profiles to config is prohibited under the active policy (%s) (use --json to generate an ephemeral profile)", GlobalContext.Engine.Policy.Name())
+			if !GlobalContext.Engine.GetPolicy().AllowConfigModification() && !JSONOutput {
+				return fmt.Errorf("saving profiles to config is prohibited under the active policy (%s) (use --json to generate an ephemeral profile)", GlobalContext.Engine.GetPolicy().Name())
 			}
 
 			// Save to config (Only if policy allows)
-			if GlobalContext.Engine.Policy.AllowConfigModification() {
+			if GlobalContext.Engine.GetPolicy().AllowConfigModification() {
 				if conf.Profiles == nil {
 					conf.Profiles = make(map[string]*crypto.DynamicProfile)
 				}
@@ -200,8 +200,8 @@ func profilesRmCmd() *cobra.Command {
 		Short: "Remove a custom profile from config",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
-			if !GlobalContext.Engine.Policy.AllowConfigModification() {
-				return fmt.Errorf("config modification is prohibited under the active policy (%s)", GlobalContext.Engine.Policy.Name())
+			if !GlobalContext.Engine.GetPolicy().AllowConfigModification() {
+				return fmt.Errorf("config modification is prohibited under the active policy (%s)", GlobalContext.Engine.GetPolicy().Name())
 			}
 			name := args[0]
 			conf := crypto.GetGlobalConfig()
