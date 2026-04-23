@@ -14,6 +14,8 @@ func TestAgentIdentityFlow(t *testing.T) {
 	os.Setenv("HOME", tmpDir)
 	defer os.Setenv("HOME", oldHome)
 
+	_ = InitEngine()
+
 	os.Setenv("MAKNOON_JSON", "1")
 	defer os.Unsetenv("MAKNOON_JSON")
 	SetJSONOutput(true)
@@ -71,6 +73,8 @@ func TestAgentShardingFlow(t *testing.T) {
 	oldHome := os.Getenv("HOME")
 	os.Setenv("HOME", tmpDir)
 	defer os.Setenv("HOME", oldHome)
+
+	_ = InitEngine()
 
 	os.Setenv("MAKNOON_JSON", "1")
 	defer os.Unsetenv("MAKNOON_JSON")

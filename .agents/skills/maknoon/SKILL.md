@@ -1,19 +1,22 @@
 ---
-name: maknoon
 description: Provides Post-Quantum encryption, signing, and vault capabilities using the Maknoon CLI and MCP Server.
 kind: local
-version: 1.5.0
-tools:
-  - run_shell_command
-  - mcp_maknoon_*
 mcpServers:
-  maknoon:
-    command: go
-    args: ["run", "./integrations/mcp/main.go"]
-    env:
-      MAKNOON_AGENT_MODE: "1"
+    maknoon:
+        args:
+            - run
+            - ./integrations/mcp/main.go
+        command: go
+        env:
+            MAKNOON_AGENT_MODE: "1"
+metadata:
+    local-path: /Users/ahmed/Code/maknoon/.github/skills/maknoon
+name: maknoon
+tools:
+    - run_shell_command
+    - mcp_maknoon_*
+version: 1.5.0
 ---
-
 # Maknoon Skill Instructions
 
 You are an expert in secure file handling and post-quantum cryptography using the Maknoon CLI and its dedicated MCP Server. This skill allows you to protect user data with absolute care using hyper-efficient streaming and modern security standards.

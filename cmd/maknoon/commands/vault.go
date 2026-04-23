@@ -13,7 +13,6 @@ import (
 	"github.com/al-Zamakhshari/maknoon/pkg/crypto"
 	"github.com/spf13/cobra"
 	"go.etcd.io/bbolt"
-	"golang.org/x/term"
 )
 
 const (
@@ -154,21 +153,9 @@ func vaultRecoverCmd() *cobra.Command {
 
 			if targetPath != "" {
 				// Save to a new vault with a new passphrase
-				var p []byte
-				if env := os.Getenv("MAKNOON_PASSPHRASE"); env != "" {
-					p = []byte(env)
-				} else if JSONOutput {
-					err := fmt.Errorf("new master passphrase required via MAKNOON_PASSPHRASE for recovery vault in JSON mode")
-					printErrorJSON(err)
-					return nil
-				} else {
-					fmt.Printf("Recovered %d entries. Enter new master passphrase for recovery vault: ", len(entries))
-					p1, err := term.ReadPassword(int(os.Stdin.Fd()))
-					fmt.Println()
-					if err != nil {
-						return err
-					}
-					p = p1
+				p, _, err := getPassphrase("Enter new master passphrase for recovery vault: ")
+				if err != nil {
+					return err
 				}
 				defer crypto.SafeClear(p)
 
@@ -252,16 +239,6 @@ func vaultRecoverCmd() *cobra.Command {
 	return cmd
 }
 
-func checkJSONMode(cmd *cobra.Command) {
-	if JSONOutput || os.Getenv("MAKNOON_JSON") == "1" {
-		JSONOutput = true
-		if cmd != nil {
-			cmd.SilenceUsage = true
-			cmd.SilenceErrors = true
-		}
-	}
-}
-
 func resolveVaultPath(name string) (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -319,7 +296,11 @@ func openVault() (*bbolt.DB, []byte, error) {
 		fido2Raw = b.Get([]byte(fido2Key))
 
 		if useFido2 && fido2Raw == nil {
-			meta, secret, err := crypto.Fido2Enroll("maknoon.io", "vault-user")
+			pin, err := getPIN()
+			if err != nil {
+				return err
+			}
+			meta, secret, err := crypto.Fido2Enroll("maknoon.io", "vault-user", pin)
 			if err != nil {
 				return err
 			}
@@ -349,28 +330,30 @@ func openVault() (*bbolt.DB, []byte, error) {
 			_ = db.Close()
 			return nil, nil, err
 		}
-		secret, err := crypto.Fido2Derive(meta.RPID, meta.CredentialID)
+		pin, err := getPIN()
+		if err != nil {
+			_ = db.Close()
+			return nil, nil, err
+		}
+		secret, err := crypto.Fido2Derive(meta.RPID, meta.CredentialID, pin)
 		if err != nil {
 			_ = db.Close()
 			return nil, nil, err
 		}
 		passphrase = secret
-	} else if vaultPassphrase != "" {
-		passphrase = []byte(vaultPassphrase)
-	} else if env := os.Getenv("MAKNOON_PASSPHRASE"); env != "" {
-		passphrase = []byte(env)
-	} else if JSONOutput {
-		_ = db.Close()
-		return nil, nil, fmt.Errorf("master passphrase required via MAKNOON_PASSPHRASE or -s")
-	} else {
-		fmt.Print("Enter Vault Master Passphrase: ")
-		p, err := term.ReadPassword(int(os.Stdin.Fd()))
-		fmt.Println()
-		if err != nil {
-			_ = db.Close()
-			return nil, nil, err
+	}
+
+	if len(passphrase) == 0 {
+		if vaultPassphrase != "" {
+			passphrase = []byte(vaultPassphrase)
+		} else {
+			var err error
+			passphrase, _, err = getPassphrase("Enter Vault Master Passphrase: ")
+			if err != nil {
+				_ = db.Close()
+				return nil, nil, err
+			}
 		}
-		passphrase = p
 	}
 
 	masterKey := crypto.DeriveVaultKey(passphrase, salt)
@@ -393,14 +376,9 @@ func vaultSetCmd() *cobra.Command {
 
 			if env := os.Getenv("MAKNOON_PASSWORD"); env != "" {
 				password = []byte(env)
-			} else if JSONOutput {
-				err := fmt.Errorf("password required via MAKNOON_PASSWORD environment variable in JSON mode")
-				printErrorJSON(err)
-				return nil
 			} else {
-				fmt.Print("Enter password for ", service, ": ")
-				password, err = term.ReadPassword(int(os.Stdin.Fd()))
-				fmt.Println()
+				var err error
+				password, _, err = getPassphrase(fmt.Sprintf("Enter password for %s: ", service))
 				if err != nil {
 					return err
 				}
@@ -645,7 +623,7 @@ func vaultDeleteCmd() *cobra.Command {
 				}
 			}
 
-			if err := os.Remove(path); err != nil {
+			if err := crypto.SecureDelete(path); err != nil {
 				return err
 			}
 

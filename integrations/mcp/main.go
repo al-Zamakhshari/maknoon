@@ -290,6 +290,29 @@ func createServer() *server.MCPServer {
 	}
 	s.AddTool(contactList, contactListHandler)
 
+	// Tool: profiles_list
+	profilesList := mcp.NewTool("profiles_list",
+		mcp.WithDescription("List all available cryptographic profiles"),
+	)
+	profilesList.InputSchema = mcp.ToolInputSchema{
+		Type:       "object",
+		Properties: map[string]interface{}{},
+	}
+	s.AddTool(profilesList, profilesListHandler)
+
+	// Tool: profiles_gen
+	profilesGen := mcp.NewTool("profiles_gen",
+		mcp.WithDescription("Generate a new random, validated profile and save it to config"),
+	)
+	profilesGen.InputSchema = mcp.ToolInputSchema{
+		Type: "object",
+		Properties: map[string]interface{}{
+			"name": map[string]interface{}{"type": "string", "description": "Name for the new profile"},
+		},
+		Required: []string{"name"},
+	}
+	s.AddTool(profilesGen, profilesGenHandler)
+
 	return s
 }
 
@@ -301,7 +324,7 @@ func getMaknoonBinary() string {
 }
 
 func getMaknoonEnv() []string {
-	env := []string{"MAKNOON_JSON=1"}
+	env := []string{"MAKNOON_JSON=1", "MAKNOON_AGENT_MODE=1"}
 	vars := []string{"MAKNOON_PASSPHRASE", "MAKNOON_PUBLIC_KEY", "MAKNOON_PRIVATE_KEY", "HOME", "PATH"}
 	for _, v := range vars {
 		if val := os.Getenv(v); val != "" {
@@ -753,6 +776,31 @@ func contactListHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return mcp.NewToolResultError(fmt.Sprintf("Contact list failed: %s", string(out))), nil
+	}
+
+	return mcp.NewToolResultText(string(out)), nil
+}
+
+func profilesListHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	cmd := exec.CommandContext(ctx, getMaknoonBinary(), "profiles", "list", "--json")
+	cmd.Env = getMaknoonEnv()
+
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Profiles list failed: %s", string(out))), nil
+	}
+
+	return mcp.NewToolResultText(string(out)), nil
+}
+
+func profilesGenHandler(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	name := request.GetString("name", "")
+	cmd := exec.CommandContext(ctx, getMaknoonBinary(), "profiles", "gen", name, "--json")
+	cmd.Env = getMaknoonEnv()
+
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("Profiles generation failed: %s", string(out))), nil
 	}
 
 	return mcp.NewToolResultText(string(out)), nil

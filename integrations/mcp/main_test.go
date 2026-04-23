@@ -44,6 +44,7 @@ func TestMCPServerTools(t *testing.T) {
 		expectedTools := []string{
 			"vault_get", "vault_set", "encrypt_file", "decrypt_file",
 			"gen_password", "gen_passphrase", "inspect_file", "identity_active",
+			"profiles_list", "profiles_gen",
 		}
 		for _, name := range expectedTools {
 			if _, ok := tools[name]; !ok {
@@ -255,12 +256,15 @@ func TestMCPServerTools(t *testing.T) {
 
 		res := s.HandleMessage(ctx, req)
 		resRaw, _ := json.Marshal(res)
-		if !strings.Contains(string(resRaw), "master passphrase required") {
+		if !strings.Contains(string(resRaw), "passphrase required") {
 			t.Errorf("Expected master key error, got: %s", string(resRaw))
 		}
 	})
 
 	t.Run("Start Chat Tool", func(t *testing.T) {
+		if testing.Short() {
+			t.Skip("skipping chat tool test in short mode")
+		}
 		req := json.RawMessage(`{
 			"jsonrpc": "2.0",
 			"id": "10",
@@ -298,6 +302,46 @@ func TestMCPServerTools(t *testing.T) {
 		resRaw, _ := json.Marshal(res)
 		if !strings.Contains(string(resRaw), "success") || !strings.Contains(string(resRaw), "contacts") {
 			t.Errorf("Identity publish local failed. Result: %s", string(resRaw))
+		}
+	})
+
+	t.Run("Profiles Management", func(t *testing.T) {
+		// 1. Generate a new profile
+		genReq := json.RawMessage(`{
+			"jsonrpc": "2.0",
+			"id": "12",
+			"method": "tools/call",
+			"params": {
+				"name": "profiles_gen",
+				"arguments": {"name": "mcp-test-profile"}
+			}
+		}`)
+		res := s.HandleMessage(ctx, genReq)
+		resRaw, _ := json.Marshal(res)
+		// The tool outputs the PROFILE JSON directly if successful.
+		if !strings.Contains(string(resRaw), "kdf_iterations") {
+			t.Fatalf("Profiles generation tool failed. Result: %s", string(resRaw))
+		}
+
+		// 2. List profiles
+		listReq := json.RawMessage(`{
+			"jsonrpc": "2.0",
+			"id": "13",
+			"method": "tools/call",
+			"params": {
+				"name": "profiles_list",
+				"arguments": {}
+			}
+		}`)
+		res = s.HandleMessage(ctx, listReq)
+		resRaw, _ = json.Marshal(res)
+		// NOTE: In Agent Mode, profiles are ephemeral and NOT saved to config.
+		// So we expect 'nist' (default) but NOT 'mcp-test-profile'.
+		if !strings.Contains(string(resRaw), "nist") {
+			t.Errorf("Profiles list tool failed to show default profile. Result: %s", string(resRaw))
+		}
+		if strings.Contains(string(resRaw), "mcp-test-profile") {
+			t.Errorf("Profiles list tool unexpectedly showed ephemeral profile (should not be saved in agent mode). Result: %s", string(resRaw))
 		}
 	})
 }

@@ -69,3 +69,26 @@ func TestMnemonic(t *testing.T) {
 		t.Errorf("restored share checksum mismatch")
 	}
 }
+
+func TestCombineDuplicateShares(t *testing.T) {
+	secret := []byte("panic-prevention-test")
+	m, n := 2, 3
+	shares, _ := SplitSecret(secret, m, n)
+
+	// Attempt to combine with duplicate shares
+	badShares := []Share{shares[0], shares[0]}
+
+	defer func() {
+		if r := recover(); r != nil {
+			t.Errorf("CombineShares panicked with duplicate shares: %v", r)
+		}
+	}()
+
+	_, err := CombineShares(badShares)
+	if err == nil {
+		t.Errorf("expected error for duplicate shares, got nil")
+	}
+	if err != nil && !bytes.Contains([]byte(err.Error()), []byte("duplicate share")) {
+		t.Errorf("expected duplicate share error, got: %v", err)
+	}
+}

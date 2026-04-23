@@ -1,14 +1,13 @@
 package commands
 
 import (
-	"encoding/json"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/al-Zamakhshari/maknoon/pkg/crypto"
-	"github.com/schollz/progressbar/v3"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 )
@@ -39,7 +38,7 @@ func EncryptCmd() *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
 			inputPath := args[0]
-			input, inputName, totalSize, isDir, err := resolveEncryptInput(inputPath)
+			input, _, _, isDir, err := resolveEncryptInput(inputPath)
 			if err != nil {
 				if JSONOutput {
 					printErrorJSON(err)
@@ -66,15 +65,15 @@ func EncryptCmd() *cobra.Command {
 			}
 
 			if profileFile != "" {
-				var profileID int
-				if err := loadCustomProfile(profileFile, &profileID); err != nil {
+				dp, err := GlobalContext.Engine.LoadCustomProfile(profileFile)
+				if err != nil {
 					if JSONOutput {
 						printErrorJSON(err)
 						return nil
 					}
 					return err
 				}
-				profileStr = fmt.Sprintf("%d", profileID)
+				profileStr = fmt.Sprintf("%d", dp.ID())
 			}
 
 			profileID := byte(0)
@@ -111,7 +110,15 @@ func EncryptCmd() *cobra.Command {
 				m := crypto.NewIdentityManager()
 				resolvedSignPath := m.ResolveKeyPath(signKeyPath, "MAKNOON_PRIVATE_KEY")
 				if resolvedSignPath != "" {
-					sk, err := m.LoadPrivateKey(resolvedSignPath, []byte(passphrase), false)
+					var pin string
+					if _, err := os.Stat(strings.TrimSuffix(resolvedSignPath, ".key") + ".fido2"); err == nil {
+						var err2 error
+						pin, err2 = getPIN()
+						if err2 != nil {
+							return err2
+						}
+					}
+					sk, err := m.LoadPrivateKey(resolvedSignPath, []byte(passphrase), pin, false)
 					if err == nil {
 						opts.SigningKey = sk
 					}
@@ -131,15 +138,19 @@ func EncryptCmd() *cobra.Command {
 				quiet = true
 			}
 
-			if !quiet && totalSize > 0 {
-				fmt.Printf("Protecting '%s'...\n", inputName)
-				bar := progressbar.DefaultBytes(totalSize, "preserving")
-				opts.ProgressReader = bar
-			} else if !quiet {
-				fmt.Printf("Protecting '%s'...\n", inputName)
-			}
+			events := make(chan crypto.EngineEvent, 100)
+			opts.EventStream = events
+			done := make(chan struct{})
+			go func() {
+				handleEngineEvents(events, quiet)
+				close(done)
+			}()
 
-			if _, err := crypto.Protect(inputPath, nil, out, opts); err != nil {
+			_, err = GlobalContext.Engine.Protect(inputPath, nil, out, opts)
+			close(events)
+			<-done
+
+			if err != nil {
 				if JSONOutput {
 					printErrorJSON(err)
 					return err
@@ -193,6 +204,10 @@ func resolveEncryptInput(path string) (io.Reader, string, int64, bool, error) {
 		return os.Stdin, "stdin", -1, false, nil
 	}
 
+	if err := validatePath(path); err != nil {
+		return nil, "", 0, false, err
+	}
+
 	info, err := os.Stat(path)
 	if err != nil {
 		return nil, "", 0, false, err
@@ -221,30 +236,15 @@ func resolveEncryptOutput(outPath, inPath string) (io.Writer, string, error) {
 		outPath = inPath + ".makn"
 	}
 
+	if err := validatePath(outPath); err != nil {
+		return nil, "", err
+	}
+
 	f, err := os.Create(outPath)
 	if err != nil {
 		return nil, "", err
 	}
 	return f, outPath, nil
-}
-
-func loadCustomProfile(path string, profileID *int) error {
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		return err
-	}
-	var dp crypto.DynamicProfile
-	if err := json.Unmarshal(raw, &dp); err != nil {
-		return err
-	}
-	if err := dp.Validate(); err != nil {
-		return err
-	}
-	crypto.RegisterProfile(&dp)
-	if profileID != nil {
-		*profileID = int(dp.ID())
-	}
-	return nil
 }
 
 func resolveEncryptionKeysMulti(opts *crypto.Options, pubKeyPaths []string, passphrase, inputPath string, tofu bool) error {
@@ -271,35 +271,28 @@ func resolveEncryptionKeysMulti(opts *crypto.Options, pubKeyPaths []string, pass
 		opts.Passphrase = []byte(passphrase)
 		return nil
 	}
-	if env := os.Getenv("MAKNOON_PASSPHRASE"); env != "" {
-		opts.Passphrase = []byte(env)
-		return nil
-	}
 
-	if inputPath == "-" || JSONOutput {
-		return fmt.Errorf("passphrase required via MAKNOON_PASSPHRASE or -s")
-	}
-
-	fmt.Print("Enter passphrase: ")
-	p, err := term.ReadPassword(int(os.Stdin.Fd()))
-	fmt.Println()
+	var err error
+	var interactive bool
+	opts.Passphrase, interactive, err = getPassphrase("Enter passphrase: ")
 	if err != nil {
 		return err
 	}
 
-	fmt.Print("Confirm passphrase: ")
-	confirm, err := term.ReadPassword(int(os.Stdin.Fd()))
-	fmt.Println()
-	if err != nil {
-		crypto.SafeClear(p)
-		return err
-	}
-	defer crypto.SafeClear(confirm)
+	if interactive {
+		fmt.Print("Confirm passphrase: ")
+		confirm, err := term.ReadPassword(int(os.Stdin.Fd()))
+		fmt.Println()
+		if err != nil {
+			crypto.SafeClear(opts.Passphrase)
+			return err
+		}
+		defer crypto.SafeClear(confirm)
 
-	if string(p) != string(confirm) {
-		crypto.SafeClear(p)
-		return fmt.Errorf("passphrases do not match")
+		if string(opts.Passphrase) != string(confirm) {
+			crypto.SafeClear(opts.Passphrase)
+			return fmt.Errorf("passphrases do not match")
+		}
 	}
-	opts.Passphrase = p
 	return nil
 }

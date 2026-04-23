@@ -3,6 +3,7 @@ package commands
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/al-Zamakhshari/maknoon/pkg/crypto"
 	"github.com/spf13/cobra"
@@ -42,7 +43,17 @@ func SignCmd() *cobra.Command {
 				return err
 			}
 
-			keyBytes, err := m.LoadPrivateKey(resolvedPath, []byte(passphrase), false)
+			// Check for FIDO2 and get PIN if needed
+			var pin string
+			if _, err := os.Stat(strings.TrimSuffix(resolvedPath, ".key") + ".fido2"); err == nil {
+				var err2 error
+				pin, err2 = getPIN()
+				if err2 != nil {
+					return err2
+				}
+			}
+
+			keyBytes, err := m.LoadPrivateKey(resolvedPath, []byte(passphrase), pin, false)
 			if err != nil {
 				if JSONOutput {
 					printErrorJSON(err)

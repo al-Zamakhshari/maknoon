@@ -12,6 +12,11 @@ import (
 	"github.com/al-Zamakhshari/maknoon/pkg/crypto"
 )
 
+func TestMain(m *testing.M) {
+	_ = InitEngine()
+	os.Exit(m.Run())
+}
+
 func TestGenCmd(t *testing.T) {
 	SetJSONOutput(false)
 	t.Run("Default password", func(t *testing.T) {
@@ -309,6 +314,7 @@ func TestVaultJSON(t *testing.T) {
 	oldHome := os.Getenv("HOME")
 	os.Setenv("HOME", tmpDir)
 	defer os.Setenv("HOME", oldHome)
+	_ = InitEngine()
 
 	// Create the vaults dir
 	vaultsDir := filepath.Join(tmpDir, ".maknoon", "vaults")

@@ -12,6 +12,12 @@ import (
 	"strings"
 )
 
+func init() {
+	RegisterRegistry("dns", func() IdentityRegistry {
+		return NewDNSRegistry()
+	})
+}
+
 // DNSRegistry implements IdentityRegistry by resolving keys from DNS TXT records.
 type DNSRegistry struct {
 	resolver *net.Resolver

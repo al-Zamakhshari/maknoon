@@ -16,12 +16,28 @@ const (
 
 // Config represents the global settings for Maknoon.
 type Config struct {
-	DefaultIdentity string                     `json:"default_identity"`
-	Security        SecurityConfig             `json:"security"`
-	Performance     PerformanceConfig          `json:"performance"`
-	Nostr           NostrConfig                `json:"nostr"`
-	Paths           PathConfig                 `json:"paths"`
-	Profiles        map[string]*DynamicProfile `json:"profiles,omitempty"`
+	DefaultIdentity    string                     `json:"default_identity"`
+	IdentityRegistries []string                   `json:"identity_registries,omitempty"`
+	Security           SecurityConfig             `json:"security"`
+	Performance        PerformanceConfig          `json:"performance"`
+	AgentLimits        AgentLimitsConfig          `json:"agent_limits"`
+	Wormhole           WormholeConfig             `json:"wormhole"`
+	Nostr              NostrConfig                `json:"nostr"`
+	Paths              PathConfig                 `json:"paths"`
+	Profiles           map[string]*DynamicProfile `json:"profiles,omitempty"`
+}
+
+type AgentLimitsConfig struct {
+	MaxMemoryKB uint32   `json:"max_memory_kb"`
+	MaxTime     uint32   `json:"max_time"`
+	MaxThreads  uint8    `json:"max_threads"`
+	MaxWorkers  int      `json:"max_workers"`
+	AllowedURLs []string `json:"allowed_urls"`
+}
+
+type WormholeConfig struct {
+	RendezvousURL string `json:"rendezvous_url"`
+	TransitRelay  string `json:"transit_relay"`
 }
 
 type SecurityConfig struct {
@@ -52,11 +68,21 @@ var (
 	configMu     sync.RWMutex
 )
 
+// GetUserHomeDir returns the current user's home directory, respecting the HOME environment variable.
+func GetUserHomeDir() string {
+	if h := os.Getenv("HOME"); h != "" {
+		return h
+	}
+	h, _ := os.UserHomeDir()
+	return h
+}
+
 // DefaultConfig returns the standard fallback settings.
 func DefaultConfig() *Config {
-	home, _ := os.UserHomeDir()
+	home := GetUserHomeDir()
 	return &Config{
-		DefaultIdentity: "default",
+		DefaultIdentity:    "default",
+		IdentityRegistries: []string{"dns", "nostr"},
 		Security: SecurityConfig{
 			ArgonTime:    3,
 			ArgonMemory:  64 * 1024,
@@ -66,6 +92,20 @@ func DefaultConfig() *Config {
 			Concurrency:      0,
 			CompressionLevel: 3,
 			DefaultStealth:   false,
+		},
+		AgentLimits: AgentLimitsConfig{
+			MaxMemoryKB: 512 * 1024, // 512MB
+			MaxTime:     5,
+			MaxThreads:  4,
+			MaxWorkers:  2,
+			AllowedURLs: []string{
+				"wss://relay.magic-wormhole.io:4000/v1",
+				"tcp:transit.magic-wormhole.io:4001",
+			},
+		},
+		Wormhole: WormholeConfig{
+			RendezvousURL: "wss://relay.magic-wormhole.io:4000/v1",
+			TransitRelay:  "tcp:transit.magic-wormhole.io:4001",
 		},
 		Nostr: NostrConfig{
 			Relays: []string{
@@ -122,11 +162,7 @@ func LoadConfig() (*Config, error) {
 		return globalConfig, nil
 	}
 
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return DefaultConfig(), nil
-	}
-
+	home := GetUserHomeDir()
 	path := filepath.Join(home, MaknoonDir, ConfigFileName)
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -155,11 +191,7 @@ func LoadConfig() (*Config, error) {
 
 // Save persists the configuration to disk.
 func (c *Config) Save() error {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return err
-	}
-
+	home := GetUserHomeDir()
 	path := filepath.Join(home, MaknoonDir, ConfigFileName)
 	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
 		return err
@@ -180,4 +212,12 @@ func GetGlobalConfig() *Config {
 		return DefaultConfig()
 	}
 	return c
+}
+
+// ResetGlobalConfig clears the cached config, forcing a reload on next use.
+// Useful for tests that change environment variables like HOME.
+func ResetGlobalConfig() {
+	configMu.Lock()
+	defer configMu.Unlock()
+	globalConfig = nil
 }

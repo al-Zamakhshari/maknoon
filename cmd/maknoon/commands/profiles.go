@@ -155,11 +155,11 @@ func profilesGenCmd() *cobra.Command {
 				return fmt.Errorf("no available profile IDs (4-127 reached limit)")
 			}
 
-			// Generate random profile
-			dp := crypto.GenerateRandomProfile(nextID)
+			// Generate random profile via engine
+			dp := GlobalContext.Engine.GenerateRandomProfile(nextID)
 
-			// 1. Static Validation
-			if err := dp.Validate(); err != nil {
+			// Static & Policy Validation via engine
+			if err := GlobalContext.Engine.ValidateProfile(dp); err != nil {
 				return fmt.Errorf("generated invalid profile: %w", err)
 			}
 
@@ -168,13 +168,19 @@ func profilesGenCmd() *cobra.Command {
 				return fmt.Errorf("profile failed functional smoke test (impossible combination): %w", err)
 			}
 
-			// Save to config
-			if conf.Profiles == nil {
-				conf.Profiles = make(map[string]*crypto.DynamicProfile)
+			if !GlobalContext.Engine.Policy.AllowConfigModification() && !JSONOutput {
+				return fmt.Errorf("saving profiles to config is prohibited under the active policy (%s) (use --json to generate an ephemeral profile)", GlobalContext.Engine.Policy.Name())
 			}
-			conf.Profiles[name] = dp
-			if err := conf.Save(); err != nil {
-				return fmt.Errorf("failed to save config: %w", err)
+
+			// Save to config (Only if policy allows)
+			if GlobalContext.Engine.Policy.AllowConfigModification() {
+				if conf.Profiles == nil {
+					conf.Profiles = make(map[string]*crypto.DynamicProfile)
+				}
+				conf.Profiles[name] = dp
+				if err := conf.Save(); err != nil {
+					return fmt.Errorf("failed to save config: %w", err)
+				}
 			}
 
 			if JSONOutput {
@@ -194,6 +200,9 @@ func profilesRmCmd() *cobra.Command {
 		Short: "Remove a custom profile from config",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
+			if !GlobalContext.Engine.Policy.AllowConfigModification() {
+				return fmt.Errorf("config modification is prohibited under the active policy (%s)", GlobalContext.Engine.Policy.Name())
+			}
 			name := args[0]
 			conf := crypto.GetGlobalConfig()
 

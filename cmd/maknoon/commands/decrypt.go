@@ -4,15 +4,12 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"log/slog"
 	"os"
 	"strings"
 	"time"
 
 	"github.com/al-Zamakhshari/maknoon/pkg/crypto"
-	"github.com/schollz/progressbar/v3"
 	"github.com/spf13/cobra"
-	"golang.org/x/term"
 )
 
 // DecryptCmd returns the cobra command for decrypting .makn files.
@@ -36,7 +33,7 @@ func DecryptCmd() *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
 			inputFile := args[0]
-			in, inputName, totalSize, err := resolveDecryptInput(inputFile)
+			in, _, totalSize, err := resolveDecryptInput(inputFile)
 			if err != nil {
 				if JSONOutput {
 					printErrorJSON(err)
@@ -49,7 +46,7 @@ func DecryptCmd() *cobra.Command {
 			}
 
 			if profileFile != "" {
-				if err := loadCustomProfile(profileFile, nil); err != nil {
+				if _, err := GlobalContext.Engine.LoadCustomProfile(profileFile); err != nil {
 					if JSONOutput {
 						printErrorJSON(err)
 						return nil
@@ -169,30 +166,22 @@ func DecryptCmd() *cobra.Command {
 				}
 			}
 
-			// 5. Initialize the Progress Bar and Pipe
-			if !quiet && outPath != "-" {
-				fmt.Printf("Decrypting '%s'...\n", inputName)
+			// 5. Initialize the Event Stream and Telemetry
+			events := make(chan crypto.EngineEvent, 100)
+			opts := crypto.Options{
+				Passphrase:  finalKey,
+				PublicKey:   senderKey,
+				Concurrency: concurrency,
+				Stealth:     stealth,
+				TotalSize:   totalSize,
+				EventStream: events,
+				Verbose:     verbose,
 			}
 
-			pr, pw := io.Pipe()
-			proxyIn := fullIn
-			if !quiet && totalSize > 0 && outPath != "-" {
-				bar := progressbar.DefaultBytes(totalSize, "restoring")
-				proxyIn = io.TeeReader(fullIn, bar)
-			}
-
+			done := make(chan struct{})
 			go func() {
-				var dErr error
-				var f byte
-				var spk []byte
-				if magic == crypto.MagicHeader {
-					f, spk, dErr = crypto.DecryptStream(proxyIn, pw, finalKey, concurrency, stealth)
-				} else {
-					f, spk, dErr = crypto.DecryptStreamWithPrivateKeyAndVerifier(proxyIn, pw, finalKey, senderKey, concurrency, stealth)
-				}
-				_ = f
-				_ = spk
-				_ = pw.CloseWithError(dErr)
+				handleEngineEvents(events, quiet)
+				close(done)
 			}()
 
 			if outPath == "-" {
@@ -203,7 +192,11 @@ func DecryptCmd() *cobra.Command {
 				defer func() { GlobalContext.JSONWriter = oldWriter }()
 			}
 
-			if err := crypto.FinalizeRestoration(pr, flags, outPath, slog.New(slog.NewTextHandler(io.Discard, nil))); err != nil {
+			_, err = GlobalContext.Engine.Unprotect(fullIn, nil, outPath, opts)
+			close(events)
+			<-done
+
+			if err != nil {
 				if JSONOutput {
 					printErrorJSON(err)
 					return err
@@ -345,16 +338,11 @@ func resolveDecryptionKey(magic, manualPass, keyPath string, useFido2 bool, isSt
 			return nil, nil, fmt.Errorf("FIDO2-backed symmetric encryption is currently only supported via the 'vault' command")
 		}
 		if len(password) == 0 {
-			if isStdin {
-				return nil, nil, fmt.Errorf("passphrase required via MAKNOON_PASSPHRASE or -s when reading from stdin")
-			}
-			fmt.Print("Enter passphrase: ")
-			p, err := term.ReadPassword(int(os.Stdin.Fd()))
-			fmt.Println()
+			var err error
+			password, _, err = getPassphrase("Enter passphrase: ")
 			if err != nil {
 				return nil, nil, err
 			}
-			password = p
 		}
 		return password, password, nil
 	}
@@ -366,7 +354,17 @@ func resolveDecryptionKey(magic, manualPass, keyPath string, useFido2 bool, isSt
 			return nil, nil, fmt.Errorf("private key required via -k or MAKNOON_PRIVATE_KEY")
 		}
 
-		priv, err := m.LoadPrivateKey(resolvedPath, password, isStdin)
+		// Check for FIDO2 and get PIN if needed
+		var pin string
+		if _, err := os.Stat(strings.TrimSuffix(resolvedPath, ".key") + ".fido2"); err == nil {
+			var err2 error
+			pin, err2 = getPIN()
+			if err2 != nil {
+				return nil, nil, err2
+			}
+		}
+
+		priv, err := m.LoadPrivateKey(resolvedPath, password, pin, isStdin)
 		if err != nil {
 			return nil, nil, err
 		}

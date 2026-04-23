@@ -13,7 +13,12 @@ import (
 
 // DecryptStream decrypts data from r to w using a passphrase.
 func DecryptStream(r io.Reader, w io.Writer, password []byte, concurrency int, isStealth bool) (byte, []byte, error) {
-	magic, profileID, flags, err := ReadHeader(r, isStealth)
+	return DecryptStreamWithEvents(r, w, password, concurrency, isStealth, nil)
+}
+
+// DecryptStreamWithEvents is the extended version of DecryptStream that supports telemetry.
+func DecryptStreamWithEvents(r io.Reader, w io.Writer, password []byte, concurrency int, isStealth bool, eventStream chan<- EngineEvent) (byte, []byte, error) {
+	magic, profileID, flags, _, err := ReadHeader(r, isStealth)
 	if err != nil {
 		return 0, nil, err
 	}
@@ -45,35 +50,45 @@ func DecryptStream(r io.Reader, w io.Writer, password []byte, concurrency int, i
 		return 0, nil, err
 	}
 
-	return flags, nil, streamDecrypt(r, w, aead, baseNonce, concurrency)
+	return flags, nil, streamDecrypt(r, w, aead, baseNonce, concurrency, eventStream)
 }
 
 // ReadHeader reads the magic bytes (if not stealth) and the profile/flags header.
-func ReadHeader(r io.Reader, isStealth bool) (magic string, profileID byte, flags byte, err error) {
+// It returns recipientCount for asymmetric files (0 for symmetric).
+func ReadHeader(r io.Reader, isStealth bool) (magic string, profileID byte, flags byte, recipientCount byte, err error) {
 	if !isStealth {
 		m := make([]byte, 4)
 		if _, err := io.ReadFull(r, m); err != nil {
-			return "", 0, 0, err
+			return "", 0, 0, 0, err
 		}
 		magic = string(m)
 	}
 
 	header := make([]byte, 2)
 	if _, err := io.ReadFull(r, header); err != nil {
-		return magic, 0, 0, err
+		return magic, 0, 0, 0, err
 	}
 	profileID = header[0]
 	flags = header[1]
-	return magic, profileID, flags, nil
+
+	if !isStealth && magic == MagicHeaderAsym {
+		rc := make([]byte, 1)
+		if _, err := io.ReadFull(r, rc); err != nil {
+			return magic, profileID, flags, 0, err
+		}
+		recipientCount = rc[0]
+	}
+
+	return magic, profileID, flags, recipientCount, nil
 }
 
 // DecryptStreamWithPrivateKey decrypts data from r to w using a private key.
 func DecryptStreamWithPrivateKey(r io.Reader, w io.Writer, privKeyBytes []byte, concurrency int, isStealth bool) (byte, []byte, error) {
-	return DecryptStreamWithPrivateKeyAndVerifier(r, w, privKeyBytes, nil, concurrency, isStealth)
+	return DecryptStreamWithPrivateKeyAndEvents(r, w, privKeyBytes, nil, concurrency, isStealth, nil)
 }
 
-// DecryptStreamWithPrivateKeyAndVerifier is the internal implementation supporting optional signature verification.
-func DecryptStreamWithPrivateKeyAndVerifier(r io.Reader, w io.Writer, privKeyBytes []byte, senderPubKey []byte, concurrency int, isStealth bool) (byte, []byte, error) {
+// DecryptStreamWithPrivateKeyAndEvents is the extended version of DecryptStreamWithPrivateKey that supports telemetry.
+func DecryptStreamWithPrivateKeyAndEvents(r io.Reader, w io.Writer, privKeyBytes []byte, senderPubKey []byte, concurrency int, isStealth bool, eventStream chan<- EngineEvent) (byte, []byte, error) {
 	if !isStealth {
 		magic := make([]byte, 4)
 		if _, err := io.ReadFull(r, magic); err != nil {
@@ -177,16 +192,21 @@ func DecryptStreamWithPrivateKeyAndVerifier(r io.Reader, w io.Writer, privKeyByt
 	}
 	fekBuf.Destroy()
 
-	return flags, senderPubKey, streamDecrypt(r, w, aead, baseNonce, concurrency)
+	return flags, senderPubKey, streamDecrypt(r, w, aead, baseNonce, concurrency, eventStream)
 }
 
-func streamDecrypt(r io.Reader, w io.Writer, aead cipher.AEAD, baseNonce []byte, concurrency int) error {
+// DecryptStreamWithPrivateKeyAndVerifier is the internal implementation supporting optional signature verification.
+func DecryptStreamWithPrivateKeyAndVerifier(r io.Reader, w io.Writer, privKeyBytes []byte, senderPubKey []byte, concurrency int, isStealth bool) (byte, []byte, error) {
+	return DecryptStreamWithPrivateKeyAndEvents(r, w, privKeyBytes, senderPubKey, concurrency, isStealth, nil)
+}
+
+func streamDecrypt(r io.Reader, w io.Writer, aead cipher.AEAD, baseNonce []byte, concurrency int, eventStream chan<- EngineEvent) error {
 	if concurrency <= 0 {
 		concurrency = runtime.NumCPU()
 	}
 
 	if concurrency == 1 {
-		return streamDecryptSequential(r, w, aead, baseNonce)
+		return streamDecryptSequential(r, w, aead, baseNonce, eventStream)
 	}
 
 	type decryptJob struct {
@@ -276,17 +296,26 @@ func streamDecrypt(r io.Reader, w io.Writer, aead cipher.AEAD, baseNonce []byte,
 		close(seqResults)
 	}()
 
+	totalProcessed := int64(0)
 	return runSequencer(w, seqResults, errChan, func(w io.Writer, b []byte) error {
 		if _, err := w.Write(b); err != nil {
 			return err
+		}
+		totalProcessed += int64(len(b))
+		if eventStream != nil {
+			eventStream <- EventChunkProcessed{
+				BytesProcessed: int64(len(b)),
+				TotalProcessed: totalProcessed,
+			}
 		}
 		SafeClear(b)
 		return nil
 	})
 }
 
-func streamDecryptSequential(r io.Reader, w io.Writer, aead cipher.AEAD, baseNonce []byte) error {
+func streamDecryptSequential(r io.Reader, w io.Writer, aead cipher.AEAD, baseNonce []byte, eventStream chan<- EngineEvent) error {
 	chunkIndex := uint64(0)
+	totalProcessed := int64(0)
 	nonce := make([]byte, aead.NonceSize())
 	lenBuf := make([]byte, 4)
 
@@ -322,6 +351,15 @@ func streamDecryptSequential(r io.Reader, w io.Writer, aead cipher.AEAD, baseNon
 			SafeClear(plaintext)
 			return err
 		}
+
+		totalProcessed += int64(len(plaintext))
+		if eventStream != nil {
+			eventStream <- EventChunkProcessed{
+				BytesProcessed: int64(len(plaintext)),
+				TotalProcessed: totalProcessed,
+			}
+		}
+
 		SafeClear(plaintext)
 		chunkIndex++
 	}

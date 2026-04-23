@@ -76,7 +76,7 @@ func TestProfileV2RoundTrip(t *testing.T) {
 	_, _ = io.ReadFull(rand.Reader, baseNonce)
 	encrypted.Write(baseNonce)
 
-	if err := streamEncrypt(bytes.NewReader(data), &encrypted, aead, baseNonce, 1); err != nil {
+	if err := streamEncrypt(bytes.NewReader(data), &encrypted, aead, baseNonce, 1, nil); err != nil {
 		t.Fatal(err)
 	}
 
@@ -89,5 +89,35 @@ func TestProfileV2RoundTrip(t *testing.T) {
 
 	if !bytes.Equal(data, decrypted.Bytes()) {
 		t.Errorf("V2 Round-trip mismatch")
+	}
+}
+
+func TestRandomProfileGeneration(t *testing.T) {
+	seenIDs := make(map[byte]bool)
+	seenCiphers := make(map[byte]bool)
+
+	for i := 0; i < 100; i++ {
+		dp := GenerateRandomProfile(byte(i % 128))
+		if err := dp.Validate(); err != nil {
+			t.Fatalf("Generated invalid profile on iteration %d: %v", i, err)
+		}
+
+		// Ensure we are getting varied IDs and ciphers
+		seenIDs[dp.ID()] = true
+		seenCiphers[dp.CipherType] = true
+
+		// Perform a quick round-trip to ensure functionality
+		canary := []byte("random-profile-test-data")
+		pass := []byte("pass")
+		var enc bytes.Buffer
+		aead, _ := dp.NewAEAD(dp.DeriveKey(pass, make([]byte, dp.SaltSize())))
+		nonce := make([]byte, aead.NonceSize())
+		if err := streamEncrypt(bytes.NewReader(canary), &enc, aead, nonce, 1, nil); err != nil {
+			t.Fatalf("Random profile encryption failed: %v", err)
+		}
+	}
+
+	if len(seenCiphers) < 2 {
+		t.Errorf("Low cipher diversity in random profiles: %v", seenCiphers)
 	}
 }

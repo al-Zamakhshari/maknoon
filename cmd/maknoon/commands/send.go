@@ -130,6 +130,22 @@ func SendCmd() *cobra.Command {
 			}
 
 			// 2. Initialize Wormhole Client
+			conf := crypto.GetGlobalConfig()
+			if rendezvousURL == "" {
+				rendezvousURL = conf.Wormhole.RendezvousURL
+			}
+			if transitRelay == "" {
+				transitRelay = conf.Wormhole.TransitRelay
+			}
+
+			// Validate URLs if in Agent Mode
+			if err := GlobalContext.Engine.ValidateWormholeURL(rendezvousURL); err != nil {
+				return err
+			}
+			if err := GlobalContext.Engine.ValidateWormholeURL(transitRelay); err != nil {
+				return err
+			}
+
 			c := wormhole.Client{
 				RendezvousURL: rendezvousURL,
 			}

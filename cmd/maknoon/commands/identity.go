@@ -55,7 +55,19 @@ func identityPublishCmd() *cobra.Command {
 			}
 
 			m := crypto.NewIdentityManager()
-			id, err := m.LoadIdentity(name, []byte(passphrase), false)
+
+			// Check for FIDO2 and get PIN if needed
+			basePath, _, _ := m.ResolveBaseKeyPath(name)
+			var pin string
+			if _, err := os.Stat(basePath + ".fido2"); err == nil {
+				var err2 error
+				pin, err2 = getPIN()
+				if err2 != nil {
+					return err2
+				}
+			}
+
+			id, err := m.LoadIdentity(name, []byte(passphrase), pin, false)
 			if err != nil {
 				return err
 			}
@@ -209,7 +221,19 @@ func identitySplitCmd() *cobra.Command {
 			name := args[0]
 
 			m := crypto.NewIdentityManager()
-			id, err := m.LoadIdentity(name, []byte(passphrase), false)
+
+			// Check for FIDO2 and get PIN if needed
+			basePath, _, _ := m.ResolveBaseKeyPath(name)
+			var pin string
+			if _, err := os.Stat(basePath + ".fido2"); err == nil {
+				var err2 error
+				pin, err2 = getPIN()
+				if err2 != nil {
+					return err2
+				}
+			}
+
+			id, err := m.LoadIdentity(name, []byte(passphrase), pin, false)
 			if err != nil {
 				return err
 			}

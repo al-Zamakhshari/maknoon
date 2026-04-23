@@ -9,7 +9,6 @@ import (
 
 	"github.com/psanford/wormhole-william/rendezvous"
 	"github.com/psanford/wormhole-william/wordlist"
-	"github.com/psanford/wormhole-william/wormhole"
 )
 
 // ChatEvent represents a synchronized event in the chat stream.
@@ -29,9 +28,10 @@ type ChatSession struct {
 	SideID string
 	Code   string
 
-	Rendezvous *rendezvous.Client
-	Events     chan ChatEvent
-	done       chan struct{}
+	RendezvousURL string
+	Rendezvous    *rendezvous.Client
+	Events        chan ChatEvent
+	done          chan struct{}
 
 	// Synchronization State
 	mu          sync.Mutex
@@ -59,7 +59,11 @@ func NewChatSession(appID string) *ChatSession {
 
 // StartHost starts a chat session as a host.
 func (s *ChatSession) StartHost(ctx context.Context) (string, error) {
-	s.Rendezvous = rendezvous.NewClient(wormhole.DefaultRendezvousURL, s.SideID, s.AppID)
+	url := s.RendezvousURL
+	if url == "" {
+		url = GetGlobalConfig().Wormhole.RendezvousURL
+	}
+	s.Rendezvous = rendezvous.NewClient(url, s.SideID, s.AppID)
 	if _, err := s.Rendezvous.Connect(ctx); err != nil {
 		return "", err
 	}
@@ -81,7 +85,11 @@ func (s *ChatSession) StartHost(ctx context.Context) (string, error) {
 // StartJoin joins an existing chat session.
 func (s *ChatSession) StartJoin(ctx context.Context, code string) error {
 	s.Code = code
-	s.Rendezvous = rendezvous.NewClient(wormhole.DefaultRendezvousURL, s.SideID, s.AppID)
+	url := s.RendezvousURL
+	if url == "" {
+		url = GetGlobalConfig().Wormhole.RendezvousURL
+	}
+	s.Rendezvous = rendezvous.NewClient(url, s.SideID, s.AppID)
 	if _, err := s.Rendezvous.Connect(ctx); err != nil {
 		return err
 	}

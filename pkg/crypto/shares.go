@@ -137,9 +137,15 @@ func CombineShares(shares []Share) ([]byte, error) {
 		return nil, fmt.Errorf("insufficient shares: got %d, need %d", len(shares), m)
 	}
 
-	// Validate shares (version, threshold, checksum)
+	// Validate shares (version, threshold, checksum, and uniqueness)
 	secretLen := len(shares[0].Data)
+	seenIndices := make(map[byte]bool)
 	for _, s := range shares {
+		if seenIndices[s.Index] {
+			return nil, fmt.Errorf("duplicate share detected: index %d", s.Index)
+		}
+		seenIndices[s.Index] = true
+
 		if s.Version != ShareVersion {
 			return nil, fmt.Errorf("unsupported share version: %d", s.Version)
 		}

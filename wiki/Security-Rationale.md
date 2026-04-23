@@ -22,7 +22,15 @@ Standard encrypted files often contain "Magic Bytes" (e.g., `MAKN`) that identif
 *   **KDF**: Argon2id (Memory-hard key derivation).
 *   **Signatures**: ML-DSA-87 (Quantum-resistant authentication).
 
-## 5. File Lifecycle & Secure Deletion
+## 5. Threshold Security (SSS)
+Maknoon provides M-of-N secret sharding for identities and vaults using Shamir's Secret Sharing (SSS) over $GF(2^8)$.
+
+### Implementation Details:
+*   **Mnemonic Encoding**: Shares are converted to BIP-39 style mnemonics for human-friendly "break-glass" scenarios.
+*   **Checksum Verification**: Each share includes a SHA-256 based checksum to detect accidental word transposition or corruption.
+*   **Panic-Free Reconstruction**: The reconstruction engine rigorously validates share uniqueness. Providing duplicate shares (e.g., the same mnemonic twice) returns a descriptive error rather than triggering a mathematical panic (division by zero), ensuring robust operation in automated environments.
+
+## 6. File Lifecycle & Secure Deletion
 Encryption only protects the ciphertext. To protect the original plaintext, Maknoon provides an optional `--shred` flag during encryption.
 
 ### The Shredding Reality

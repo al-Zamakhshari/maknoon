@@ -56,3 +56,41 @@ func FuzzUnpackDynamicProfile(f *testing.F) {
 		_ = dp.Validate()
 	})
 }
+
+func FuzzRandomProfiles(f *testing.F) {
+	f.Add(byte(100))
+	f.Add(byte(200))
+
+	f.Fuzz(func(t *testing.T, id byte) {
+		dp := GenerateRandomProfile(id)
+		if err := dp.Validate(); err != nil {
+			t.Fatalf("Random profile validation failed: %v", err)
+		}
+
+		canary := []byte("fuzz-test-canary-data")
+		pass := []byte("fuzz-pass")
+		salt := make([]byte, dp.SaltSize())
+
+		// Test Symmetric Roundtrip
+		var encrypted bytes.Buffer
+		key := dp.DeriveKey(pass, salt)
+		aead, err := dp.NewAEAD(key)
+		if err != nil {
+			t.Fatalf("Failed to create AEAD: %v", err)
+		}
+		nonce := make([]byte, aead.NonceSize())
+
+		if err := streamEncrypt(bytes.NewReader(canary), &encrypted, aead, nonce, 1, nil); err != nil {
+			t.Fatalf("Encryption failed: %v", err)
+		}
+
+		var decrypted bytes.Buffer
+		if err := streamDecrypt(bytes.NewReader(encrypted.Bytes()), &decrypted, aead, nonce, 1, nil); err != nil {
+			t.Fatalf("Decryption failed: %v", err)
+		}
+
+		if !bytes.Equal(canary, decrypted.Bytes()) {
+			t.Error("Data corruption detected")
+		}
+	})
+}

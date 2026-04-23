@@ -86,8 +86,8 @@ func TestWireFormatHybridProof(t *testing.T) {
 	}
 
 	// Proof of Hybrid components:
-	// ML-KEM-768 CT (1088) + X25519 PK (32) + Wrapped FEK (32) = 1152
-	const expectedTotalSize = 1152
+	// ML-KEM-768 CT (1088) + X25519 PK (32) + Wrapped FEK with tag (48) = 1168
+	const expectedTotalSize = 1168
 
 	if len(wrapped) != expectedTotalSize {
 		t.Errorf("Wire format mismatch. Expected %d bytes, got %d", expectedTotalSize, len(wrapped))

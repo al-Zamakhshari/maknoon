@@ -2,100 +2,65 @@
 
 Maknoon is a high-performance, post-quantum CLI encryption tool. It focuses on efficiency, security, and future-proofing against quantum computing threats.
 
-## 🏗 Project Architecture
+## 🏗 Project Architecture (v2.0 - Policy Driven)
 
-- **`cmd/maknoon/`**: Entry point (`main.go`) and CLI command definitions using Cobra. CLI commands should remain "thin," delegating logic to the service layer.
+- **`cmd/maknoon/`**: Entry point (`main.go`). Now uses a centralized `Engine` instantiated with either a `HumanPolicy` or `AgentPolicy` at startup.
+- **`pkg/crypto/engine.go`**: The central stateful service. Owns the `SecurityPolicy`, `Config`, and `IdentityManager`. All high-level crypto operations (Protect, Unprotect) are methods of this struct.
+- **`pkg/crypto/policy.go`**: Implementation of the **Policy Provider Pattern**. Dictates capability-based security (path validation, resource limits).
 - **`pkg/crypto/`**: Core library implementing the cryptographic pipeline, streaming logic, and FIDO2 integration.
-- **`integrations/`**: Third-party wrappers and tools (e.g., MCP Server).
-- **`pkg/crypto/shares.go`**: Core Shamir's Secret Sharing engine with mnemonic support.
-- **`pkg/crypto/registry.go`**: Identity Bridge interface and Bolt-based local registry.
-- **`pkg/crypto/registry_nostr.go`**: Global discovery via Nostr Kind 0 metadata events.
-- **`pkg/crypto/registry_dns.go`**: Global discovery via DNS TXT records (with deSEC support).
-- **`pkg/crypto/contacts.go`**: Local Petname system for trusted peer management.
+- **`integrations/mcp/`**: MCP Server for AI Agent interaction. Now fully integrated with the Agent Sandbox.
 
 ## 🛡 Cryptographic Stack
 
 - **Symmetric Cipher**: XChaCha20-Poly1305 (AEAD) with 192-bit nonces.
-- **Asymmetric Encryption (KEM)**: ML-KEM / Kyber1024 (NIST Standard).
+- **Asymmetric Encryption (KEM)**: ML-KEM / Kyber1024 (NIST Standard) wrapped in standard **HPKE Seal/Open** (RFC 9180).
 - **Digital Signatures**: ML-DSA-87 / Dilithium (NIST Standard).
 - **Key Derivation (KDF)**: Argon2id (Time: 3, Memory: 64MB).
-- **Secret Sharing**: Shamir's SSS over $GF(2^8)$ with BIP-39 style mnemonics. Includes KEM, SIG, and Nostr keys.
-- **Identity Discovery**: Global resolution via Nostr (`@nostr:npub...`) and DNS (`@domain.com`) with local Petname prioritization and self-signed record verification.
-- **P2P Transport**: Magic Wormhole (SPAKE2 PAKE) layered with Maknoon Symmetric PQC.
- Supports **Identity-Based** (Asymmetric) handshakes, **Zero-Disk** text transport, and a **Sequenced Chat Protocol** with reordering buffers for rock-solid synchronization.
+- **Secret Sharing**: Shamir's SSS over $GF(2^8)$ with BIP-39 style mnemonics.
 
-## 🤖 Agent Integration & Skills
+## 🤖 Agent Sandbox & "Restricted Mode"
 
-- **"gh skill" Ready**: The project defines an official Agent Skill at `.github/skills/maknoon/SKILL.md`.
-- **Inlined MCP Server**: The skill manifest includes a dedicated MCP server configuration (`go run ./integrations/mcp/main.go`) that agents can auto-provision.
-- **Agent mode**: Triggered via `MAKNOON_AGENT_MODE=1` or `--json`. Suppresses all interactive prompts and forces structured JSON output.
+Maknoon implements a strict **Capability-Based Sandbox** for autonomous environments (triggered via `MAKNOON_AGENT_MODE=1` or `--json`):
+
+1.  **Filesystem Isolation**: Restricted to the user's Home directory (`~/`) and system Temp directories.
+2.  **Resource Governance**: Parallel workers are clamped (default: 2), and Argon2id parameters are capped to prevent DoS.
+3.  **Network Boundaries**: P2P transfers are restricted to a configurable allow-list of trusted Rendezvous/Transit servers.
+4.  **Immutable Config**: Agents are physically blocked from using `config set` or `config init` to modify global security policies.
+5.  **Ephemeral Profiles**: Agents can generate profiles as JSON output but cannot persist them to disk.
 
 ## 📋 Engineering Standards & Design Patterns
 
-### 1. Service Layer Pattern
-Core business logic (handshakes, multi-stage pipelines) MUST reside in `pkg/crypto` and be exposed as reusable service functions.
-- **`crypto.Protect`**: Orchestrates "Archive -> Compress -> Encrypt."
-- **`crypto.Unprotect`**: Orchestrates "Decrypt -> Decompress -> Extract."
-- **Goal**: Allow the core library to be used by TUIs, APIs, or Agents without CLI dependency.
+### 1. The Engine Pattern
+All business logic must be invoked via the `Engine` struct. Do not call low-level crypto functions directly from CLI commands.
+- **`engine.Protect`**: Orchestrates "Archive -> Compress -> Encrypt" under active policy.
+- **`engine.Unprotect`**: Orchestrates "Decrypt -> Decompress -> Extract" under active policy.
 
-### 2. Context Encapsulation
-Avoid global variables for execution state. Use the `commands.Context` struct to manage `JSONOutput`, `JSONWriter`, and other session-specific states.
-- Always use `commands.SetJSONOutput(bool)` to keep state synchronized.
+### 2. Policy Provider Pattern
+Avoid "Mode-Based" logic (`if IsAgentMode`). Instead, query the `engine.Policy` object for permissions (e.g., `engine.Policy.ValidatePath(path)`).
 
 ### 3. Centralized Security Validation
-All file system operations MUST be validated using `crypto.ValidatePath(path, restricted)`.
-- **Restricted Mode**: (Triggered in Agent/JSON mode) Limits access to the user's Home and System Temp directories to prevent path traversal.
+All file system operations MUST be validated using the engine's policy. The sandbox is enforced at the entry point of the `Engine` methods.
 
-### 4. Identity & Contact Management
-Use `crypto.ContactManager` for local address book operations and `crypto.IdentityRegistry` for global handle discovery.
-- **Rule**: Always resolve local Petnames *before* falling back to the global dPKI registry.
-- **Verification**: All remote identity records MUST be self-signed by the user's ML-DSA key and verified locally before use.
-
-### 5. Memory Hygiene
+### 4. Memory Hygiene
 Use `crypto.SafeClear` (aliased to `memguard.WipeBytes`) immediately after sensitive data use.
-- **Critical**: Go's GC does not guarantee immediate erasure; deterministic wiping is mandatory for FEKs and passphrases.
-
-### 7. Agentic Self-Description (Mandatory)
-Maknoon MUST remain self-describing for autonomous agents. 
-- **The `schema` Command**: Every new CLI command or flag MUST be automatically discoverable via `maknoon schema`. 
-- **Metadata Requirement**: All commands MUST provide a concise `Short` description and a well-formed `Use` string (e.g., `command [optional] <required>`). 
-- **Verification**: Changes to the CLI tree MUST be verified by running `go test ./cmd/maknoon/commands/schema_test.go`.
-- **Documentation Sync**: Any change to `cmd/` or `pkg/` that alters user-facing behavior MUST be accompanied by an update to `README.md` or `wiki/`. The pre-commit hook enforces this heuristic.
+deterministic wiping is mandatory for FEKs and private keys.
 
 ## 🛠 Building and Running
 
-### Prerequisites
-- Go 1.25 or higher.
-
 ### Key Commands
 - **Build**: `go build -o maknoon ./cmd/maknoon`
-- **Test**: `go test ./...`
+- **Test (Quick)**: `go test -v -short ./...` (Skips flaky network tests)
+- **Schema**: `maknoon schema` (Generates JSON metadata for agents)
 
-## 🚀 Development Workflow
+## 🚀 v3.0 Roadmap (Industrial-Grade Refactor)
+*The following tasks are pending implementation (see `.agents/plans/v3-architecture-roadmap.md`):*
 
-1.  **Dedicated Branching**: ALWAYS create a new feature branch (`feat/...`, `fix/...`) BEFORE committing.
-2.  **Pre-Push Requirements**:
-    *   **Update Documentation**: Sync `README.md`, `maknoon.1`, and `wiki/`.
-    *   **Verify Tests**: Ensure 100% pass rate on all Go tests.
-    *   **Formatting**: Run `gofmt -w .` project-wide.
-3.  **Mandatory Pull Requests**: Direct commits to `main` are restricted. Changes must be verified via CI/CD before merging.
+1.  **Strong Error Typing**: Transition from `fmt.Errorf` to concrete error structs (e.g., `ErrPolicyViolation`) in `pkg/crypto/errors.go`.
+2.  **The Observer Pattern**: Replace `ProgressReader` with an asynchronous `EngineEvent` stream for decoupled telemetry.
+3.  **The Decorator Pattern**: Refactor monolithic pipelines into a chain of `Transformer` middleware (Archive, Compress, Encrypt).
+4.  **Registry Factory**: Replace hardcoded identity registries with a pluggable registration system.
 
-## 🚀 Pre-Release Checklist
-
-1.  **Security Audit (v1.5 Status: COMPLETED)**:
-    *   **Sharding Security**: Verified that $M-1$ shards yield zero information and that reconstructed buffers are wiped.
-    *   **dPKI Integrity**: Confirmed that all published records are self-signed and verified via ML-DSA.
-    *   **Path Traversal**: Verified that `ValidatePath` is applied to all file I/O commands (`encrypt`, `decrypt`, `info`, `sign`, `verify`).
-    *   **Agent Isolation**: Confirmed that in Agent mode, all file operations are restricted to `~/` and system temp directories.
-    *   **Zip Slip**: Verified protection in `ExtractArchive`.
-    *   **Zero-Trace**: Confirmed use of `SafeClear` for FEKs and private keys.
-    *   **JSON Redirection**: In `stdout` decryption, success metadata MUST go to `stderr`.
-2.  **Quality Check**:
-    *   Run `staticcheck ./...` and `go vet ./...`.
-    *   Verify CI/CD success at [Actions](https://github.com/al-Zamakhshari/maknoon/actions).
-
-## 🧪 Testing Practices
-
-- **Unit Tests**: Alongside source in `*_test.go`.
-- **Integration Tests**: End-to-end scenarios in `cmd/maknoon/main_test.go` and `integrations/`.
-- **P2P Verification**: Use `pkg/crypto/p2p_test.go` to verify race-free header handling, zero-disk text transfers, and asymmetric identity-based handshakes.
+## 🧪 Current Status
+- **Agent Sandbox**: Fully Sealed (v1.5 Security Audit verified).
+- **Architecture**: V2 (Policy-Driven Engine) completed.
+- **Phase 1 of V3**: Started (Errors defined, migration pending).

@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"io"
 	"os"
 	"path/filepath"
@@ -9,8 +10,14 @@ import (
 	"testing"
 
 	"github.com/al-Zamakhshari/maknoon/cmd/maknoon/commands"
+	"github.com/al-Zamakhshari/maknoon/pkg/crypto"
 	"github.com/spf13/cobra"
 )
+
+func TestMain(m *testing.M) {
+	_ = commands.InitEngine()
+	os.Exit(m.Run())
+}
 
 // runRootCmd helper to run the full CLI with global flags and capture combined output
 func runRootCmd(args ...string) string {
@@ -23,6 +30,7 @@ func runRootCmd(args ...string) string {
 				cmd.SilenceUsage = true
 				cmd.SilenceErrors = true
 			}
+			_ = commands.InitEngine()
 		},
 	}
 	rootCmd.PersistentFlags().BoolVar(&commands.JSONOutput, "json", false, "Output results in JSON format")
@@ -387,12 +395,14 @@ func TestIntegrationRandomProfileStress(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// 1. Generate a random profile
+	dp := crypto.GenerateRandomProfile(100)
+	profileJSON, err := json.Marshal(dp)
+	if err != nil {
+		t.Fatal(err)
+	}
 	profileFile := filepath.Join(tmpDir, "random_profile.json")
-	profCmd := commands.ProfilesCmd()
-	profCmd.SetArgs([]string{"--generate", "--secret", "--output", profileFile})
-
-	if err := profCmd.Execute(); err != nil {
-		t.Fatalf("Random profile generation failed: %v", err)
+	if err := os.WriteFile(profileFile, profileJSON, 0644); err != nil {
+		t.Fatal(err)
 	}
 
 	inputFile := filepath.Join(tmpDir, "random_test.txt")
@@ -713,6 +723,7 @@ func TestIntegrationIdentity(t *testing.T) {
 	oldHome := os.Getenv("HOME")
 	os.Setenv("HOME", tmpDir)
 	defer os.Setenv("HOME", oldHome)
+	_ = commands.InitEngine()
 
 	// 1. Generate an identity
 	keyBase := "test_id"
@@ -781,6 +792,7 @@ func TestIntegrationVaultMaintenance(t *testing.T) {
 	oldHome := os.Getenv("HOME")
 	os.Setenv("HOME", tmpDir)
 	defer os.Setenv("HOME", oldHome)
+	_ = commands.InitEngine()
 
 	vaultName := "maint_test"
 	if err := os.Setenv("MAKNOON_PASSWORD", "secret123"); err != nil {
@@ -906,5 +918,37 @@ func TestIntegrationFullFeatureStress(t *testing.T) {
 	}
 	if !bytes.Equal(orig, restored) {
 		t.Fatalf("Stress test content mismatch")
+	}
+}
+
+func TestIntegrationCustomNamedProfile(t *testing.T) {
+	tmpDir := t.TempDir()
+	oldHome := os.Getenv("HOME")
+	os.Setenv("HOME", tmpDir)
+	defer os.Setenv("HOME", oldHome)
+	_ = commands.InitEngine()
+
+	// 1. Generate a custom profile
+	runRootCmd("profiles", "gen", "custom-suite")
+
+	// 2. Verify it's in the list
+	listOut := runRootCmd("profiles", "list")
+	if !strings.Contains(listOut, "custom-suite") {
+		t.Fatalf("Custom profile 'custom-suite' not found in list: %s", listOut)
+	}
+
+	// 3. Encrypt using the named profile
+	plainPath := filepath.Join(tmpDir, "secret.txt")
+	os.WriteFile(plainPath, []byte("named profile integration test"), 0600)
+
+	runRootCmd("encrypt", plainPath, "-s", "mypass", "--profile", "custom-suite")
+
+	// 4. Decrypt and verify
+	decPath := filepath.Join(tmpDir, "restored.txt")
+	runRootCmd("decrypt", plainPath+".makn", "-o", decPath, "-s", "mypass")
+
+	restored, _ := os.ReadFile(decPath)
+	if string(restored) != "named profile integration test" {
+		t.Errorf("Restored content mismatch: %s", string(restored))
 	}
 }

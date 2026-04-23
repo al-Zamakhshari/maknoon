@@ -95,7 +95,7 @@ func TestFido2EnrollAndDeriveTopLevel(t *testing.T) {
 	}
 
 	// Test Enroll
-	meta, secret, err := Fido2Enroll("test.io", "test-user")
+	meta, secret, err := Fido2Enroll("test.io", "test-user", "")
 	if err != nil {
 		t.Fatalf("Enroll failed: %v", err)
 	}
@@ -107,7 +107,7 @@ func TestFido2EnrollAndDeriveTopLevel(t *testing.T) {
 	}
 
 	// Test Derive
-	derived, err := Fido2Derive("test.io", meta.CredentialID)
+	derived, err := Fido2Derive("test.io", meta.CredentialID, "")
 	if err != nil {
 		t.Fatalf("Derive failed: %v", err)
 	}
@@ -123,10 +123,10 @@ func TestFido2OpenerError(t *testing.T) {
 		return nil, fmt.Errorf("device busy")
 	}
 
-	if _, _, err := Fido2Enroll("a", "b"); err == nil {
+	if _, _, err := Fido2Enroll("a", "b", ""); err == nil {
 		t.Error("Expected error from opener in Enroll")
 	}
-	if _, err := Fido2Derive("a", []byte("b")); err == nil {
+	if _, err := Fido2Derive("a", []byte("b"), ""); err == nil {
 		t.Error("Expected error from opener in Derive")
 	}
 }
@@ -167,7 +167,7 @@ func TestFido2FallbackTouch(t *testing.T) {
 		},
 	}
 
-	_, secret, err := Fido2EnrollWithAuthenticator(mock, "test.io", "user")
+	_, secret, err := Fido2EnrollWithAuthenticator(mock, "test.io", "user", "")
 	if err != nil {
 		t.Fatalf("Enroll failed: %v", err)
 	}

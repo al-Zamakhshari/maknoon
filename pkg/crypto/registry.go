@@ -120,3 +120,49 @@ func parseMaknoonTXT(txt string) (*IdentityRecord, error) {
 
 	return &record, nil
 }
+
+// MultiRegistry combines multiple registries for discovery.
+type MultiRegistry struct {
+	Registries []IdentityRegistry
+}
+
+var registryFactories = make(map[string]func() IdentityRegistry)
+
+// RegisterRegistry adds a new registry factory to the global map.
+func RegisterRegistry(name string, factory func() IdentityRegistry) {
+	registryFactories[name] = factory
+}
+
+// NewIdentityRegistry returns a multi-registry based on configuration.
+func NewIdentityRegistry() IdentityRegistry {
+	conf := GetGlobalConfig()
+	active := conf.IdentityRegistries
+	if len(active) == 0 {
+		active = []string{"dns", "nostr"} // Default fallback
+	}
+
+	mr := &MultiRegistry{}
+	for _, name := range active {
+		if factory, ok := registryFactories[name]; ok {
+			mr.Registries = append(mr.Registries, factory())
+		}
+	}
+	return mr
+}
+
+func (m *MultiRegistry) Resolve(ctx context.Context, handle string) (*IdentityRecord, error) {
+	for _, r := range m.Registries {
+		if record, err := r.Resolve(ctx, handle); err == nil {
+			return record, nil
+		}
+	}
+	return nil, fmt.Errorf("failed to resolve handle in any registry: %s", handle)
+}
+
+func (m *MultiRegistry) Publish(ctx context.Context, record *IdentityRecord) error {
+	return fmt.Errorf("use specific registry for publishing")
+}
+
+func (m *MultiRegistry) Revoke(ctx context.Context, handle string, proof []byte) error {
+	return fmt.Errorf("use specific registry for revocation")
+}

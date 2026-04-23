@@ -43,7 +43,7 @@ func TestP2PFlowCorruption(t *testing.T) {
 	// 2. Simulate the FIXED receive.go logic
 	// Peeking first
 	reader := bytes.NewReader(encrypted.Bytes())
-	_, _, recvFlags, err := ReadHeader(reader, false)
+	_, _, recvFlags, _, err := ReadHeader(reader, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -118,7 +118,7 @@ func TestP2PDirectoryFlow(t *testing.T) {
 	// 3. Decrypt and Restore (Simulate 'receive')
 	// Peek flags first (as per our fix)
 	reader := bytes.NewReader(encrypted.Bytes())
-	_, _, recvFlags, err := ReadHeader(reader, false)
+	_, _, recvFlags, _, err := ReadHeader(reader, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -189,7 +189,7 @@ func TestP2PTextTransfer(t *testing.T) {
 	// Actually, FinalizeRestoration needs a way to write to a custom buffer.
 	// For now, let's use a temporary file.
 	outPath := filepath.Join(t.TempDir(), "out.txt")
-	if err := FinalizeRestoration(&decrypted, recvFlags, outPath, nil); err != nil {
+	if err := FinalizeRestoration(&decrypted, nil, recvFlags, outPath, nil); err != nil {
 		t.Fatalf("Finalize failed: %v", err)
 	}
 
@@ -224,7 +224,7 @@ func TestP2PAsymmetric(t *testing.T) {
 	// 3. Decrypt with recipient's private key (Simulate 'receive')
 	// Peek at header first (standard pattern)
 	reader := bytes.NewReader(encrypted.Bytes())
-	magic, _, _, err := ReadHeader(reader, false)
+	magic, _, _, _, err := ReadHeader(reader, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -242,7 +242,7 @@ func TestP2PAsymmetric(t *testing.T) {
 
 	// Finalize (Decompress)
 	outPath := filepath.Join(t.TempDir(), "out_asym.txt")
-	if err := FinalizeRestoration(&decrypted, recvFlags, outPath, nil); err != nil {
+	if err := FinalizeRestoration(&decrypted, nil, recvFlags, outPath, nil); err != nil {
 		t.Fatalf("Finalize failed: %v", err)
 	}
 

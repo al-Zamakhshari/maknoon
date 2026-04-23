@@ -7,12 +7,87 @@ import (
 	"os"
 
 	"github.com/al-Zamakhshari/maknoon/pkg/crypto"
+	"github.com/schollz/progressbar/v3"
+	"github.com/spf13/cobra"
+	"golang.org/x/term"
 )
+
+// getPIN prompts the user for a FIDO2 PIN if not provided via environment or in agent mode.
+func getPIN() (string, error) {
+	if env := os.Getenv("MAKNOON_FIDO2_PIN"); env != "" {
+		return env, nil
+	}
+	if GlobalContext.Engine != nil && GlobalContext.Engine.Policy.IsAgent() {
+		return "", nil // Library will handle the "PIN required" error if needed
+	}
+
+	fmt.Print("Enter FIDO2 Security Key PIN: ")
+	p, err := term.ReadPassword(int(os.Stdin.Fd()))
+	fmt.Println()
+	if err != nil {
+		return "", err
+	}
+	return string(p), nil
+}
+
+// getPassphrase prompts the user for a passphrase if not provided and not in agent mode.
+// It returns the passphrase and a boolean indicating if it was collected via terminal interaction.
+func getPassphrase(prompt string) ([]byte, bool, error) {
+	if env := os.Getenv("MAKNOON_PASSPHRASE"); env != "" {
+		return []byte(env), false, nil
+	}
+	if GlobalContext.Engine != nil && GlobalContext.Engine.Policy.IsAgent() {
+		return nil, false, fmt.Errorf("passphrase required via MAKNOON_PASSPHRASE (interaction prohibited in agent mode)")
+	}
+
+	fmt.Print(prompt)
+	p, err := term.ReadPassword(int(os.Stdin.Fd()))
+	fmt.Println()
+	if err != nil {
+		return nil, false, err
+	}
+	return p, true, nil
+}
+
+// handleEngineEvents consumes the telemetry stream and updates the UI (e.g., progress bars).
+func handleEngineEvents(events <-chan crypto.EngineEvent, quiet bool) {
+	var bar *progressbar.ProgressBar
+	for ev := range events {
+		if quiet {
+			continue
+		}
+		switch e := ev.(type) {
+		case crypto.EventEncryptionStarted:
+			if e.TotalBytes > 0 {
+				bar = progressbar.DefaultBytes(e.TotalBytes, "protecting")
+			} else {
+				fmt.Fprintln(os.Stderr, "Protecting...")
+			}
+		case crypto.EventDecryptionStarted:
+			if e.TotalBytes > 0 {
+				bar = progressbar.DefaultBytes(e.TotalBytes, "unprotecting")
+			} else {
+				fmt.Fprintln(os.Stderr, "Unprotecting...")
+			}
+		case crypto.EventChunkProcessed:
+			if bar != nil {
+				_ = bar.Set64(e.TotalProcessed)
+			}
+		case crypto.EventHandshakeComplete:
+			// Handshake done, usually fast so maybe just a log if verbose
+		}
+	}
+	if bar != nil {
+		_ = bar.Finish()
+		fmt.Fprintln(os.Stderr)
+	}
+}
 
 // Context encapsulates the execution state of the Maknoon CLI.
 type Context struct {
 	JSONOutput bool
 	JSONWriter io.Writer
+	Engine     *crypto.Engine
 }
 
 // GlobalContext is the default context for CLI execution.
@@ -26,9 +101,37 @@ func (c *Context) printJSON(v interface{}) {
 	fmt.Fprintln(c.JSONWriter, string(raw))
 }
 
-// printErrorJSON outputs an error as a JSON object to stderr.
+// printErrorJSON outputs an error as a JSON object to stderr, including metadata for typed errors.
 func (c *Context) printErrorJSON(err error) {
-	raw, _ := json.Marshal(map[string]string{"error": err.Error()})
+	resp := map[string]interface{}{
+		"error": err.Error(),
+	}
+
+	// Inspect typed errors for metadata
+	var policyErr *crypto.ErrPolicyViolation
+	var authErr *crypto.ErrAuthentication
+	var cryptoErr *crypto.ErrCrypto
+	var stateErr *crypto.ErrState
+
+	if crypto.As(err, &policyErr) {
+		resp["type"] = "security_policy_violation"
+		resp["is_security_violation"] = true
+		resp["code"] = 403
+		if policyErr.Path != "" {
+			resp["path"] = policyErr.Path
+		}
+	} else if crypto.As(err, &authErr) {
+		resp["type"] = "authentication_failed"
+		resp["code"] = 401
+	} else if crypto.As(err, &cryptoErr) {
+		resp["type"] = "cryptographic_failure"
+		resp["code"] = 500
+	} else if crypto.As(err, &stateErr) {
+		resp["type"] = "system_state_error"
+		resp["code"] = 503
+	}
+
+	raw, _ := json.Marshal(resp)
 	fmt.Fprintln(os.Stderr, string(raw))
 }
 
@@ -59,6 +162,24 @@ func SetJSONOutput(enabled bool) {
 	GlobalContext.JSONOutput = enabled
 }
 
+// InitEngine initializes the GlobalContext's Engine with the appropriate policy.
+func InitEngine() error {
+	crypto.ResetGlobalConfig()
+	var policy crypto.SecurityPolicy
+	if crypto.IsAgentMode() {
+		policy = &crypto.AgentPolicy{}
+	} else {
+		policy = &crypto.HumanPolicy{}
+	}
+
+	engine, err := crypto.NewEngine(policy)
+	if err != nil {
+		return err
+	}
+	GlobalContext.Engine = engine
+	return nil
+}
+
 // resolveProfile maps a profile name or ID string to a byte ID.
 func resolveProfile(p string) (byte, error) {
 	switch p {
@@ -84,11 +205,19 @@ func resolveProfile(p string) (byte, error) {
 }
 
 // validatePath ensures a path is safe to use.
-// In JSON mode, it restricts all file operations to the user's home directory.
 func validatePath(path string) error {
-	// If NOT in JSON/Agent mode, we allow all paths (traditional CLI behavior)
-	if !JSONOutput {
+	if GlobalContext.Engine == nil {
 		return nil
 	}
-	return crypto.ValidatePath(path, true)
+	return GlobalContext.Engine.Policy.ValidatePath(path)
+}
+
+func checkJSONMode(cmd *cobra.Command) {
+	if JSONOutput || os.Getenv("MAKNOON_JSON") == "1" {
+		JSONOutput = true
+		if cmd != nil {
+			cmd.SilenceUsage = true
+			cmd.SilenceErrors = true
+		}
+	}
 }

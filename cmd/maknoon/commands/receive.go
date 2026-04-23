@@ -35,6 +35,22 @@ func ReceiveCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			code := args[0]
 
+			conf := crypto.GetGlobalConfig()
+			if recvRendezvousURL == "" {
+				recvRendezvousURL = conf.Wormhole.RendezvousURL
+			}
+			if recvTransitRelay == "" {
+				recvTransitRelay = conf.Wormhole.TransitRelay
+			}
+
+			// Validate URLs if in Agent Mode
+			if err := GlobalContext.Engine.ValidateWormholeURL(recvRendezvousURL); err != nil {
+				return err
+			}
+			if err := GlobalContext.Engine.ValidateWormholeURL(recvTransitRelay); err != nil {
+				return err
+			}
+
 			c := wormhole.Client{
 				RendezvousURL: recvRendezvousURL,
 			}
@@ -98,7 +114,7 @@ func ReceiveCmd() *cobra.Command {
 			if _, err := tmpFile.Seek(0, 0); err != nil {
 				return err
 			}
-			magic, _, flags, err := crypto.ReadHeader(tmpFile, recvStealth)
+			magic, _, flags, _, err := crypto.ReadHeader(tmpFile, recvStealth)
 			if err != nil {
 				return fmt.Errorf("failed to read file header: %w", err)
 			}
@@ -106,10 +122,8 @@ func ReceiveCmd() *cobra.Command {
 			// 3. Resolve key (Asymmetric or Symmetric)
 			var passBytes []byte
 			var privKeyBytes []byte
-			var isAsymmetric bool
 
 			if magic == crypto.MagicHeaderAsym {
-				isAsymmetric = true
 				if !quietRecv {
 					fmt.Println("🛡️  Detected Identity-based encryption.")
 				}
@@ -120,20 +134,31 @@ func ReceiveCmd() *cobra.Command {
 					return fmt.Errorf("private key required for identity-based P2P (use -k or MAKNOON_PRIVATE_KEY)")
 				}
 
-				privKeyBytes, err = m.LoadPrivateKey(resolvedPriv, []byte(recvPassphrase), false)
+				// Check for FIDO2 and get PIN if needed
+				var pin string
+				if _, err := os.Stat(strings.TrimSuffix(resolvedPriv, ".key") + ".fido2"); err == nil {
+					var err2 error
+					pin, err2 = getPIN()
+					if err2 != nil {
+						return err2
+					}
+				}
+
+				privKeyBytes, err = m.LoadPrivateKey(resolvedPriv, []byte(recvPassphrase), pin, false)
 				if err != nil {
 					return err
 				}
 				defer crypto.SafeClear(privKeyBytes)
 			} else {
 				if recvPassphrase == "" {
-					if JSONOutput {
-						return fmt.Errorf("session passphrase required via --passphrase for symmetric P2P")
+					var err error
+					passBytes, _, err = getPassphrase("Enter P2P session passphrase: ")
+					if err != nil {
+						return err
 					}
-					fmt.Printf("\n🔐 Enter session passphrase: ")
-					fmt.Scanln(&recvPassphrase)
+				} else {
+					passBytes = []byte(recvPassphrase)
 				}
-				passBytes = []byte(recvPassphrase)
 				defer crypto.SafeClear(passBytes)
 			}
 
@@ -166,20 +191,20 @@ func ReceiveCmd() *cobra.Command {
 
 			// Use pipe to bridge DecryptStream and FinalizeRestoration
 			pr, pw := io.Pipe()
-			var dErr error
 			go func() {
 				defer pw.Close()
-				if isAsymmetric {
-					_, _, dErr = crypto.DecryptStreamWithPrivateKeyAndVerifier(tmpFile, pw, privKeyBytes, nil, 0, recvStealth)
+				var dErr error
+				if privKeyBytes != nil {
+					_, _, dErr = crypto.DecryptStreamWithPrivateKeyAndEvents(tmpFile, pw, privKeyBytes, nil, 0, recvStealth, nil)
 				} else {
-					_, _, dErr = crypto.DecryptStream(tmpFile, pw, passBytes, 0, recvStealth)
+					_, _, dErr = crypto.DecryptStreamWithEvents(tmpFile, pw, passBytes, 0, recvStealth, nil)
 				}
 				if dErr != nil {
 					_ = pw.CloseWithError(dErr)
 				}
 			}()
 
-			if err := crypto.FinalizeRestoration(pr, flags, finalOut, slog.New(slog.NewTextHandler(io.Discard, nil))); err != nil {
+			if err := crypto.FinalizeRestoration(pr, nil, flags, finalOut, slog.New(slog.NewTextHandler(io.Discard, nil))); err != nil {
 				if JSONOutput {
 					printErrorJSON(err)
 					return err

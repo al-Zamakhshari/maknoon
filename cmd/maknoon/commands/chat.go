@@ -11,8 +11,10 @@ import (
 )
 
 var (
-	chatPassphrase string
-	chatSignKey    string
+	chatPassphrase  string
+	chatSignKey     string
+	chatRendezvous  string
+	chatTransitAddr string
 )
 
 const chatAppID = "maknoon.io/ghost-chat/v1"
@@ -31,6 +33,8 @@ func ChatCmd() *cobra.Command {
 
 	cmd.Flags().StringVarP(&chatPassphrase, "passphrase", "s", "", "Shared secret for the chat (optional)")
 	cmd.Flags().StringVar(&chatSignKey, "sign-key", "", "Path to your private key for message signing")
+	cmd.Flags().StringVar(&chatRendezvous, "rendezvous-url", "", "Custom Magic Wormhole rendezvous server URL")
+	cmd.Flags().StringVar(&chatTransitAddr, "transit-relay", "", "Custom Magic Wormhole transit relay address")
 
 	return cmd
 }
@@ -38,7 +42,24 @@ func ChatCmd() *cobra.Command {
 // --- Agent Mode (JSONL REPL) ---
 
 func runAgentChat(args []string) error {
+	conf := crypto.GetGlobalConfig()
+	if chatRendezvous == "" {
+		chatRendezvous = conf.Wormhole.RendezvousURL
+	}
+	if chatTransitAddr == "" {
+		chatTransitAddr = conf.Wormhole.TransitRelay
+	}
+
+	// Validate URLs if in Agent Mode
+	if err := GlobalContext.Engine.ValidateWormholeURL(chatRendezvous); err != nil {
+		return err
+	}
+	if err := GlobalContext.Engine.ValidateWormholeURL(chatTransitAddr); err != nil {
+		return err
+	}
+
 	sess := crypto.NewChatSession(chatAppID)
+	sess.RendezvousURL = chatRendezvous
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 

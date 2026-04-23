@@ -30,7 +30,7 @@ type ContactManager struct {
 const contactBucket = "contacts"
 
 func NewContactManager() (*ContactManager, error) {
-	home, _ := os.UserHomeDir()
+	home := GetUserHomeDir()
 	path := filepath.Join(home, MaknoonDir, "contacts.db")
 
 	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {

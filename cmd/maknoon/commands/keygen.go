@@ -36,15 +36,15 @@ func KeygenCmd() *cobra.Command {
 			var err error
 
 			if profileFile != "" {
-				var profileID int
-				if err := loadCustomProfile(profileFile, &profileID); err != nil {
+				dp, err := GlobalContext.Engine.LoadCustomProfile(profileFile)
+				if err != nil {
 					if JSONOutput {
 						printErrorJSON(err)
 						return err
 					}
 					return err
 				}
-				profileStr = fmt.Sprintf("%d", profileID)
+				profileStr = fmt.Sprintf("%d", dp.ID())
 			}
 
 			profileID := byte(1)
@@ -72,7 +72,11 @@ func KeygenCmd() *cobra.Command {
 			}
 
 			if useFido2 {
-				meta, secret, err := crypto.Fido2Enroll("maknoon.io", "keygen-user")
+				pin, err := getPIN()
+				if err != nil {
+					return err
+				}
+				meta, secret, err := crypto.Fido2Enroll("maknoon.io", "keygen-user", pin)
 				if err != nil {
 					if JSONOutput {
 						printErrorJSON(err)
@@ -95,6 +99,10 @@ func KeygenCmd() *cobra.Command {
 
 			if len(password) > 0 {
 				defer crypto.SafeClear(password)
+			}
+
+			if err := crypto.EnsureMaknoonDirs(); err != nil {
+				return err
 			}
 
 			if !JSONOutput && !quiet {
@@ -194,30 +202,18 @@ func KeygenCmd() *cobra.Command {
 
 func getInitialPassphrase(noPassword bool, manual string) ([]byte, error) {
 	if noPassword {
-		if !JSONOutput {
-			fmt.Println("Generating unprotected keypair (Automation Mode)...")
-		}
 		return nil, nil
 	}
 	if manual != "" {
 		return []byte(manual), nil
 	}
-	if env := os.Getenv("MAKNOON_PASSPHRASE"); env != "" {
-		return []byte(env), nil
-	}
 
-	if JSONOutput {
-		return nil, fmt.Errorf("passphrase required via MAKNOON_PASSPHRASE or -s in JSON mode")
-	}
-
-	fmt.Print("Enter passphrase to protect your private keys: ")
-	p, err := term.ReadPassword(int(os.Stdin.Fd()))
-	fmt.Println()
+	p, interactive, err := getPassphrase("Enter passphrase to protect your private keys: ")
 	if err != nil {
 		return nil, err
 	}
 
-	if len(p) > 0 {
+	if interactive && len(p) > 0 {
 		fmt.Print("Confirm passphrase: ")
 		confirm, err := term.ReadPassword(int(os.Stdin.Fd()))
 		fmt.Println()

@@ -47,6 +47,7 @@ func TestVaultShardingCLI(t *testing.T) {
 	oldHome := os.Getenv("HOME")
 	os.Setenv("HOME", tmpDir)
 	defer os.Setenv("HOME", oldHome)
+	_ = InitEngine()
 
 	vaultsDir := filepath.Join(tmpDir, ".maknoon", "vaults")
 	os.MkdirAll(vaultsDir, 0700)
@@ -86,6 +87,7 @@ func TestDPKIPocCLI(t *testing.T) {
 	oldHome := os.Getenv("HOME")
 	os.Setenv("HOME", tmpDir)
 	defer os.Setenv("HOME", oldHome)
+	_ = InitEngine()
 
 	keysDir := filepath.Join(tmpDir, ".maknoon", "keys")
 	os.MkdirAll(keysDir, 0700)
@@ -135,12 +137,15 @@ func TestDPKIPocCLI(t *testing.T) {
 func TestContactResolutionCLI(t *testing.T) {
 	SetJSONOutput(false)
 	tmpDir := t.TempDir()
+	uniqueHome := filepath.Join(tmpDir, "contact_home")
+	os.MkdirAll(uniqueHome, 0700)
 
 	oldHome := os.Getenv("HOME")
-	os.Setenv("HOME", tmpDir)
+	os.Setenv("HOME", uniqueHome)
 	defer os.Setenv("HOME", oldHome)
+	_ = InitEngine()
 
-	keysDir := filepath.Join(tmpDir, ".maknoon", "keys")
+	keysDir := filepath.Join(uniqueHome, ".maknoon", "keys")
 	os.MkdirAll(keysDir, 0700)
 
 	// 1. Generate identity for a friend

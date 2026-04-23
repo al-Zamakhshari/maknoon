@@ -10,6 +10,12 @@ import (
 	"github.com/nbd-wtf/go-nostr/nip19"
 )
 
+func init() {
+	RegisterRegistry("nostr", func() IdentityRegistry {
+		return NewNostrRegistry()
+	})
+}
+
 // NostrRegistry implements IdentityRegistry using Nostr relays.
 type NostrRegistry struct {
 	Relays []string

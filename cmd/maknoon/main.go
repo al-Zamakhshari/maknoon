@@ -26,6 +26,11 @@ func main() {
 				cmd.SilenceErrors = true
 			}
 			commands.GlobalContext.JSONWriter = commands.JSONWriter
+
+			if err := commands.InitEngine(); err != nil {
+				os.Stderr.WriteString(err.Error() + "\n")
+				os.Exit(1)
+			}
 		},
 	}
 

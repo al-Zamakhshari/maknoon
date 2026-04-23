@@ -5,12 +5,10 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"iter"
-	"os"
 
 	"github.com/mohammadv184/go-fido2"
 	"github.com/mohammadv184/go-fido2/protocol/ctap2"
 	"github.com/mohammadv184/go-fido2/protocol/webauthn"
-	"golang.org/x/term"
 )
 
 // Authenticator defines the interface for interacting with a FIDO2 security key.
@@ -52,29 +50,28 @@ type Fido2Metadata struct {
 var fido2Salt = sha256.Sum256([]byte("maknoon-fido2-hmac-salt"))
 
 // Fido2Enroll registers a new FIDO2 credential with hmac-secret support.
-func Fido2Enroll(rpID, user string) (*Fido2Metadata, []byte, error) {
+func Fido2Enroll(rpID, user, pin string) (*Fido2Metadata, []byte, error) {
 	dev, err := DefaultOpener()
 	if err != nil {
 		return nil, nil, err
 	}
 	defer func() { _ = dev.Close() }()
 
-	return Fido2EnrollWithAuthenticator(dev, rpID, user)
+	return Fido2EnrollWithAuthenticator(dev, rpID, user, pin)
 }
 
 // Fido2EnrollWithAuthenticator is the internal enrollment logic that takes an Authenticator interface.
-func Fido2EnrollWithAuthenticator(dev Authenticator, rpID, user string) (*Fido2Metadata, []byte, error) {
+func Fido2EnrollWithAuthenticator(dev Authenticator, rpID, user, pin string) (*Fido2Metadata, []byte, error) {
 	info := dev.Info()
 	if !hasHMACSecretSupport(info) {
 		return nil, nil, fmt.Errorf("your security key does not support the 'hmac-secret' extension")
 	}
 
-	token, err := handleFido2PIN(dev, info, rpID)
+	token, err := handleFido2PIN(dev, info, rpID, pin)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	fmt.Println("Please touch your security key to register...")
 	res, err := registerFido2Credential(dev, token, rpID, user, hasHMACSecretMC(info))
 	if err != nil {
 		return nil, nil, err
@@ -114,16 +111,12 @@ func hasHMACSecretMC(info *ctap2.AuthenticatorGetInfoResponse) bool {
 	return false
 }
 
-func handleFido2PIN(dev Authenticator, info *ctap2.AuthenticatorGetInfoResponse, rpID string) ([]byte, error) {
+func handleFido2PIN(dev Authenticator, info *ctap2.AuthenticatorGetInfoResponse, rpID string, pin string) ([]byte, error) {
 	if info.Options[ctap2.OptionClientPIN] {
-		fmt.Print("Enter FIDO2 Security Key PIN: ")
-		pin, err := term.ReadPassword(int(os.Stdin.Fd()))
-		fmt.Println()
-		if err != nil {
-			return nil, err
+		if pin == "" {
+			return nil, fmt.Errorf("FIDO2 PIN required")
 		}
-		defer SafeClear(pin)
-		token, err := dev.GetPinUvAuthTokenUsingPIN(string(pin), ctap2.PermissionMakeCredential|ctap2.PermissionGetAssertion, rpID)
+		token, err := dev.GetPinUvAuthTokenUsingPIN(pin, ctap2.PermissionMakeCredential|ctap2.PermissionGetAssertion, rpID)
 		if err != nil {
 			return nil, fmt.Errorf("PIN authentication failed: %w", err)
 		}
@@ -172,37 +165,32 @@ func extractOrDeriveSecret(dev Authenticator, res *ctap2.AuthenticatorMakeCreden
 	}
 
 	if len(initialSecret) == 0 {
-		fmt.Println("One more touch needed to initialize hardware secret...")
 		return fido2DeriveInternal(dev, token, rpID, credentialID)
 	}
 	return initialSecret, nil
 }
 
 // Fido2Derive derives a deterministic 256-bit key from a FIDO2 key.
-func Fido2Derive(rpID string, credentialID []byte) ([]byte, error) {
+func Fido2Derive(rpID string, credentialID []byte, pin string) ([]byte, error) {
 	dev, err := DefaultOpener()
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = dev.Close() }()
 
-	return Fido2DeriveWithAuthenticator(dev, rpID, credentialID)
+	return Fido2DeriveWithAuthenticator(dev, rpID, credentialID, pin)
 }
 
 // Fido2DeriveWithAuthenticator is the internal derivation logic that takes an Authenticator interface.
-func Fido2DeriveWithAuthenticator(dev Authenticator, rpID string, credentialID []byte) ([]byte, error) {
+func Fido2DeriveWithAuthenticator(dev Authenticator, rpID string, credentialID []byte, pin string) ([]byte, error) {
 	info := dev.Info()
 	var token []byte
 	if info.Options[ctap2.OptionClientPIN] {
-		fmt.Print("Enter FIDO2 Security Key PIN: ")
-		pin, err := term.ReadPassword(int(os.Stdin.Fd()))
-		fmt.Println()
-		if err != nil {
-			return nil, err
+		if pin == "" {
+			return nil, fmt.Errorf("FIDO2 PIN required")
 		}
-		defer SafeClear(pin)
 		var err2 error
-		token, err2 = dev.GetPinUvAuthTokenUsingPIN(string(pin), ctap2.PermissionGetAssertion, rpID)
+		token, err2 = dev.GetPinUvAuthTokenUsingPIN(pin, ctap2.PermissionGetAssertion, rpID)
 		if err2 != nil {
 			return nil, fmt.Errorf("PIN authentication failed: %w", err2)
 		}
@@ -212,8 +200,6 @@ func Fido2DeriveWithAuthenticator(dev Authenticator, rpID string, credentialID [
 }
 
 func fido2DeriveInternal(dev Authenticator, token []byte, rpID string, credentialID []byte) ([]byte, error) {
-	fmt.Println("Please touch your security key to derive the key...")
-
 	clientDataHash := make([]byte, 32)
 	if _, err := rand.Read(clientDataHash); err != nil {
 		return nil, err

@@ -4,8 +4,10 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
+	"encoding/json"
 	"fmt"
 	"math/big"
+	"os"
 
 	"github.com/secure-io/siv-go"
 	"golang.org/x/crypto/argon2"
@@ -87,6 +89,7 @@ func (p *DynamicProfile) Validate() error {
 	if p.ArgonMem < 1024 {
 		return fmt.Errorf("invalid KDF memory: %d KB (min 1024)", p.ArgonMem)
 	}
+
 	if p.CustomSalt < 8 {
 		return fmt.Errorf("invalid salt size: %d (min 8)", p.CustomSalt)
 	}
@@ -130,6 +133,26 @@ func UnpackDynamicProfile(id byte, b []byte) (*DynamicProfile, error) {
 	}, nil
 }
 
+// GenerateRandomProfile creates a random profile within policy limits.
+func (e *Engine) GenerateRandomProfile(id byte) *DynamicProfile {
+	dp := GenerateRandomProfile(id)
+
+	// Apply Policy-driven clamping to iterations, memory, and threads
+	maxT, maxM, maxTh := e.Policy.ClampProfileGeneration(e.Config.AgentLimits.MaxTime, e.Config.AgentLimits.MaxMemoryKB, e.Config.AgentLimits.MaxThreads)
+
+	if dp.ArgonTime > maxT {
+		dp.ArgonTime = maxT
+	}
+	if dp.ArgonMem > maxM {
+		dp.ArgonMem = maxM
+	}
+	if dp.ArgonThrd > maxTh {
+		dp.ArgonThrd = maxTh
+	}
+
+	return dp
+}
+
 // GenerateRandomProfile creates a technically sound and secure profile with random parameters.
 func GenerateRandomProfile(id byte) *DynamicProfile {
 	// 1. Random Cipher (0, 1, or 2)
@@ -146,15 +169,25 @@ func GenerateRandomProfile(id byte) *DynamicProfile {
 	s, _ := rand.Int(rand.Reader, big.NewInt(49))
 	saltSize := 16 + int(s.Uint64())
 
-	// 4. Random Argon2 Settings (Realistic but varying)
-	it, _ := rand.Int(rand.Reader, big.NewInt(11))
-	iterations := uint32(1 + it.Uint64())
+	// 4. Random Argon2 Settings
+	// We use safe ranges that balance security with usability.
 
-	memSteps, _ := rand.Int(rand.Reader, big.NewInt(32))
-	memory := uint32(16384 + (memSteps.Uint64() * 16384))
+	// Default Max Ranges
+	maxTime := uint32(10)
+	maxMem := uint32(1024 * 1024) // 1GB
+	maxThrd := uint8(8)
 
-	th, _ := rand.Int(rand.Reader, big.NewInt(8))
-	threads := uint8(1 + th.Uint64())
+	it, _ := rand.Int(rand.Reader, big.NewInt(int64(maxTime)))
+	iterations := uint32(it.Uint64()) + 1
+	if iterations < 1 {
+		iterations = 1
+	}
+
+	mem, _ := rand.Int(rand.Reader, big.NewInt(int64(maxMem-1024)))
+	memory := uint32(mem.Uint64()) + 1024
+
+	th, _ := rand.Int(rand.Reader, big.NewInt(int64(maxThrd-1)))
+	threads := uint8(th.Uint64()) + 1
 
 	return &DynamicProfile{
 		CustomID:   id,
@@ -166,4 +199,21 @@ func GenerateRandomProfile(id byte) *DynamicProfile {
 		CustomSalt: saltSize,
 		CustomNonc: nonceSize,
 	}
+}
+
+// LoadCustomProfile reads a custom profile from a JSON file, validates it, and registers it.
+func LoadCustomProfile(path string) (*DynamicProfile, error) {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	var dp DynamicProfile
+	if err := json.Unmarshal(raw, &dp); err != nil {
+		return nil, err
+	}
+	if err := dp.Validate(); err != nil {
+		return nil, err
+	}
+	RegisterProfile(&dp)
+	return &dp, nil
 }

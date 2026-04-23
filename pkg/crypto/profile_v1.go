@@ -50,8 +50,8 @@ func (p *ProfileV1) NewAEAD(key []byte) (cipher.AEAD, error) {
 // KEMName returns the KEM algorithm name.
 func (p *ProfileV1) KEMName() string { return "Hybrid ML-KEM-768+X25519" }
 
-// RecipientBlockSize returns the total size of an encrypted FEK block (1120 + 32 = 1152).
-func (p *ProfileV1) RecipientBlockSize() int { return 1152 }
+// RecipientBlockSize returns the total size of an encrypted FEK block (1120 + 48 = 1168).
+func (p *ProfileV1) RecipientBlockSize() int { return 1168 }
 
 // GenerateHybridKeyPair generates a new hybrid key pair (ML-KEM-768 + X25519).
 func (p *ProfileV1) GenerateHybridKeyPair() (priv, pub []byte, err error) {

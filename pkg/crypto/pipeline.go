@@ -14,6 +14,133 @@ import (
 	"github.com/klauspost/compress/zstd"
 )
 
+// Transformer defines an interchangeable middleware for the crypto pipeline.
+type Transformer interface {
+	Wrap(r io.Reader) (io.Reader, error)
+}
+
+// ArchiveTransformer handles TAR archiving and extraction.
+type ArchiveTransformer struct {
+	InputPath string
+	OutputDir string // Set for extraction
+	Logger    *slog.Logger
+}
+
+func (t *ArchiveTransformer) Wrap(r io.Reader) (io.Reader, error) {
+	if t.OutputDir != "" {
+		// Extraction is a Sink in our current design, it doesn't return a reader easily.
+		// For now, keep ExtractArchive as a separate helper or refactor later.
+		return r, ExtractArchive(r, t.OutputDir)
+	}
+	if t.Logger != nil {
+		t.Logger.Info("archiving input directory", "path", t.InputPath)
+	}
+	return wrapWithArchiver(t.InputPath, t.Logger), nil
+}
+
+// CompressTransformer handles Zstd compression and decompression.
+type CompressTransformer struct {
+	Decompress bool
+	Logger     *slog.Logger
+}
+
+func (t *CompressTransformer) Wrap(r io.Reader) (io.Reader, error) {
+	if t.Decompress {
+		if t.Logger != nil {
+			t.Logger.Info("decompressing zstd stream")
+		}
+		zr, err := zstd.NewReader(r)
+		if err != nil {
+			return nil, err
+		}
+		return zr, nil
+	}
+	if t.Logger != nil {
+		t.Logger.Info("enabling zstd compression")
+	}
+	return wrapWithCompressor(r, t.Logger), nil
+}
+
+// EncryptTransformer handles the core cryptographic pipeline.
+type EncryptTransformer struct {
+	Options Options
+}
+
+func (t *EncryptTransformer) Wrap(r io.Reader) (io.Reader, error) {
+	pr, pw := io.Pipe()
+	var flags byte
+	if t.Options.Compress {
+		flags |= FlagCompress
+	}
+	if t.Options.IsArchive {
+		flags |= FlagArchive
+	}
+	if t.Options.Stealth {
+		flags |= FlagStealth
+	}
+
+	allPublicKeys := t.Options.PublicKeys
+	if len(t.Options.PublicKey) > 0 {
+		allPublicKeys = append(allPublicKeys, t.Options.PublicKey)
+	}
+
+	var logger *slog.Logger
+	if t.Options.Verbose {
+		logger = slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	}
+
+	go func() {
+		defer pw.Close()
+		var err error
+		if len(allPublicKeys) > 0 {
+			if logger != nil {
+				logger.Info("starting asymmetric encryption", "recipients", len(allPublicKeys))
+			}
+			err = EncryptStreamWithPublicKeysAndEvents(r, pw, allPublicKeys, t.Options.SigningKey, flags, t.Options.Concurrency, t.Options.ProfileID, t.Options.EventStream)
+		} else {
+			if logger != nil {
+				logger.Info("starting symmetric encryption")
+			}
+			err = EncryptStreamWithEvents(r, pw, t.Options.Passphrase, flags, t.Options.Concurrency, t.Options.ProfileID, t.Options.EventStream)
+		}
+
+		if err != nil {
+			_ = pw.CloseWithError(err)
+		} else {
+			t.Options.emit(EventHandshakeComplete{})
+		}
+	}()
+
+	return pr, nil
+}
+
+// DecryptTransformer handles the core unprotection pipeline.
+type DecryptTransformer struct {
+	Options Options
+	Input   io.Reader
+	Magic   string
+}
+
+func (t *DecryptTransformer) Wrap(r io.Reader) (io.Reader, error) {
+	pr, pw := io.Pipe()
+	go func() {
+		defer pw.Close()
+		var dErr error
+		if t.Magic == MagicHeaderAsym {
+			_, _, dErr = DecryptStreamWithPrivateKeyAndEvents(t.Input, pw, t.Options.Passphrase, t.Options.PublicKey, t.Options.Concurrency, t.Options.Stealth, t.Options.EventStream)
+		} else {
+			_, _, dErr = DecryptStreamWithEvents(t.Input, pw, t.Options.Passphrase, t.Options.Concurrency, t.Options.Stealth, t.Options.EventStream)
+		}
+
+		if dErr != nil {
+			_ = pw.CloseWithError(dErr)
+		} else {
+			t.Options.emit(EventHandshakeComplete{})
+		}
+	}()
+	return pr, nil
+}
+
 // Options defines settings for the protection process.
 type Options struct {
 	Passphrase     []byte
@@ -23,14 +150,37 @@ type Options struct {
 	ProfileID      byte     // 0 for default
 	Compress       bool
 	IsArchive      bool
-	Concurrency    int       // 0 for auto (NumCPU), 1 for sequential
-	ProgressReader io.Reader // Optional reader to track progress
-	Verbose        bool      // Enables internal slog tracing
-	Stealth        bool      // Enables fingerprint resistance (headerless)
+	Concurrency    int                // 0 for auto (NumCPU), 1 for sequential
+	TotalSize      int64              // Known total size of input for progress tracking
+	EventStream    chan<- EngineEvent // Optional channel for telemetry
+	ProgressReader io.Reader          // Deprecated: use EventStream
+	Verbose        bool               // Enables internal slog tracing
+	Stealth        bool               // Enables fingerprint resistance (headerless)
 }
 
-// Protect handles the full encryption pipeline for a source (file, directory, or reader).
-func Protect(inputName string, r io.Reader, w io.Writer, opts Options) (byte, error) {
+func (o *Options) emit(ev EngineEvent) {
+	if o.EventStream != nil {
+		o.EventStream <- ev
+	}
+}
+
+// Protect handles the full encryption pipeline under the active policy.
+func (e *Engine) Protect(inputName string, r io.Reader, w io.Writer, opts Options) (byte, error) {
+	// 1. Enforce Path Policy
+	if inputName != "-" && inputName != "" {
+		if err := e.Policy.ValidatePath(inputName); err != nil {
+			return 0, err
+		}
+	}
+
+	// 2. Clamp Resources
+	opts.Concurrency = e.Policy.ClampConcurrency(opts.Concurrency, e.Config.AgentLimits.MaxWorkers)
+
+	// 3. Delegation to core implementation
+	return protectInternal(inputName, r, w, opts)
+}
+
+func protectInternal(inputName string, r io.Reader, w io.Writer, opts Options) (byte, error) {
 	var logger *slog.Logger
 	if opts.Verbose {
 		logger = slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
@@ -38,14 +188,28 @@ func Protect(inputName string, r io.Reader, w io.Writer, opts Options) (byte, er
 		logger = slog.New(slog.NewTextHandler(io.Discard, nil))
 	}
 
-	sourceReader := r
 	var flags byte
-
 	if opts.IsArchive {
-		logger.Info("archiving input directory", "path", inputName)
 		flags |= FlagArchive
-		sourceReader = wrapWithArchiver(inputName, logger)
-	} else if sourceReader == nil {
+	}
+	if opts.Compress {
+		flags |= FlagCompress
+	}
+	if opts.Stealth {
+		logger.Info("enabling stealth mode (headerless)")
+		flags |= FlagStealth
+	}
+
+	var totalBytes int64
+	if inputName != "-" && inputName != "" {
+		if fi, err := os.Stat(inputName); err == nil && !fi.IsDir() {
+			totalBytes = fi.Size()
+		}
+	}
+	opts.emit(EventEncryptionStarted{TotalBytes: totalBytes})
+
+	sourceReader := r
+	if sourceReader == nil && !opts.IsArchive {
 		if inputName == "-" {
 			sourceReader = os.Stdin
 		} else {
@@ -58,38 +222,51 @@ func Protect(inputName string, r io.Reader, w io.Writer, opts Options) (byte, er
 		}
 	}
 
+	// Build the pipeline chain
+	var transformers []Transformer
+	if opts.IsArchive {
+		transformers = append(transformers, &ArchiveTransformer{InputPath: inputName, Logger: logger})
+	}
 	if opts.ProgressReader != nil {
 		if wr, ok := opts.ProgressReader.(io.Writer); ok {
 			sourceReader = io.TeeReader(sourceReader, wr)
 		}
 	}
-
 	if opts.Compress {
-		logger.Info("enabling zstd compression")
-		flags |= FlagCompress
-		sourceReader = wrapWithCompressor(sourceReader, logger)
+		transformers = append(transformers, &CompressTransformer{Logger: logger})
+	}
+	transformers = append(transformers, &EncryptTransformer{Options: opts})
+
+	currentReader := sourceReader
+	for _, t := range transformers {
+		var err error
+		currentReader, err = t.Wrap(currentReader)
+		if err != nil {
+			return 0, err
+		}
 	}
 
-	if opts.Stealth {
-		logger.Info("enabling stealth mode (headerless)")
-		flags |= FlagStealth
-	}
-
-	allPublicKeys := opts.PublicKeys
-	if len(opts.PublicKey) > 0 {
-		allPublicKeys = append(allPublicKeys, opts.PublicKey)
-	}
-
-	if len(allPublicKeys) > 0 {
-		logger.Info("starting asymmetric encryption", "recipients", len(allPublicKeys))
-		return flags, EncryptStreamWithPublicKeysAndSigner(sourceReader, w, allPublicKeys, opts.SigningKey, flags, opts.Concurrency, opts.ProfileID)
-	}
-	logger.Info("starting symmetric encryption")
-	return flags, EncryptStream(sourceReader, w, opts.Passphrase, flags, opts.Concurrency, opts.ProfileID)
+	_, err := io.Copy(w, currentReader)
+	return flags, err
 }
 
 // Unprotect handles the full decryption pipeline: Handshake -> Decrypt -> Decompress -> Extract.
-func Unprotect(r io.Reader, w io.Writer, outPath string, opts Options) (byte, error) {
+func (e *Engine) Unprotect(r io.Reader, w io.Writer, outPath string, opts Options) (byte, error) {
+	// 1. Enforce Path Policy
+	if outPath != "-" && outPath != "" {
+		if err := e.Policy.ValidatePath(outPath); err != nil {
+			return 0, err
+		}
+	}
+
+	// 2. Clamp Resources
+	opts.Concurrency = e.Policy.ClampConcurrency(opts.Concurrency, e.Config.AgentLimits.MaxWorkers)
+
+	// 3. Delegation to core implementation
+	return unprotectInternal(r, w, outPath, opts)
+}
+
+func unprotectInternal(r io.Reader, w io.Writer, outPath string, opts Options) (byte, error) {
 	var logger *slog.Logger
 	if opts.Verbose {
 		logger = slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
@@ -97,8 +274,10 @@ func Unprotect(r io.Reader, w io.Writer, outPath string, opts Options) (byte, er
 		logger = slog.New(slog.NewTextHandler(io.Discard, nil))
 	}
 
+	opts.emit(EventDecryptionStarted{TotalBytes: opts.TotalSize})
+
 	// 1. Peek at the header to get flags (compression, archive, etc.)
-	magic, profileID, flags, err := ReadHeader(r, opts.Stealth)
+	magic, profileID, flags, recipientCount, err := ReadHeader(r, opts.Stealth)
 	if err != nil {
 		return 0, fmt.Errorf("failed to read file header: %w", err)
 	}
@@ -107,43 +286,77 @@ func Unprotect(r io.Reader, w io.Writer, outPath string, opts Options) (byte, er
 	var headerBytes []byte
 	if !opts.Stealth {
 		headerBytes = append([]byte(magic), profileID, flags)
+		if magic == MagicHeaderAsym {
+			headerBytes = append(headerBytes, recipientCount)
+		}
 	} else {
 		headerBytes = []byte{profileID, flags}
 	}
 	fullIn := io.MultiReader(bytes.NewReader(headerBytes), r)
 
-	// 3. Resolve key and perform core decryption stream
-	// We use a pipe to bridge decryption to restoration (decompression/archive)
-	pr, pw := io.Pipe()
-	var dErr error
-	go func() {
-		defer pw.Close()
-		var dFlags byte
-		var spk []byte
-		if len(opts.PublicKeys) > 0 || len(opts.PublicKey) > 0 {
-			// Asymmetric
-			// Note: Current core API for asymmetric decrypt expects a single priv key.
-			// Pipeline 'Restore' assumes the caller provided the correct single key in Passphrase or similar.
-			// For now, assume symmetric or simple asymmetric bypass.
-			dFlags, spk, dErr = DecryptStreamWithPrivateKeyAndVerifier(fullIn, pw, opts.Passphrase, opts.PublicKey, opts.Concurrency, opts.Stealth)
-		} else {
-			// Symmetric
-			dFlags, spk, dErr = DecryptStream(fullIn, pw, opts.Passphrase, opts.Concurrency, opts.Stealth)
-		}
-		_ = dFlags
-		_ = spk
-		if dErr != nil {
-			_ = pw.CloseWithError(dErr)
-		}
-	}()
+	// 3. Build the pipeline chain
+	var transformers []Transformer
+	transformers = append(transformers, &DecryptTransformer{Options: opts, Input: fullIn, Magic: magic})
 
-	// 4. Finalize: Decompress and/or Extract Archive
-	err = FinalizeRestoration(pr, flags, outPath, logger)
+	if flags&FlagCompress != 0 {
+		transformers = append(transformers, &CompressTransformer{Decompress: true, Logger: logger})
+	}
+
+	currentReader := (io.Reader)(nil) // Initial reader for first transformer
+	for _, t := range transformers {
+		var err error
+		currentReader, err = t.Wrap(currentReader)
+		if err != nil {
+			return flags, err
+		}
+	}
+
+	// 4. Finalize: Extract Archive or write to file/writer
+	if flags&FlagArchive != 0 {
+		logger.Info("extracting tar archive", "target", outPath)
+		if err := ExtractArchive(currentReader, outPath); err != nil {
+			return flags, fmt.Errorf("failed to extract archive: %w", err)
+		}
+		return flags, nil
+	}
+
+	var out io.Writer
+	if w != nil {
+		out = w
+	} else if outPath == "-" {
+		out = os.Stdout
+	} else {
+		if err := os.MkdirAll(filepath.Dir(outPath), 0755); err != nil {
+			return flags, err
+		}
+		f, err := os.Create(outPath)
+		if err != nil {
+			return flags, fmt.Errorf("failed to create output file: %w", err)
+		}
+		defer func() { _ = f.Close() }()
+		out = f
+	}
+
+	_, err = io.Copy(out, currentReader)
 	return flags, err
 }
 
+// --- Legacy Shims ---
+
+// Protect handles the full encryption pipeline for a source (file, directory, or reader).
+// This is a shim that uses a default HumanPolicy engine.
+func Protect(inputName string, r io.Reader, w io.Writer, opts Options) (byte, error) {
+	return protectInternal(inputName, r, w, opts)
+}
+
+// Unprotect handles the full decryption pipeline: Handshake -> Decrypt -> Decompress -> Extract.
+// This is a shim that uses a default HumanPolicy engine.
+func Unprotect(r io.Reader, w io.Writer, outPath string, opts Options) (byte, error) {
+	return unprotectInternal(r, w, outPath, opts)
+}
+
 // FinalizeRestoration handles the post-decryption steps: decompression and archive extraction.
-func FinalizeRestoration(pr io.Reader, flags byte, outPath string, logger *slog.Logger) error {
+func FinalizeRestoration(pr io.Reader, w io.Writer, flags byte, outPath string, logger *slog.Logger) error {
 	if logger == nil {
 		logger = slog.New(slog.NewTextHandler(io.Discard, nil))
 	}
@@ -167,7 +380,9 @@ func FinalizeRestoration(pr io.Reader, flags byte, outPath string, logger *slog.
 	}
 
 	var out io.Writer
-	if outPath == "-" {
+	if w != nil {
+		out = w
+	} else if outPath == "-" {
 		out = os.Stdout
 	} else {
 		if err := os.MkdirAll(filepath.Dir(outPath), 0755); err != nil {

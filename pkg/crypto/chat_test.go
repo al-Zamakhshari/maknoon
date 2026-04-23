@@ -9,6 +9,10 @@ import (
 const ChatAppIDForTest = "maknoon.io/ghost-chat/test"
 
 func TestChatSession_BasicFlow(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping network test in short mode")
+	}
+
 	host := NewChatSession(ChatAppIDForTest)
 	peer := NewChatSession(ChatAppIDForTest)
 

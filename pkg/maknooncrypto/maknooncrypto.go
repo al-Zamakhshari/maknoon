@@ -51,34 +51,20 @@ func WrapEphemeralKey(recipientPub hpke.PublicKey, profileID byte, headerFlags b
 
 	info := []byte{profileID, headerFlags}
 
-	// Setup the HPKE sender context.
-	enc, sender, err := hpke.NewSender(recipientPub, hpke.HKDFSHA256(), hpke.ExportOnly(), info)
+	// Use standard HPKE Sender with ChaCha20-Poly1305 AEAD.
+	enc, sender, err := hpke.NewSender(recipientPub, hpke.HKDFSHA256(), hpke.ChaCha20Poly1305(), info)
 	if err != nil {
-		return nil, fmt.Errorf("failed to initialize HPKE sender context: %w", err)
+		return nil, fmt.Errorf("hpke sender setup failed: %w", err)
 	}
-
-	// Export the One-Time Pad (OTP).
-	rawOTP, err := sender.Export("maknoon-fek-wrap", fekSize)
+	ciphertext, err := sender.Seal(nil, fekBuf.Bytes())
 	if err != nil {
-		return nil, fmt.Errorf("failed to export wrapping key material: %w", err)
+		return nil, fmt.Errorf("hpke seal failed: %w", err)
 	}
 
-	otpBuf := memguard.NewBufferFromBytes(rawOTP)
-	SafeClear(rawOTP)
-	defer otpBuf.Destroy()
-
-	wrappedKey := make([]byte, fekSize)
-	fekBytes := fekBuf.Bytes()
-	otpBytes := otpBuf.Bytes()
-
-	for i := 0; i < fekSize; i++ {
-		wrappedKey[i] = fekBytes[i] ^ otpBytes[i]
-	}
-
-	// Result is encapsulated key (enc) + wrapped FEK.
-	result := make([]byte, 0, len(enc)+len(wrappedKey))
+	// Result is encapsulated key (enc) + wrapped FEK (ciphertext).
+	result := make([]byte, 0, len(enc)+len(ciphertext))
 	result = append(result, enc...)
-	result = append(result, wrappedKey...)
+	result = append(result, ciphertext...)
 
 	return result, nil
 }
@@ -87,39 +73,27 @@ func WrapEphemeralKey(recipientPub hpke.PublicKey, profileID byte, headerFlags b
 func UnwrapEphemeralKey(recipientPriv hpke.PrivateKey, profileID byte, headerFlags byte, headerData []byte) (*memguard.Enclave, error) {
 	// For ML-KEM-768 (1088) + X25519 (32) = 1120 bytes.
 	const encSize = 1120
+	// Standard HPKE ciphertext for 32-byte payload with ChaCha20-Poly1305 is 32 + 16 = 48 bytes.
+	const expectedCiphertextSize = 48
 
-	if len(headerData) < encSize+fekSize {
+	if len(headerData) < encSize+expectedCiphertextSize {
 		return nil, errors.New("invalid header data length: insufficient encapsulated material")
 	}
 
 	enc := headerData[:encSize]
-	wrappedKey := headerData[encSize : encSize+fekSize]
+	ciphertext := headerData[encSize : encSize+expectedCiphertextSize]
 
 	info := []byte{profileID, headerFlags}
 
-	receiver, err := hpke.NewRecipient(enc, recipientPriv, hpke.HKDFSHA256(), hpke.ExportOnly(), info)
+	receiver, err := hpke.NewRecipient(enc, recipientPriv, hpke.HKDFSHA256(), hpke.ChaCha20Poly1305(), info)
 	if err != nil {
-		return nil, fmt.Errorf("failed to initialize HPKE receiver context: %w", err)
+		return nil, fmt.Errorf("hpke receiver setup failed: %w", err)
 	}
-
-	rawOTP, err := receiver.Export("maknoon-fek-wrap", fekSize)
+	fekBytes, err := receiver.Open(nil, ciphertext)
 	if err != nil {
-		return nil, fmt.Errorf("failed to export unwrapping key material: %w", err)
+		return nil, fmt.Errorf("hpke open failed: %w", err)
 	}
+	defer SafeClear(fekBytes)
 
-	otpBuf := memguard.NewBufferFromBytes(rawOTP)
-	SafeClear(rawOTP)
-	defer otpBuf.Destroy()
-
-	fekBuf := memguard.NewBuffer(fekSize)
-	defer fekBuf.Destroy()
-
-	otpBytes := otpBuf.Bytes()
-	fekBytes := fekBuf.Bytes()
-
-	for i := 0; i < fekSize; i++ {
-		fekBytes[i] = wrappedKey[i] ^ otpBytes[i]
-	}
-
-	return fekBuf.Seal(), nil
+	return memguard.NewBufferFromBytes(fekBytes).Seal(), nil
 }

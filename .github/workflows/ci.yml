@@ -53,6 +53,9 @@ jobs:
       - name: Run Tests
         run: go test -v ./...
 
+      - name: Run MCP Agent Readiness Tests
+        run: go test -v ./integrations/mcp/...
+
   release:
     name: Release & Sync
     needs: test
