@@ -10,14 +10,15 @@ type MockRegistry struct {
 
 func TestRegistryFactory(t *testing.T) {
 	// Register a mock registry
-	RegisterRegistry("mock", func() IdentityRegistry {
+	RegisterRegistry("mock-factory-test", func() IdentityRegistry {
 		return &MockRegistry{}
 	})
 
-	// Override config for test
-	ResetGlobalConfig()
+	// Backup and override config for test
 	conf := GetGlobalConfig()
-	conf.IdentityRegistries = []string{"mock"}
+	old := conf.IdentityRegistries
+	conf.IdentityRegistries = []string{"mock-factory-test"}
+	defer func() { conf.IdentityRegistries = old }()
 
 	reg := NewIdentityRegistry()
 	mr, ok := reg.(*MultiRegistry)
@@ -34,6 +35,6 @@ func TestRegistryFactory(t *testing.T) {
 	}
 
 	if !found {
-		t.Error("MockRegistry not found in active registries")
+		t.Errorf("MockRegistry not found in active registries. Active: %v", mr.Registries)
 	}
 }

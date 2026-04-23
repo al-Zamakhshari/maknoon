@@ -263,8 +263,8 @@ func TestMCPServerTools(t *testing.T) {
 	})
 
 	t.Run("Start Chat Tool", func(t *testing.T) {
-		if testing.Short() {
-			t.Skip("skipping chat tool test in short mode")
+		if testing.Short() || os.Getenv("GITHUB_ACTIONS") == "true" {
+			t.Skip("skipping network test in short mode or CI")
 		}
 		req := json.RawMessage(`{
 			"jsonrpc": "2.0",
