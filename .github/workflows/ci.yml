@@ -52,9 +52,13 @@ jobs:
         run: go mod tidy
       - name: Run Tests
         run: go test -v ./...
+        env:
+          GO_TEST: 1
 
       - name: Run MCP Agent Readiness Tests
         run: go test -v ./integrations/mcp/...
+        env:
+          GO_TEST: 1
 
   release:
     name: Release & Sync
