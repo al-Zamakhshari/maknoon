@@ -9,8 +9,13 @@ import (
 
 const ChatAppIDForTest = "maknoon.io/ghost-chat/test"
 
+func TestMain(m *testing.M) {
+	os.Setenv("GO_TEST", "1")
+	os.Exit(m.Run())
+}
+
 func TestChatSession_BasicFlow(t *testing.T) {
-	if testing.Short() || os.Getenv("GITHUB_ACTIONS") == "true" {
+	if testing.Short() || os.Getenv("GITHUB_ACTIONS") == "true" || os.Getenv("GO_TEST") == "1" {
 		t.Skip("skipping network test in short mode or CI")
 	}
 

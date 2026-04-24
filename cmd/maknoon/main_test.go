@@ -15,6 +15,7 @@ import (
 )
 
 func TestMain(m *testing.M) {
+	os.Setenv("GO_TEST", "1")
 	_ = commands.InitEngine()
 	os.Exit(m.Run())
 }

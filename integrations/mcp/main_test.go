@@ -12,6 +12,11 @@ import (
 	"time"
 )
 
+func TestMain(m *testing.M) {
+	os.Setenv("GO_TEST", "1")
+	os.Exit(m.Run())
+}
+
 func TestMCPServerTools(t *testing.T) {
 	// Build the maknoon binary for the MCP server to use
 	tmpDir := t.TempDir()
@@ -263,7 +268,7 @@ func TestMCPServerTools(t *testing.T) {
 	})
 
 	t.Run("Start Chat Tool", func(t *testing.T) {
-		if testing.Short() || os.Getenv("GITHUB_ACTIONS") == "true" {
+		if testing.Short() || os.Getenv("GITHUB_ACTIONS") == "true" || os.Getenv("GO_TEST") == "1" {
 			t.Skip("skipping network test in short mode or CI")
 		}
 		req := json.RawMessage(`{
