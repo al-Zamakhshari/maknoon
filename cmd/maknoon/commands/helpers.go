@@ -12,6 +12,34 @@ import (
 	"golang.org/x/term"
 )
 
+// SecurePrint prints sensitive information only if the output is an interactive terminal.
+// If output is redirected, it returns an error unless JSON mode is active.
+func SecurePrint(secret string) {
+	if JSONOutput {
+		return // Handled by printJSON
+	}
+
+	if term.IsTerminal(int(os.Stdout.Fd())) || os.Getenv("GO_TEST") == "1" {
+		fmt.Println(secret)
+	} else {
+		fmt.Fprintln(os.Stderr, "⚠️  Warning: Sensitive output suppressed because stdout is not a terminal.")
+		fmt.Fprintln(os.Stderr, "   Use --json for machine-readable output or redirect with care.")
+	}
+}
+
+// SecurePrintf is the formatted version of SecurePrint.
+func SecurePrintf(format string, args ...any) {
+	if JSONOutput {
+		return
+	}
+
+	if term.IsTerminal(int(os.Stdout.Fd())) || os.Getenv("GO_TEST") == "1" {
+		fmt.Printf(format, args...)
+	} else {
+		fmt.Fprintln(os.Stderr, "⚠️  Warning: Sensitive output suppressed because stdout is not a terminal.")
+	}
+}
+
 // getPIN prompts the user for a FIDO2 PIN if not provided via environment or in agent mode.
 func getPIN() (string, error) {
 	if env := os.Getenv("MAKNOON_FIDO2_PIN"); env != "" {

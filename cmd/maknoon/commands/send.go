@@ -183,7 +183,7 @@ func SendCmd() *cobra.Command {
 					"status": "established",
 				}
 				if len(opts.Passphrase) > 0 {
-					res["passphrase"] = string(opts.Passphrase) // codeql [go/clear-text-logging]
+					res["passphrase"] = string(opts.Passphrase)
 				} else {
 					res["type"] = "asymmetric"
 				}
@@ -192,7 +192,7 @@ func SendCmd() *cobra.Command {
 				fmt.Printf("\n✅ Wormhole established!\n")
 				fmt.Printf("🔑 Receiver Code: %s\n", code)
 				if len(opts.Passphrase) > 0 {
-					fmt.Printf("👉 Session Passphrase: %s\n\n", string(opts.Passphrase)) // codeql [go/clear-text-logging]
+					SecurePrintf("👉 Session Passphrase: %s\n\n", string(opts.Passphrase))
 					fmt.Printf("Share these with the recipient. The transfer will begin once they enter them.\n")
 				} else {
 					fmt.Printf("🛡️  Encrypted for recipient's identity. No passphrase required.\n\n")

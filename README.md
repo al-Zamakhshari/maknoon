@@ -210,6 +210,7 @@ Maknoon is built as a highly-modular Go SDK. Integrations like the CLI and MCP s
 - **Capability-Based Security**: Operations strictly validate permissions (e.g., `CapVaultWrite`) before execution.
 - **Privacy-First Logging**: Audit logs automatically sanitize file paths to prevent PII leaks (e.g., masking user home directory names).
 - **Hardened Memory Hygiene**: Sensitive credentials in the Vault and MCP layers are stored in byte slices and deterministically zeroed out using `SafeClear` patterns immediately after use.
+- **Active Security Guardrails**: TTY detection prevents accidental secret leakage (passwords/passphrases) when CLI output is redirected to files or pipes.
 - **Robust Integrity Checks**: Shamir's Secret Sharing (SSS) shards use 128-bit SHA-256 checksums to guarantee reconstruction integrity.
 - **CodeQL Hardened**: All critical and high-severity security alerts have been remediated and verified.
 
