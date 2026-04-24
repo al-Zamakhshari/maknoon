@@ -13,8 +13,14 @@ import (
 )
 
 func TestMain(m *testing.M) {
-	os.Setenv("GO_TEST", "1")
 	_ = InitEngine()
+	// Initialize a test UI that allows capturing sensitive output into buffers
+	GlobalContext.UI = &UIHandler{
+		Stdout:      os.Stdout,
+		Stderr:      os.Stderr,
+		Interactive: true, // Allow tests to see "sensitive" info
+		JSON:        false,
+	}
 	os.Exit(m.Run())
 }
 

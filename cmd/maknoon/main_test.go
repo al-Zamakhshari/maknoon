@@ -15,7 +15,6 @@ import (
 )
 
 func TestMain(m *testing.M) {
-	os.Setenv("GO_TEST", "1")
 	_ = commands.InitEngine()
 	os.Exit(m.Run())
 }
@@ -26,9 +25,13 @@ func runRootCmd(args ...string) string {
 		Use: "maknoon",
 		PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
 			commands.SetupViper()
-			// Force GO_TEST=1 for integration tests to allow SecurePrint
-			os.Setenv("GO_TEST", "1")
-			return commands.InitEngine()
+			err := commands.InitEngine()
+			if err != nil {
+				return err
+			}
+			// Inject an interactive UI for the test to capture output
+			commands.GlobalContext.UI.Interactive = true
+			return nil
 		},
 	}
 	rootCmd.PersistentFlags().BoolVar(&commands.JSONOutput, "json", false, "Output results in JSON format")
@@ -63,12 +66,19 @@ func runRootCmd(args ...string) string {
 	oldStderr := os.Stderr
 	oldJSONWriter := commands.JSONWriter
 	oldGlobalWriter := commands.GlobalContext.JSONWriter
+	oldUI := commands.GlobalContext.UI
 
 	r, w, _ := os.Pipe()
 	os.Stdout = w
 	os.Stderr = w
 	commands.JSONWriter = w
 	commands.GlobalContext.JSONWriter = w
+	commands.GlobalContext.UI = &commands.UIHandler{
+		Stdout:      w,
+		Stderr:      w,
+		Interactive: true,
+		JSON:        false,
+	}
 
 	_ = rootCmd.Execute()
 
@@ -77,7 +87,8 @@ func runRootCmd(args ...string) string {
 	os.Stderr = oldStderr
 	commands.JSONWriter = oldJSONWriter
 	commands.GlobalContext.JSONWriter = oldGlobalWriter
-	io.Copy(&buf, r)
+	commands.GlobalContext.UI = oldUI
+	_, _ = io.Copy(&buf, r)
 	return buf.String()
 }
 

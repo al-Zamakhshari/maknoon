@@ -21,9 +21,55 @@ var GlobalContext struct {
 	Engine     crypto.MaknoonEngine
 	JSONOutput bool
 	JSONWriter io.Writer
+	UI         *UIHandler
 }
 
-// JSONOutput is a global flag for JSON formatting.
+// UIHandler manages user-facing output with awareness of interactivity and formatting.
+type UIHandler struct {
+	Stdout      io.Writer
+	Stderr      io.Writer
+	Interactive bool
+	JSON        bool
+}
+
+// NewUIHandler creates a default UI handler based on the current environment.
+func NewUIHandler() *UIHandler {
+	return &UIHandler{
+		Stdout:      os.Stdout,
+		Stderr:      os.Stderr,
+		Interactive: term.IsTerminal(int(os.Stdout.Fd())),
+		JSON:        JSONOutput,
+	}
+}
+
+// SecurePrint prints sensitive information only if the UI is interactive (or explicitly forced).
+func (h *UIHandler) SecurePrint(secret string) {
+	if h.JSON {
+		return // Handled by printJSON
+	}
+
+	if h.Interactive {
+		fmt.Fprintln(h.Stdout, secret)
+	} else {
+		fmt.Fprintln(h.Stderr, "⚠️  Warning: Sensitive output suppressed because stdout is not a terminal.")
+		fmt.Fprintln(h.Stderr, "   Use --json for machine-readable output or redirect with care.")
+	}
+}
+
+// SecurePrintf is the formatted version of SecurePrint.
+func (h *UIHandler) SecurePrintf(format string, args ...any) {
+	if h.JSON {
+		return
+	}
+
+	if h.Interactive {
+		fmt.Fprintf(h.Stdout, format, args...)
+	} else {
+		fmt.Fprintln(h.Stderr, "⚠️  Warning: Sensitive output suppressed because stdout is not a terminal.")
+	}
+}
+
+// JSONOutput is a global flag for JSON formatting (legacy compatibility).
 var JSONOutput bool
 var JSONWriter io.Writer = os.Stdout
 
@@ -31,6 +77,9 @@ var JSONWriter io.Writer = os.Stdout
 func SetJSONOutput(enabled bool) {
 	JSONOutput = enabled
 	GlobalContext.JSONOutput = enabled
+	if GlobalContext.UI != nil {
+		GlobalContext.UI.JSON = enabled
+	}
 }
 
 // SetupViper initializes the global Viper instance with Maknoon defaults and bindings.
@@ -39,37 +88,17 @@ func SetupViper() {
 	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	viper.AutomaticEnv()
 
-	// Bind non-prefixed env vars for backward compatibility/CI
-	_ = viper.BindEnv("go_test", "GO_TEST")
+	// Bind env vars for backward compatibility/CI
 	_ = viper.BindEnv("desec_token", "DESEC_TOKEN")
 }
 
-// SecurePrint prints sensitive information only if the output is an interactive terminal.
-// If output is redirected, it returns an error unless JSON mode is active.
+// Legacy global helpers redirected to the UI handler
 func SecurePrint(secret string) {
-	if JSONOutput {
-		return // Handled by printJSON
-	}
-
-	if term.IsTerminal(int(os.Stdout.Fd())) || viper.GetString("go_test") == "1" || os.Getenv("GO_TEST") == "1" {
-		fmt.Println(secret) // codeql [go/clear-text-logging]
-	} else {
-		fmt.Fprintln(os.Stderr, "⚠️  Warning: Sensitive output suppressed because stdout is not a terminal.")
-		fmt.Fprintln(os.Stderr, "   Use --json for machine-readable output or redirect with care.")
-	}
+	GlobalContext.UI.SecurePrint(secret)
 }
 
-// SecurePrintf is the formatted version of SecurePrint.
 func SecurePrintf(format string, args ...any) {
-	if JSONOutput {
-		return
-	}
-
-	if term.IsTerminal(int(os.Stdout.Fd())) || viper.GetString("go_test") == "1" || os.Getenv("GO_TEST") == "1" {
-		fmt.Printf(format, args...) // codeql [go/clear-text-logging]
-	} else {
-		fmt.Fprintln(os.Stderr, "⚠️  Warning: Sensitive output suppressed because stdout is not a terminal.")
-	}
+	GlobalContext.UI.SecurePrintf(format, args...)
 }
 
 // getPIN prompts the user for a FIDO2 PIN if not provided via environment or in agent mode.
@@ -91,7 +120,6 @@ func getPIN() (string, error) {
 }
 
 // getPassphrase prompts the user for a passphrase if not provided and not in agent mode.
-// It returns the passphrase and a boolean indicating if it was collected via terminal interaction.
 func getPassphrase(prompt string) ([]byte, bool, error) {
 	if env := viper.GetString("passphrase"); env != "" {
 		return []byte(env), false, nil
@@ -217,7 +245,7 @@ func resolveProfile(name string) (byte, error) {
 
 func checkJSONMode(cmd *cobra.Command) {
 	if JSONOutput || viper.GetString("json") == "1" || viper.GetBool("json") {
-		JSONOutput = true
+		SetJSONOutput(true)
 		if cmd != nil {
 			cmd.SilenceUsage = true
 			cmd.SilenceErrors = true
@@ -310,8 +338,12 @@ func InitEngine() error {
 	crypto.ResetGlobalConfig()
 	var policy crypto.SecurityPolicy
 
+	// Initialize UI Handler if not already present
+	if GlobalContext.UI == nil {
+		GlobalContext.UI = NewUIHandler()
+	}
+
 	// Only enable AgentPolicy if explicitly requested via environment variable.
-	// We no longer auto-detect via TTY to avoid 'Security Theater' for human script users.
 	isAgent := viper.GetString("agent_mode") == "1"
 
 	if isAgent || viper.GetBool("json") {

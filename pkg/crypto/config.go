@@ -180,7 +180,6 @@ func LoadConfig() (*Config, error) {
 	v.SetEnvPrefix("MAKNOON")
 	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	v.AutomaticEnv()
-	_ = v.BindEnv("go_test", "GO_TEST")
 	_ = v.BindEnv("desec_token", "DESEC_TOKEN")
 
 	home := GetUserHomeDir()

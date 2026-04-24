@@ -6,29 +6,35 @@ import (
 	"os"
 )
 
-// CaptureOutput captures the stdout and JSONWriter output of a function.
+// CaptureOutput captures the stdout and UIHandler output of a function.
 func CaptureOutput(f func()) string {
+	// 1. Swap OS Stdout
 	oldStdout := os.Stdout
-	oldJSONWriter := JSONWriter
-	oldGlobalWriter := GlobalContext.JSONWriter
-
 	r, w, _ := os.Pipe()
 	os.Stdout = w
-	JSONWriter = w
+
+	// 2. Setup a Test UI that writes to our pipe
+	oldUI := GlobalContext.UI
+	GlobalContext.UI = &UIHandler{
+		Stdout:      w,
+		Stderr:      w,
+		Interactive: true, // Allow tests to see "sensitive" info
+		JSON:        false,
+	}
+
+	// 3. Backup and swap legacy JSONWriter if needed
+	oldJSONWriter := GlobalContext.JSONWriter
 	GlobalContext.JSONWriter = w
 
 	f()
 
-	if err := w.Close(); err != nil {
-		panic(err)
-	}
+	// Restore
+	w.Close()
 	os.Stdout = oldStdout
-	JSONWriter = oldJSONWriter
-	GlobalContext.JSONWriter = oldGlobalWriter
+	GlobalContext.UI = oldUI
+	GlobalContext.JSONWriter = oldJSONWriter
 
 	var buf bytes.Buffer
-	if _, err := io.Copy(&buf, r); err != nil {
-		panic(err)
-	}
+	_, _ = io.Copy(&buf, r)
 	return buf.String()
 }

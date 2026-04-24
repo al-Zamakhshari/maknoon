@@ -15,7 +15,13 @@ func TestPersistentPreRunE(t *testing.T) {
 		Use: "maknoon",
 		PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
 			SetupViper()
-			return InitEngine()
+			err := InitEngine()
+			if err != nil {
+				return err
+			}
+			// Simulate interactive terminal for standard CLI runs
+			GlobalContext.UI.Interactive = true
+			return nil
 		},
 	}
 	root.PersistentFlags().BoolVar(&JSONOutput, "json", false, "")
