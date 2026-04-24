@@ -403,13 +403,13 @@ func TestVaultJSON(t *testing.T) {
 		r, w, _ := os.Pipe()
 		os.Stdout = w
 		os.Stderr = w
-		
+
 		// Ensure GlobalContext respects our redirection
 		oldJSONWriter := GlobalContext.JSONWriter
 		GlobalContext.JSONWriter = w
 
 		_ = getCmdErr.Execute() // Expected to fail
-		
+
 		if err := w.Close(); err != nil {
 			t.Fatal(err)
 		}
@@ -445,7 +445,7 @@ func TestCompletions(t *testing.T) {
 	if err := keygenCmd.Execute(); err != nil {
 		t.Fatal(err)
 	}
-	
+
 	ids, _ := completeIdentities(nil, nil, "test")
 	if len(ids) == 0 || ids[0] != "test-id" {
 		t.Errorf("Identity completion failed, got: %v", ids)
@@ -456,7 +456,7 @@ func TestCompletions(t *testing.T) {
 	if err := os.WriteFile(vaultPath, []byte("dummy"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	
+
 	vaults, _ := completeVaults(nil, nil, "wo")
 	if len(vaults) == 0 || vaults[0] != "work" {
 		t.Errorf("Vault completion failed, got: %v", vaults)

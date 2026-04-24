@@ -368,9 +368,9 @@ func openVault() (*bbolt.DB, []byte, error) {
 func vaultSetCmd() *cobra.Command {
 	var user, note string
 	cmd := &cobra.Command{
-		Use:   "set [service]",
-		Short: "Store a secret in the vault",
-		Args:  cobra.ExactArgs(1),
+		Use:               "set [service]",
+		Short:             "Store a secret in the vault",
+		Args:              cobra.ExactArgs(1),
 		ValidArgsFunction: completeServices,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			checkJSONMode(cmd)
@@ -435,9 +435,9 @@ func vaultSetCmd() *cobra.Command {
 
 func vaultGetCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "get [service]",
-		Short: "Retrieve a secret from the vault",
-		Args:  cobra.ExactArgs(1),
+		Use:               "get [service]",
+		Short:             "Retrieve a secret from the vault",
+		Args:              cobra.ExactArgs(1),
 		ValidArgsFunction: completeServices,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			checkJSONMode(cmd)

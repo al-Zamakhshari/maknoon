@@ -214,9 +214,9 @@ func identitySplitCmd() *cobra.Command {
 	var passphrase string
 
 	cmd := &cobra.Command{
-		Use:   "split [name]",
-		Short: "Shard an identity using Shamir's Secret Sharing",
-		Args:  cobra.ExactArgs(1),
+		Use:               "split [name]",
+		Short:             "Shard an identity using Shamir's Secret Sharing",
+		Args:              cobra.ExactArgs(1),
 		ValidArgsFunction: completeIdentities,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			checkJSONMode(cmd)
@@ -401,9 +401,9 @@ func identityCombineCmd() *cobra.Command {
 
 func identityInfoCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "info [name]",
-		Short: "Show details about a local identity",
-		Args:  cobra.ExactArgs(1),
+		Use:               "info [name]",
+		Short:             "Show details about a local identity",
+		Args:              cobra.ExactArgs(1),
 		ValidArgsFunction: completeIdentities,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			checkJSONMode(cmd)
@@ -461,9 +461,9 @@ func identityActiveCmd() *cobra.Command {
 
 func identityRenameCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "rename [old] [new]",
-		Short: "Rename a local identity",
-		Args:  cobra.ExactArgs(2),
+		Use:               "rename [old] [new]",
+		Short:             "Rename a local identity",
+		Args:              cobra.ExactArgs(2),
 		ValidArgsFunction: completeIdentities,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			checkJSONMode(cmd)

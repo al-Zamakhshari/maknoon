@@ -40,7 +40,7 @@ func TestSecurePrintScenarios(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var outBuf, errBuf bytes.Buffer
-			
+
 			handler := &UIHandler{
 				Stdout:      &outBuf,
 				Stderr:      &errBuf,

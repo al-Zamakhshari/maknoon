@@ -195,9 +195,9 @@ func profilesGenCmd() *cobra.Command {
 
 func profilesRmCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "rm <name>",
-		Short: "Remove a custom profile from config",
-		Args:  cobra.ExactArgs(1),
+		Use:               "rm <name>",
+		Short:             "Remove a custom profile from config",
+		Args:              cobra.ExactArgs(1),
 		ValidArgsFunction: completeProfiles,
 		RunE: func(_ *cobra.Command, args []string) error {
 			name := args[0]

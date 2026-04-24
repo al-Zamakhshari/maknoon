@@ -51,7 +51,7 @@ func TestConfigMerging(t *testing.T) {
 
 func TestConfigValidation(t *testing.T) {
 	conf := DefaultConfig()
-	
+
 	// Valid config
 	if err := conf.Validate(); err != nil {
 		t.Errorf("Valid config failed validation: %v", err)
@@ -81,7 +81,7 @@ func TestEngineUpdateConfigPolicy(t *testing.T) {
 	engine, _ := NewEngine(&HumanPolicy{})
 	newConf := DefaultConfig()
 	newConf.DefaultIdentity = "human-updated"
-	
+
 	if err := engine.UpdateConfig(nil, newConf); err != nil {
 		t.Errorf("Human policy should allow config update, got: %v", err)
 	}
@@ -108,7 +108,7 @@ func TestConfigPersistence(t *testing.T) {
 	conf := engine.GetConfig()
 	conf.DefaultIdentity = "persistence-test"
 	conf.Performance.Concurrency = 99
-	
+
 	if err := engine.UpdateConfig(nil, conf); err != nil {
 		t.Fatalf("UpdateConfig failed: %v", err)
 	}
@@ -126,7 +126,7 @@ func TestConfigPersistence(t *testing.T) {
 	if loaded.Performance.Concurrency != 99 {
 		t.Errorf("Persistence failed for concurrency")
 	}
-	
+
 	// 3. Verify file permissions
 	path := filepath.Join(tmpDir, MaknoonDir, ConfigFileName)
 	info, err := os.Stat(path)

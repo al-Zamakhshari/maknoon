@@ -54,7 +54,7 @@ func TestPersistentPreRunE(t *testing.T) {
 	if _, ok := GlobalContext.Engine.GetPolicy().(*crypto.AgentPolicy); !ok {
 		t.Errorf("Expected AgentPolicy, got %T", GlobalContext.Engine.GetPolicy())
 	}
-	
+
 	if !JSONOutput {
 		t.Error("Agent mode should implicitly enable JSON output")
 	}
@@ -66,14 +66,14 @@ func TestAgentConfigProtectionIntegration(t *testing.T) {
 	defer os.Unsetenv("MAKNOON_AGENT_MODE")
 	viper.Reset()
 	SetupViper()
-	
+
 	if err := InitEngine(); err != nil {
 		t.Fatal(err)
 	}
-	
+
 	cmd := ConfigCmd()
 	cmd.SetArgs([]string{"set", "perf.concurrency", "100"})
-	
+
 	err := cmd.Execute()
 	if err == nil {
 		t.Error("Agent should not be allowed to modify config, but command succeeded")
