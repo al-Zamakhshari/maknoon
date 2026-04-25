@@ -1,7 +1,6 @@
 package commands
 
 import (
-	"crypto/tls"
 	"fmt"
 	"os"
 	"os/signal"
@@ -27,44 +26,44 @@ func TunnelCmd() *cobra.Command {
 
 func tunnelListenCmd() *cobra.Command {
 	var addr string
-	var certFile, keyFile string
+	var useWormhole bool
 
 	cmd := &cobra.Command{
 		Use:   "listen",
 		Short: "Start a Post-Quantum Tunnel Server (Gateway Receiver)",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// 1. Setup PQC TLS
-			tlsConf := tunnel.GetPQCConfig()
-			
-			if certFile != "" && keyFile != "" {
-				// In v3.0, loading custom certs would happen here
-				return fmt.Errorf("loading custom certificates not yet implemented in CLI")
-			} else {
-				fmt.Println("⚠️  Warning: Using ephemeral self-signed certificate for tunnel")
-				cert, err := tunnel.GenerateTestCertificate()
-				if err != nil {
-					return fmt.Errorf("failed to generate ephemeral cert: %w", err)
-				}
-				tlsConf.Certificates = []tls.Certificate{cert}
+			if err := InitEngine(); err != nil {
+				return err
 			}
 
-			// 2. Start Listener
-			srv, err := tunnel.Listen(addr, tlsConf, GlobalContext.Engine.GetConfig().Tunnel)
+			code, statusCh, err := GlobalContext.Engine.TunnelListen(nil, addr, useWormhole)
 			if err != nil {
-				return fmt.Errorf("failed to start listener: %w", err)
+				return err
 			}
-			defer srv.Listener.Close()
 
-			server := &tunnel.TunnelServer{Listener: srv.Listener}
-			fmt.Printf("🚀 PQC Tunnel Server listening on %s (UDP)\n", addr)
-			
-			return server.Start(nil)
+			if useWormhole {
+				fmt.Printf("👻 Ghost Tunnel Initialized\n")
+				fmt.Printf("🔑 Wormhole Code: %s\n", code)
+				fmt.Println("⏳ Waiting for peer...")
+			} else {
+				fmt.Printf("🚀 PQC Tunnel Server listening on %s (UDP)\n", addr)
+			}
+
+			status := <-statusCh
+			if status.Active {
+				fmt.Printf("🔒 PQC Tunnel Established via %s\n", status.LocalAddress)
+			}
+
+			// Block until interrupt
+			sig := make(chan os.Signal, 1)
+			signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
+			<-sig
+			return nil
 		},
 	}
 
 	cmd.Flags().StringVar(&addr, "address", ":4433", "Address to listen on (UDP)")
-	cmd.Flags().StringVar(&certFile, "tls-cert", "", "Path to TLS certificate")
-	cmd.Flags().StringVar(&keyFile, "tls-key", "", "Path to TLS private key")
+	cmd.Flags().BoolVar(&useWormhole, "wormhole", false, "Use Magic Wormhole for NAT traversal")
 
 	return cmd
 }
@@ -72,6 +71,7 @@ func tunnelListenCmd() *cobra.Command {
 func tunnelStartCmd() *cobra.Command {
 	var remote string
 	var localPort int
+	var wormholeCode string
 
 	cmd := &cobra.Command{
 		Use:   "start",
@@ -84,6 +84,7 @@ func tunnelStartCmd() *cobra.Command {
 			opts := tunnel.TunnelOptions{
 				RemoteEndpoint: remote,
 				LocalProxyPort: localPort,
+				WormholeCode:   wormholeCode,
 			}
 
 			status, err := GlobalContext.Engine.TunnelStart(nil, opts)
@@ -93,7 +94,9 @@ func tunnelStartCmd() *cobra.Command {
 
 			fmt.Printf("🔒 PQC L4 Tunnel Active\n")
 			fmt.Printf("📡 Local Proxy: %s\n", status.LocalAddress)
-			fmt.Printf("🌍 Remote Peer: %s\n", status.RemoteEndpoint)
+			if status.RemoteEndpoint != "" {
+				fmt.Printf("🌍 Remote Peer: %s\n", status.RemoteEndpoint)
+			}
 
 			sig := make(chan os.Signal, 1)
 			signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
@@ -106,7 +109,7 @@ func tunnelStartCmd() *cobra.Command {
 
 	cmd.Flags().StringVar(&remote, "remote", "", "Remote PQC Tunnel endpoint (host:port)")
 	cmd.Flags().IntVar(&localPort, "port", 1080, "Local SOCKS5 proxy port")
-	cmd.MarkFlagRequired("remote")
+	cmd.Flags().StringVar(&wormholeCode, "code", "", "Magic Wormhole code for NAT traversal")
 
 	return cmd
 }

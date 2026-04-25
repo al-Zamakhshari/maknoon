@@ -2,9 +2,11 @@ package crypto
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"sync"
 	"time"
 
@@ -14,59 +16,38 @@ import (
 // EngineEvent is the base interface for all telemetry events.
 type EngineEvent interface{}
 
-// EventEncryptionStarted is emitted when the protection pipeline begins.
+// Telemetry Events
 type EventEncryptionStarted struct {
 	TotalBytes int64
 }
-
-// EventDecryptionStarted is emitted when the unprotection pipeline begins.
 type EventDecryptionStarted struct {
 	TotalBytes int64
 }
-
-// EventHandshakeComplete is emitted after the header is successfully processed.
 type EventHandshakeComplete struct{}
-
-// EventChunkProcessed is emitted for each successfully processed data chunk.
 type EventChunkProcessed struct {
 	BytesProcessed int64
 	TotalProcessed int64
 }
 
-// EventEmitter defines the interface for sending telemetry.
-type EventEmitter interface {
-	Emit(ev EngineEvent)
-}
-
-// EngineContext carries the execution state, telemetry stream, and policy for an operation.
+// EngineContext carries the execution state and policy for an operation.
 type EngineContext struct {
 	context.Context
 	Events chan<- EngineEvent
 	Policy SecurityPolicy
 }
 
-// NewEngineContext creates a new context with an optional event stream.
 func NewEngineContext(ctx context.Context, events chan<- EngineEvent, policy SecurityPolicy) *EngineContext {
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	return &EngineContext{
-		Context: ctx,
-		Events:  events,
-		Policy:  policy,
-	}
+	if ctx == nil { ctx = context.Background() }
+	return &EngineContext{Context: ctx, Events: events, Policy: policy}
 }
 
-// Emit safely sends an event to the telemetry stream, preventing panics on closed channels.
 func (c *EngineContext) Emit(ev EngineEvent) {
-	if c == nil || c.Events == nil {
-		return
-	}
+	if c == nil || c.Events == nil { return }
 	defer func() { _ = recover() }()
 	c.Events <- ev
 }
 
-// Protector handles encryption and decryption pipelines.
+// Interface Definitions
 type Protector interface {
 	Protect(ectx *EngineContext, inputName string, r io.Reader, w io.Writer, opts Options) (byte, error)
 	Unprotect(ectx *EngineContext, r io.Reader, w io.Writer, outPath string, opts Options) (byte, error)
@@ -76,7 +57,6 @@ type Protector interface {
 	ValidateProfile(ectx *EngineContext, p *DynamicProfile) error
 }
 
-// IdentityService handles identity lifecycle and discovery.
 type IdentityService interface {
 	IdentityActive(ectx *EngineContext) ([]string, error)
 	IdentityInfo(ectx *EngineContext, name string) (string, error)
@@ -88,7 +68,6 @@ type IdentityService interface {
 	ContactList(ectx *EngineContext) ([]*Contact, error)
 }
 
-// VaultManager handles secure credential storage.
 type VaultManager interface {
 	VaultGet(ectx *EngineContext, vaultPath string, service string, passphrase []byte, pin string) (*VaultEntry, error)
 	VaultSet(ectx *EngineContext, vaultPath string, entry *VaultEntry, passphrase []byte, pin string) error
@@ -99,58 +78,32 @@ type VaultManager interface {
 	VaultRecover(ectx *EngineContext, mnemonics []string, vaultPath string, output string, passphrase string) (string, error)
 }
 
-// P2PService handles peer-to-peer transfers.
 type P2PService interface {
 	P2PSend(ectx *EngineContext, inputName string, r io.Reader, opts P2PSendOptions) (string, <-chan P2PStatus, error)
 	P2PReceive(ectx *EngineContext, code string, opts P2PReceiveOptions) (<-chan P2PStatus, error)
 	ValidateWormholeURL(ectx *EngineContext, u string) error
 }
 
-// Utils provides secure generation helpers.
 type Utils interface {
 	GeneratePassword(ectx *EngineContext, length int, noSymbols bool) (string, error)
 	GeneratePassphrase(ectx *EngineContext, words int, separator string) (string, error)
 }
 
-// StateProvider provides a standardized interface for accessing and managing
-// the engine's internal configuration state and security policy. It ensures
-// that state modifications are governed by the active capability policy.
 type StateProvider interface {
-	// GetPolicy returns the current security policy enforced by the engine.
 	GetPolicy() SecurityPolicy
-	// GetConfig returns the active configuration parameters.
 	GetConfig() *Config
-	// UpdateConfig replaces the current configuration with newConf, subject to policy validation.
 	UpdateConfig(ectx *EngineContext, newConf *Config) error
-	// RegisterProfile adds a new cryptographic profile to the engine's registry.
 	RegisterProfile(ectx *EngineContext, name string, dp *DynamicProfile) error
-	// RemoveProfile deletes a custom profile from the engine's registry.
 	RemoveProfile(ectx *EngineContext, name string) error
 }
 
-// Inspector provides non-destructive analysis of encrypted Maknoon data.
-type Inspector interface {
-	// Inspect reads the header of an encrypted stream and returns its metadata
-	// and cryptographic parameters without attempting full decryption.
-	Inspect(ectx *EngineContext, in io.Reader) (*HeaderInfo, error)
-}
-
-// TunnelService provides managed access to post-quantum L4 tunnels.
 type TunnelService interface {
-	// TunnelStart initializes the user-space netstack and establishes a PQC tunnel.
 	TunnelStart(ectx *EngineContext, opts tunnel.TunnelOptions) (tunnel.TunnelStatus, error)
-	// TunnelStop gracefully tears down the active tunnel and clears associated memory.
+	TunnelListen(ectx *EngineContext, addr string, useWormhole bool) (string, <-chan tunnel.TunnelStatus, error)
 	TunnelStop(ectx *EngineContext) error
-	// TunnelStatus returns the operational state of the tunnel.
 	TunnelStatus(ectx *EngineContext) (tunnel.TunnelStatus, error)
 }
 
-// MaknoonEngine is the primary high-level facade for all Maknoon services.
-// It orchestrates low-level cryptographic primitives into high-level missions
-// while strictly enforcing the configured SecurityPolicy at every entry point.
-//
-// In v3.0, MaknoonEngine is the single source of truth for both CLI and MCP server
-// logic, ensuring zero logic drift across different integration layers.
 type MaknoonEngine interface {
 	Protector
 	IdentityService
@@ -162,16 +115,29 @@ type MaknoonEngine interface {
 	TunnelService
 }
 
-// Engine is the central stateful service for Maknoon operations.
+type Inspector interface {
+	Inspect(ectx *EngineContext, in io.Reader) (*HeaderInfo, error)
+}
+
+// Engine Implementation
 type Engine struct {
 	Policy     SecurityPolicy
 	Config     *Config
 	Identities *IdentityManager
 
-	// Tunnel State
 	activeTunnel *tunnel.TunnelStatus
 	gateway      *tunnel.TunnelGateway
 	tunnelMu     sync.RWMutex
+}
+
+func NewEngine(policy SecurityPolicy) (*Engine, error) {
+	conf, err := LoadConfig()
+	if err != nil { return nil, err }
+	return &Engine{
+		Policy:     policy,
+		Config:     conf,
+		Identities: NewIdentityManager(),
+	}, nil
 }
 
 func (e *Engine) GetPolicy() SecurityPolicy { return e.Policy }
@@ -180,26 +146,18 @@ func (e *Engine) GetConfig() *Config        { return e.Config }
 func (e *Engine) UpdateConfig(ectx *EngineContext, newConf *Config) error {
 	ectx = e.context(ectx)
 	if !ectx.Policy.AllowConfigModification() {
-		return &ErrPolicyViolation{Reason: "configuration modification is prohibited under the active policy"}
+		return &ErrPolicyViolation{Reason: "configuration modification is prohibited"}
 	}
-	if err := newConf.Validate(); err != nil {
-		return err
-	}
-	if err := newConf.Save(); err != nil {
-		return err
-	}
+	if err := newConf.Validate(); err != nil { return err }
+	if err := newConf.Save(); err != nil { return err }
 	e.Config = newConf
 	return nil
 }
 
 func (e *Engine) RegisterProfile(ectx *EngineContext, name string, dp *DynamicProfile) error {
 	ectx = e.context(ectx)
-	if !ectx.Policy.AllowConfigModification() {
-		return &ErrPolicyViolation{Reason: "profile registration is prohibited under the active policy"}
-	}
-	if e.Config.Profiles == nil {
-		e.Config.Profiles = make(map[string]*DynamicProfile)
-	}
+	if !ectx.Policy.AllowConfigModification() { return &ErrPolicyViolation{Reason: "profile registration prohibited"} }
+	if e.Config.Profiles == nil { e.Config.Profiles = make(map[string]*DynamicProfile) }
 	e.Config.Profiles[name] = dp
 	RegisterProfile(dp)
 	return e.Config.Save()
@@ -207,142 +165,101 @@ func (e *Engine) RegisterProfile(ectx *EngineContext, name string, dp *DynamicPr
 
 func (e *Engine) RemoveProfile(ectx *EngineContext, name string) error {
 	ectx = e.context(ectx)
-	if !ectx.Policy.AllowConfigModification() {
-		return &ErrPolicyViolation{Reason: "profile removal is prohibited under the active policy"}
-	}
-	if _, ok := e.Config.Profiles[name]; !ok {
-		return fmt.Errorf("profile '%s' not found", name)
-	}
+	if !ectx.Policy.AllowConfigModification() { return &ErrPolicyViolation{Reason: "profile removal prohibited"} }
 	delete(e.Config.Profiles, name)
 	return e.Config.Save()
 }
 
 func (e *Engine) Inspect(_ *EngineContext, in io.Reader) (*HeaderInfo, error) {
-	// Non-destructive read of the header
 	magic, profile, flags, recipients, err := ReadHeader(in, false)
-	if err != nil {
-		return nil, err
-	}
-
+	if err != nil { return nil, err }
 	return &HeaderInfo{
-		Magic:          magic,
-		ProfileID:      profile,
-		Flags:          flags,
-		RecipientCount: recipients,
-		IsCompressed:   flags&FlagCompress != 0,
-		IsArchive:      flags&FlagArchive != 0,
-		IsSigned:       flags&FlagSigned != 0,
-		IsStealth:      flags&FlagStealth != 0,
+		Magic: magic, ProfileID: profile, Flags: flags, RecipientCount: recipients,
+		IsCompressed: flags&FlagCompress != 0, IsArchive: flags&FlagArchive != 0,
+		IsSigned: flags&FlagSigned != 0, IsStealth: flags&FlagStealth != 0,
 	}, nil
 }
 
 func (e *Engine) TunnelStart(ectx *EngineContext, opts tunnel.TunnelOptions) (tunnel.TunnelStatus, error) {
 	ectx = e.context(ectx)
-	if err := e.enforce(ectx, CapP2P); err != nil {
-		return tunnel.TunnelStatus{}, err
-	}
-
+	if err := e.enforce(ectx, CapP2P); err != nil { return tunnel.TunnelStatus{}, err }
 	e.tunnelMu.Lock()
 	defer e.tunnelMu.Unlock()
+	if e.activeTunnel != nil && e.activeTunnel.Active { return *e.activeTunnel, fmt.Errorf("tunnel already active") }
 
-	if e.activeTunnel != nil && e.activeTunnel.Active {
-		return *e.activeTunnel, fmt.Errorf("a tunnel is already active")
+	var pconn net.PacketConn
+	var remoteAddr = opts.RemoteEndpoint
+	if opts.WormholeCode != "" {
+		stream, err := tunnel.EstablishGhostStream(ectx.Context, e.Config.Wormhole.RendezvousURL, opts.WormholeCode, false)
+		if err != nil { return tunnel.TunnelStatus{}, err }
+		pconn = &tunnel.WormholePacketConn{Stream: stream}
+		remoteAddr = "wormhole-peer"
 	}
 
-	// 1. Establish PQC QUIC Connection
 	tlsConf := tunnel.GetPQCConfig()
-	tlsConf.InsecureSkipVerify = true // Prototype mode: assume trust on first use
-
-	client, err := tunnel.Dial(ectx.Context, opts.RemoteEndpoint, tlsConf, e.Config.Tunnel)
+	tlsConf.InsecureSkipVerify = true
+	client, err := tunnel.DialWithConn(ectx.Context, pconn, remoteAddr, tlsConf, e.Config.Tunnel)
 	if err != nil {
-		return tunnel.TunnelStatus{}, fmt.Errorf("failed to establish PQC tunnel: %w", err)
+		if pconn != nil { pconn.Close() }
+		return tunnel.TunnelStatus{}, err
 	}
-
-	// 2. Start SOCKS5 Gateway
-	gw := &tunnel.TunnelGateway{
-		Port:   opts.LocalProxyPort,
-		Client: client,
-	}
-	if err := gw.Start(); err != nil {
-		client.Close()
-		return tunnel.TunnelStatus{}, fmt.Errorf("failed to start SOCKS5 gateway: %w", err)
-	}
-
-	// 3. Update State
+	gw := &tunnel.TunnelGateway{Port: opts.LocalProxyPort, Client: client}
+	if err := gw.Start(); err != nil { client.Close(); return tunnel.TunnelStatus{}, err }
 	e.activeTunnel = &tunnel.TunnelStatus{
-		Active:         true,
-		LocalAddress:   fmt.Sprintf("127.0.0.1:%d", opts.LocalProxyPort),
-		RemoteEndpoint: opts.RemoteEndpoint,
-		HandshakeTime:  time.Now().Format(time.RFC3339),
+		Active: true, LocalAddress: fmt.Sprintf("127.0.0.1:%d", opts.LocalProxyPort),
+		RemoteEndpoint: remoteAddr, HandshakeTime: time.Now().Format(time.RFC3339),
 	}
 	e.gateway = gw
-
 	return *e.activeTunnel, nil
+}
+
+func (e *Engine) TunnelListen(ectx *EngineContext, addr string, useWormhole bool) (string, <-chan tunnel.TunnelStatus, error) {
+	ectx = e.context(ectx)
+	if err := e.enforce(ectx, CapP2P); err != nil { return "", nil, err }
+	statusCh := make(chan tunnel.TunnelStatus, 5)
+	if !useWormhole {
+		tlsConf := tunnel.GetPQCConfig()
+		cert, err := tunnel.GenerateTestCertificate()
+		if err != nil { return "", nil, err }
+		tlsConf.Certificates = []tls.Certificate{cert}
+		srv, err := tunnel.Listen(addr, tlsConf, e.Config.Tunnel)
+		if err != nil { return "", nil, err }
+		server := &tunnel.TunnelServer{Listener: srv.Listener}
+		go server.Start(ectx.Context)
+		statusCh <- tunnel.TunnelStatus{Active: true, LocalAddress: addr}
+		return "", statusCh, nil
+	}
+	return "GHOST-MODE-PENDING", statusCh, fmt.Errorf("wormhole listener requires custom protocol handler")
 }
 
 func (e *Engine) TunnelStop(ectx *EngineContext) error {
 	e.tunnelMu.Lock()
 	defer e.tunnelMu.Unlock()
-
 	if e.gateway != nil {
 		e.gateway.Stop()
-		if e.gateway.Client != nil {
-			e.gateway.Client.Close()
-		}
+		if e.gateway.Client != nil { e.gateway.Client.Close() }
 	}
-
-	e.activeTunnel = nil
-	e.gateway = nil
+	e.activeTunnel = nil; e.gateway = nil
 	return nil
 }
 
 func (e *Engine) TunnelStatus(ectx *EngineContext) (tunnel.TunnelStatus, error) {
-	e.tunnelMu.RLock()
-	defer e.tunnelMu.RUnlock()
-
-	if e.activeTunnel == nil {
-		return tunnel.TunnelStatus{Active: false}, nil
-	}
+	e.tunnelMu.RLock(); defer e.tunnelMu.RUnlock()
+	if e.activeTunnel == nil { return tunnel.TunnelStatus{Active: false}, nil }
 	return *e.activeTunnel, nil
 }
 
-
-// context ensures a valid context and policy are always available.
 func (e *Engine) context(ectx *EngineContext) *EngineContext {
-	if ectx == nil {
-		return &EngineContext{
-			Context: context.Background(),
-			Policy:  e.Policy,
-		}
-	}
-	if ectx.Policy == nil {
-		ectx.Policy = e.Policy
-	}
-	if ectx.Context == nil {
-		ectx.Context = context.Background()
-	}
+	if ectx == nil { return &EngineContext{Context: context.Background(), Policy: e.Policy} }
+	if ectx.Policy == nil { ectx.Policy = e.Policy }
+	if ectx.Context == nil { ectx.Context = context.Background() }
 	return ectx
 }
 
 func (e *Engine) enforce(ectx *EngineContext, cap Capability) error {
-	if !ectx.Policy.HasCapability(cap) {
-		return &ErrPolicyViolation{Reason: fmt.Sprintf("capability '%s' is prohibited under the active policy", cap)}
-	}
+	ectx = e.context(ectx)
+	if !ectx.Policy.HasCapability(cap) { return &ErrPolicyViolation{Reason: fmt.Sprintf("prohibited capability: %s", cap)} }
 	return nil
-}
-
-// NewEngine creates a new Engine with the specified policy and loaded config.
-func NewEngine(policy SecurityPolicy) (*Engine, error) {
-	conf, err := LoadConfig()
-	if err != nil {
-		return nil, fmt.Errorf("failed to initialize engine config: %w", err)
-	}
-
-	return &Engine{
-		Policy:     policy,
-		Config:     conf,
-		Identities: NewIdentityManager(),
-	}, nil
 }
 
 func (e *Engine) GeneratePassword(ectx *EngineContext, length int, noSymbols bool) (string, error) {
@@ -353,20 +270,12 @@ func (e *Engine) GeneratePassphrase(ectx *EngineContext, words int, separator st
 	return GeneratePassphrase(words, separator)
 }
 
-// bufferPool reduces GC pressure during streaming.
+
 var bufferPool = sync.Pool{
-	New: func() interface{} {
-		b := make([]byte, ChunkSize+256) // Extra padding for AEAD tags
-		return &b
-	},
+	New: func() any { b := make([]byte, ChunkSize+256); return &b },
 }
 
-// SafeClear securely wipes sensitive bytes.
 func SafeClear(b []byte) {
-	if b == nil {
-		return
-	}
-	for i := range b {
-		b[i] = 0
-	}
+	if b == nil { return }
+	for i := range b { b[i] = 0 }
 }

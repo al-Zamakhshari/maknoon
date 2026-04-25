@@ -4,6 +4,7 @@ package tunnel
 type TunnelOptions struct {
 	RemoteEndpoint string `json:"remote_endpoint"`
 	LocalProxyPort int    `json:"local_proxy_port"`
+	WormholeCode   string `json:"wormhole_code,omitempty"`
 	PublicKey      []byte `json:"public_key"`
 	PQPublicKey    []byte `json:"pq_public_key"`
 	Passphrase     []byte `json:"passphrase,omitempty"`

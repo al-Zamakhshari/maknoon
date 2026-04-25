@@ -10,6 +10,12 @@ import (
 	"github.com/psanford/wormhole-william/wormhole"
 )
 
+// WormholeStreamWrapper adapts a Wormhole data stream to io.ReadWriteCloser.
+// This is used to bridge the authenticated Wormhole transit pipe to the QUIC stack.
+type WormholeStreamWrapper struct {
+	io.ReadWriteCloser
+}
+
 // P2PStatus represents a progress update in a P2P transfer.
 type P2PStatus struct {
 	Phase        string // "encrypting", "connecting", "transferring", "decrypting", "success", "error"
@@ -58,7 +64,6 @@ func (e *Engine) P2PSend(ectx *EngineContext, inputName string, r io.Reader, opt
 	}
 
 	// 2. Encryption (Library call)
-	// For simplicity, we'll use a temp file for the encrypted payload to allow seeking
 	tmpEnc, err := os.CreateTemp("", "maknoon-p2p-send-*.makn")
 	if err != nil {
 		return "", nil, err
@@ -124,7 +129,6 @@ func (e *Engine) P2PSend(ectx *EngineContext, inputName string, r io.Reader, opt
 				status <- P2PStatus{Phase: "success"}
 				return
 			}
-			// Update status
 			status <- P2PStatus{
 				Phase:      "transferring",
 				BytesTotal: totalBytes,
@@ -170,7 +174,6 @@ func (e *Engine) P2PReceive(ectx *EngineContext, code string, opts P2PReceiveOpt
 	go func() {
 		defer close(status)
 
-		// 1. Download to temp file
 		tmpFile, err := os.CreateTemp("", "maknoon-p2p-recv-*.makn")
 		if err != nil {
 			status <- P2PStatus{Phase: "error", Error: err}
@@ -184,14 +187,11 @@ func (e *Engine) P2PReceive(ectx *EngineContext, code string, opts P2PReceiveOpt
 			BytesTotal: msg.TransferBytes64,
 		}
 
-		// To correctly report progress from io.Copy, we'd need a custom writer
-		// but for now let's just do the copy.
 		if _, err := io.Copy(tmpFile, msg); err != nil {
 			status <- P2PStatus{Phase: "error", Error: err}
 			return
 		}
 
-		// 2. Decrypt
 		if _, err := tmpFile.Seek(0, 0); err != nil {
 			status <- P2PStatus{Phase: "error", Error: err}
 			return
