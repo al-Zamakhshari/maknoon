@@ -49,7 +49,7 @@ func runAgentMission(t *testing.T, ctx context.Context, mcpClient *client.Client
 		if res.IsError {
 			t.Fatalf("Tool returned error: %v", res.Content[0])
 		}
-		
+
 		pass := strings.TrimSpace(res.Content[0].(mcp.TextContent).Text)
 		if len(strings.Split(pass, "-")) != 4 {
 			t.Errorf("Unexpected result from remote gen_passphrase: %q", pass)
@@ -99,7 +99,7 @@ func runAgentMission(t *testing.T, ctx context.Context, mcpClient *client.Client
 		if err != nil || res.IsError {
 			t.Fatalf("Remote inspection failed: %v", res.Content)
 		}
-		
+
 		text := res.Content[0].(mcp.TextContent).Text
 		if !strings.Contains(text, "MAKA") {
 			t.Errorf("Inspection result missing magic bytes: %s", text)
@@ -133,7 +133,7 @@ func TestTransportSSE(t *testing.T) {
 	_, err = mcpClient.Initialize(ctx, mcp.InitializeRequest{
 		Params: mcp.InitializeParams{
 			ProtocolVersion: "2024-11-05",
-			ClientInfo: mcp.Implementation{Name: "test-client", Version: "1.0"},
+			ClientInfo:      mcp.Implementation{Name: "test-client", Version: "1.0"},
 		},
 	})
 	if err != nil {

@@ -127,40 +127,46 @@ func createMCPServer() *server.MCPServer {
 	}
 
 	// 1. Vault Tools
-	s.AddTool(mcp.NewTool("vault_get", mcp.WithDescription("Retrieve a secret from the vault")), 
+	s.AddTool(mcp.NewTool("vault_get", mcp.WithDescription("Retrieve a secret from the vault")),
 		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			args := getArgs(request)
 			service := getString(args, "service", "")
 			vault := getString(args, "vault", "default")
 			pass := []byte(viper.GetString("passphrase"))
 			entry, err := engine.VaultGet(nil, vault, service, pass, "")
-			if err != nil { return formatMCPError(err, "vault_get") }
-			if entry == nil { return mcp.NewToolResultError(`{"error":"not found"}`), nil }
+			if err != nil {
+				return formatMCPError(err, "vault_get")
+			}
+			if entry == nil {
+				return mcp.NewToolResultError(`{"error":"not found"}`), nil
+			}
 			res, _ := json.Marshal(entry)
 			crypto.SafeClear(entry.Password)
 			return mcp.NewToolResultText(string(res)), nil
 		})
 
-	s.AddTool(mcp.NewTool("vault_set", mcp.WithDescription("Store a secret in the vault")), 
+	s.AddTool(mcp.NewTool("vault_set", mcp.WithDescription("Store a secret in the vault")),
 		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			args := getArgs(request)
 			entry := &crypto.VaultEntry{
-				Service: getString(args, "service", ""),
+				Service:  getString(args, "service", ""),
 				Username: getString(args, "username", ""),
 				Password: []byte(getString(args, "password", "")),
 			}
 			err := engine.VaultSet(nil, getString(args, "vault", "default"), entry, []byte(viper.GetString("passphrase")), "")
 			crypto.SafeClear(entry.Password)
-			if err != nil { return formatMCPError(err, "vault_set") }
+			if err != nil {
+				return formatMCPError(err, "vault_set")
+			}
 			return mcp.NewToolResultText(`{"status":"success"}`), nil
 		})
 
 	// 2. Crypto Tools
-	s.AddTool(mcp.NewTool("encrypt_file", mcp.WithDescription("Encrypt a file")), 
+	s.AddTool(mcp.NewTool("encrypt_file", mcp.WithDescription("Encrypt a file")),
 		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			args := getArgs(request)
 			opts := crypto.Options{ProfileID: 1}
-			
+
 			passRaw := viper.GetString("passphrase")
 			if passRaw != "" {
 				opts.Passphrase = []byte(passRaw)
@@ -175,35 +181,43 @@ func createMCPServer() *server.MCPServer {
 					}
 				}
 			}
-			
+
 			input := getString(args, "input", "")
 			output := getString(args, "output", "")
-			
+
 			in, err := os.Open(input)
-			if err != nil { return formatMCPError(err, "encrypt_file") }
+			if err != nil {
+				return formatMCPError(err, "encrypt_file")
+			}
 			defer in.Close()
-			
+
 			out, err := os.Create(output)
-			if err != nil { return formatMCPError(err, "encrypt_file") }
+			if err != nil {
+				return formatMCPError(err, "encrypt_file")
+			}
 			defer out.Close()
-			
+
 			_, err = engine.Protect(nil, "", in, out, opts)
-			if err != nil { return formatMCPError(err, "encrypt_file") }
+			if err != nil {
+				return formatMCPError(err, "encrypt_file")
+			}
 			return mcp.NewToolResultText(`{"status":"success"}`), nil
 		})
 
-	s.AddTool(mcp.NewTool("inspect_file", mcp.WithDescription("Analyze header metadata")), 
+	s.AddTool(mcp.NewTool("inspect_file", mcp.WithDescription("Analyze header metadata")),
 		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			args := getArgs(request)
 			in, _ := os.Open(getString(args, "path", ""))
 			info, err := engine.Inspect(nil, in)
-			if err != nil { return formatMCPError(err, "inspect_file") }
+			if err != nil {
+				return formatMCPError(err, "inspect_file")
+			}
 			res, _ := json.Marshal(info)
 			return mcp.NewToolResultText(string(res)), nil
 		})
 
 	// 3. P2P & Network Tools
-	s.AddTool(mcp.NewTool("p2p_send", mcp.WithDescription("Start a secure P2P file transfer")), 
+	s.AddTool(mcp.NewTool("p2p_send", mcp.WithDescription("Start a secure P2P file transfer")),
 		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			args := getArgs(request)
 			text := getString(args, "text", "")
@@ -220,29 +234,35 @@ func createMCPServer() *server.MCPServer {
 			}
 			opts := crypto.P2PSendOptions{
 				Passphrase: []byte(viper.GetString("passphrase")),
-				Stealth: getBool(args, "stealth", false),
+				Stealth:    getBool(args, "stealth", false),
 			}
 			code, _, err := engine.P2PSend(nil, name, r, opts)
-			if err != nil { return formatMCPError(err, "p2p_send") }
+			if err != nil {
+				return formatMCPError(err, "p2p_send")
+			}
 			return mcp.NewToolResultText(fmt.Sprintf(`{"code":"%s","status":"established"}`, code)), nil
 		})
 
-	s.AddTool(mcp.NewTool("start_chat", mcp.WithDescription("Initiate a Ghost Chat session")), 
+	s.AddTool(mcp.NewTool("start_chat", mcp.WithDescription("Initiate a Ghost Chat session")),
 		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			session := crypto.NewChatSession("maknoon-mcp")
 			code, err := session.StartHost(ctx)
-			if err != nil { return formatMCPError(err, "start_chat") }
+			if err != nil {
+				return formatMCPError(err, "start_chat")
+			}
 			session.Close()
 			return mcp.NewToolResultText(fmt.Sprintf(`{"status":"established","code":"%s"}`, code)), nil
 		})
 
 	// 4. Utility Tools
-	s.AddTool(mcp.NewTool("gen_passphrase", mcp.WithDescription("Generate a secure mnemonic")), 
+	s.AddTool(mcp.NewTool("gen_passphrase", mcp.WithDescription("Generate a secure mnemonic")),
 		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			args := getArgs(request)
 			words, _ := args["words"].(float64)
 			pass, err := engine.GeneratePassphrase(nil, int(words), "-")
-			if err != nil { return formatMCPError(err, "gen_passphrase") }
+			if err != nil {
+				return formatMCPError(err, "gen_passphrase")
+			}
 			return mcp.NewToolResultText(pass), nil
 		})
 
