@@ -1,0 +1,23 @@
+services:
+  target:
+    image: nginx:alpine
+    networks:
+      tunnel-net:
+        ipv4_address: 172.20.0.5
+
+  gateway:
+    build: .
+    command: tunnel listen --address :4433
+    ports:
+      - "4433:4433/udp"
+    networks:
+      tunnel-net:
+        ipv4_address: 172.20.0.10
+    environment:
+      - MAKNOON_PASSPHRASE=test-secret-tunnel
+
+networks:
+  tunnel-net:
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

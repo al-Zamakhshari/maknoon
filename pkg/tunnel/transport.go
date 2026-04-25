@@ -2,8 +2,14 @@ package tunnel
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
 	"crypto/tls"
+	"crypto/x509"
+	"crypto/x509/pkix"
 	"fmt"
+	"math/big"
+	"time"
 
 	"github.com/quic-go/quic-go"
 )
@@ -18,11 +24,19 @@ type QUICServer struct {
 	Listener *quic.Listener
 }
 
-// Listen starts a post-quantum QUIC listener.
-func Listen(address string, tlsConf *tls.Config) (*QUICServer, error) {
+// Listen starts a post-quantum QUIC listener with governed settings.
+func Listen(address string, tlsConf *tls.Config, conf TunnelConfig) (*QUICServer, error) {
+	// Enforce hard cap
+	if conf.MaxStreams > 2000 {
+		conf.MaxStreams = 2000
+	}
+
 	quicConf := &quic.Config{
-		MaxIdleTimeout:  0,
-		KeepAlivePeriod: 30,
+		MaxIdleTimeout:         time.Duration(conf.IdleTimeout) * time.Second,
+		KeepAlivePeriod:        10 * time.Second,
+		MaxIncomingStreams:     int64(conf.MaxStreams),
+		MaxIncomingUniStreams:  int64(conf.MaxStreams),
+		HandshakeIdleTimeout:   time.Duration(conf.HandshakeTimeout) * time.Second,
 	}
 
 	ln, err := quic.ListenAddr(address, tlsConf, quicConf)
@@ -33,25 +47,64 @@ func Listen(address string, tlsConf *tls.Config) (*QUICServer, error) {
 	return &QUICServer{Listener: ln}, nil
 }
 
-// GetPQCConfig returns a TLS configuration optimized for Post-Quantum Hybrid security.
+// GenerateTestCertificate creates a self-signed TLS certificate for testing purposes.
+func GenerateTestCertificate() (tls.Certificate, error) {
+	// Standard RSA 2048 for the outer TLS layer (Handshake uses ML-KEM/X25519 hybrid curves)
+	priv, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		return tls.Certificate{}, err
+	}
+
+	template := x509.Certificate{
+		SerialNumber: big.NewInt(1),
+		Subject: pkix.Name{
+			Organization: []string{"Maknoon Ephemeral PQC"},
+		},
+		NotBefore: time.Now(),
+		NotAfter:  time.Now().Add(24 * time.Hour),
+
+		KeyUsage:              x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		BasicConstraintsValid: true,
+	}
+
+	derBytes, err := x509.CreateCertificate(rand.Reader, &template, &template, &priv.PublicKey, priv)
+	if err != nil {
+		return tls.Certificate{}, err
+	}
+
+	return tls.Certificate{
+		Certificate: [][]byte{derBytes},
+		PrivateKey:  priv,
+	}, nil
+}
+
+// GetPQCConfig returns a TLS configuration optimized for Strict Post-Quantum Hybrid security.
 func GetPQCConfig() *tls.Config {
 	return &tls.Config{
 		MinVersion: tls.VersionTLS13,
-		// Prioritize ML-KEM-768 hybrid key exchange (Go 1.23+)
+		// STRICT MODE: Only allow ML-KEM hybrid key exchange.
+		// If a client does not support this, the handshake must fail.
 		CurvePreferences: []tls.CurveID{
-			tls.X25519MLKEM768, // Post-Quantum Hybrid
-			tls.X25519,
-			tls.CurveP256,
+			tls.X25519MLKEM768, // The only permitted exchange
 		},
 		NextProtos: []string{"maknoon-pqc-tunnel"},
 	}
 }
 
-// Dial establishes a secure QUIC connection to the remote endpoint.
-func Dial(ctx context.Context, address string, tlsConf *tls.Config) (*QUICClient, error) {
+// Dial establishes a secure QUIC connection with governed settings.
+func Dial(ctx context.Context, address string, tlsConf *tls.Config, conf TunnelConfig) (*QUICClient, error) {
+	// Enforce hard cap
+	if conf.MaxStreams > 2000 {
+		conf.MaxStreams = 2000
+	}
+
 	quicConf := &quic.Config{
-		MaxIdleTimeout:  0,
-		KeepAlivePeriod: 30,
+		MaxIdleTimeout:         time.Duration(conf.IdleTimeout) * time.Second,
+		KeepAlivePeriod:        10 * time.Second,
+		MaxIncomingStreams:     int64(conf.MaxStreams),
+		MaxIncomingUniStreams:  int64(conf.MaxStreams),
+		HandshakeIdleTimeout:   time.Duration(conf.HandshakeTimeout) * time.Second,
 	}
 
 	conn, err := quic.DialAddr(ctx, address, tlsConf, quicConf)

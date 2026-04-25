@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/al-Zamakhshari/maknoon/pkg/crypto"
+	"github.com/al-Zamakhshari/maknoon/pkg/tunnel"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 	"github.com/spf13/cobra"
@@ -226,7 +227,7 @@ func createMCPServer() *server.MCPServer {
 				port = 1080 // Default SOCKS5 port
 			}
 
-			opts := crypto.TunnelOptions{
+			opts := tunnel.TunnelOptions{
 				RemoteEndpoint: remote,
 				LocalProxyPort: int(port),
 			}

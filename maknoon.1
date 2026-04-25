@@ -28,6 +28,17 @@ Receive data from a peer using a Wormhole code.
 .B chat [code]
 Start a secure, ephemeral Ghost Chat session. Supports TUI and JSONL (for agents).
 .TP
+.B tunnel [subcommand]
+Post-Quantum L4 Tunnel Gateway. Manage secure network perimeters via PQC-QUIC and SOCKS5.
+.RS
+.TP
+.B listen
+Start a Post-Quantum Tunnel Server (Gateway Receiver).
+.TP
+.B start
+Start a local Post-Quantum SOCKS5 Gateway.
+.RE
+.TP
 .B info [file]
 Displays detailed cryptographic metadata of an encrypted Maknoon file.
 .SS Identity & Trust

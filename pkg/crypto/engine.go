@@ -138,11 +138,11 @@ type Inspector interface {
 // TunnelService provides managed access to post-quantum L4 tunnels.
 type TunnelService interface {
 	// TunnelStart initializes the user-space netstack and establishes a PQC tunnel.
-	TunnelStart(ectx *EngineContext, opts TunnelOptions) (TunnelStatus, error)
+	TunnelStart(ectx *EngineContext, opts tunnel.TunnelOptions) (tunnel.TunnelStatus, error)
 	// TunnelStop gracefully tears down the active tunnel and clears associated memory.
 	TunnelStop(ectx *EngineContext) error
 	// TunnelStatus returns the operational state of the tunnel.
-	TunnelStatus(ectx *EngineContext) (TunnelStatus, error)
+	TunnelStatus(ectx *EngineContext) (tunnel.TunnelStatus, error)
 }
 
 // MaknoonEngine is the primary high-level facade for all Maknoon services.
@@ -169,7 +169,7 @@ type Engine struct {
 	Identities *IdentityManager
 
 	// Tunnel State
-	activeTunnel *TunnelStatus
+	activeTunnel *tunnel.TunnelStatus
 	gateway      *tunnel.TunnelGateway
 	tunnelMu     sync.RWMutex
 }
@@ -236,10 +236,10 @@ func (e *Engine) Inspect(_ *EngineContext, in io.Reader) (*HeaderInfo, error) {
 	}, nil
 }
 
-func (e *Engine) TunnelStart(ectx *EngineContext, opts TunnelOptions) (TunnelStatus, error) {
+func (e *Engine) TunnelStart(ectx *EngineContext, opts tunnel.TunnelOptions) (tunnel.TunnelStatus, error) {
 	ectx = e.context(ectx)
 	if err := e.enforce(ectx, CapP2P); err != nil {
-		return TunnelStatus{}, err
+		return tunnel.TunnelStatus{}, err
 	}
 
 	e.tunnelMu.Lock()
@@ -253,9 +253,9 @@ func (e *Engine) TunnelStart(ectx *EngineContext, opts TunnelOptions) (TunnelSta
 	tlsConf := tunnel.GetPQCConfig()
 	tlsConf.InsecureSkipVerify = true // Prototype mode: assume trust on first use
 
-	client, err := tunnel.Dial(ectx.Context, opts.RemoteEndpoint, tlsConf)
+	client, err := tunnel.Dial(ectx.Context, opts.RemoteEndpoint, tlsConf, e.Config.Tunnel)
 	if err != nil {
-		return TunnelStatus{}, fmt.Errorf("failed to establish PQC tunnel: %w", err)
+		return tunnel.TunnelStatus{}, fmt.Errorf("failed to establish PQC tunnel: %w", err)
 	}
 
 	// 2. Start SOCKS5 Gateway
@@ -265,11 +265,11 @@ func (e *Engine) TunnelStart(ectx *EngineContext, opts TunnelOptions) (TunnelSta
 	}
 	if err := gw.Start(); err != nil {
 		client.Close()
-		return TunnelStatus{}, fmt.Errorf("failed to start SOCKS5 gateway: %w", err)
+		return tunnel.TunnelStatus{}, fmt.Errorf("failed to start SOCKS5 gateway: %w", err)
 	}
 
 	// 3. Update State
-	e.activeTunnel = &TunnelStatus{
+	e.activeTunnel = &tunnel.TunnelStatus{
 		Active:         true,
 		LocalAddress:   fmt.Sprintf("127.0.0.1:%d", opts.LocalProxyPort),
 		RemoteEndpoint: opts.RemoteEndpoint,
@@ -296,14 +296,16 @@ func (e *Engine) TunnelStop(ectx *EngineContext) error {
 	return nil
 }
 
-func (e *Engine) TunnelStatus(ectx *EngineContext) (TunnelStatus, error) {
+func (e *Engine) TunnelStatus(ectx *EngineContext) (tunnel.TunnelStatus, error) {
 	e.tunnelMu.RLock()
 	defer e.tunnelMu.RUnlock()
+
 	if e.activeTunnel == nil {
-		return TunnelStatus{Active: false}, nil
+		return tunnel.TunnelStatus{Active: false}, nil
 	}
 	return *e.activeTunnel, nil
 }
+
 
 // context ensures a valid context and policy are always available.
 func (e *Engine) context(ectx *EngineContext) *EngineContext {

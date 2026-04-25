@@ -1,0 +1,1 @@
+bfafd7887e2c47f16404486fcee82562ff1b6387a594dfc3799c1441faef3ab1  /usr/share/nginx/html/integrity_test.bin

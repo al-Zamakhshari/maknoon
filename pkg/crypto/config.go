@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/al-Zamakhshari/maknoon/pkg/tunnel"
 	"github.com/spf13/viper"
 )
 
@@ -27,6 +28,7 @@ type Config struct {
 	AgentLimits        AgentLimitsConfig          `json:"agent_limits" mapstructure:"agent_limits"`
 	Wormhole           WormholeConfig             `json:"wormhole" mapstructure:"wormhole"`
 	Nostr              NostrConfig                `json:"nostr" mapstructure:"nostr"`
+	Tunnel             tunnel.TunnelConfig        `json:"tunnel" mapstructure:"tunnel"`
 	Paths              PathConfig                 `json:"paths" mapstructure:"paths"`
 	Profiles           map[string]*DynamicProfile `json:"profiles,omitempty" mapstructure:"profiles"`
 }
@@ -70,6 +72,12 @@ type NostrConfig struct {
 type PathConfig struct {
 	KeysDir   string `json:"keys_dir" mapstructure:"keys_dir"`
 	VaultsDir string `json:"vaults_dir" mapstructure:"vaults_dir"`
+}
+
+type TunnelConfig struct {
+	MaxStreams       int `json:"max_streams" mapstructure:"max_streams"`
+	IdleTimeout      int `json:"idle_timeout_sec" mapstructure:"idle_timeout_sec"`
+	HandshakeTimeout int `json:"handshake_timeout_sec" mapstructure:"handshake_timeout_sec"`
 }
 
 var (
@@ -131,6 +139,11 @@ func DefaultConfig() *Config {
 				"wss://nos.lol",
 			},
 			PublishMetadata: true,
+		},
+		Tunnel: tunnel.TunnelConfig{
+			MaxStreams:       256,
+			IdleTimeout:      30,
+			HandshakeTimeout: 10,
 		},
 		Paths: PathConfig{
 			KeysDir:   filepath.Join(home, MaknoonDir, KeysDir),

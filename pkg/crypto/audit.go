@@ -10,6 +10,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/al-Zamakhshari/maknoon/pkg/tunnel"
 )
 
 // AuditLogger defines the interface for recording engine operations.
@@ -400,7 +402,7 @@ func (e *AuditEngine) Inspect(ectx *EngineContext, in io.Reader) (*HeaderInfo, e
 	return e.Engine.Inspect(ectx, in)
 }
 
-func (e *AuditEngine) TunnelStart(ectx *EngineContext, opts TunnelOptions) (TunnelStatus, error) {
+func (e *AuditEngine) TunnelStart(ectx *EngineContext, opts tunnel.TunnelOptions) (tunnel.TunnelStatus, error) {
 	start := time.Now()
 	status, err := e.Engine.TunnelStart(ectx, opts)
 	duration := time.Since(start)
@@ -426,6 +428,6 @@ func (e *AuditEngine) TunnelStop(ectx *EngineContext) error {
 	return err
 }
 
-func (e *AuditEngine) TunnelStatus(ectx *EngineContext) (TunnelStatus, error) {
+func (e *AuditEngine) TunnelStatus(ectx *EngineContext) (tunnel.TunnelStatus, error) {
 	return e.Engine.TunnelStatus(ectx)
 }

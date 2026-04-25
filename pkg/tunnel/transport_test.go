@@ -16,6 +16,13 @@ import (
 )
 
 func TestQUICLoopbackTunnel(t *testing.T) {
+	// Setup test config
+	conf := TunnelConfig{
+		MaxStreams:       10,
+		IdleTimeout:      5,
+		HandshakeTimeout: 5,
+	}
+
 	// 1. Setup a Mock Remote Endpoint (QUIC Server)
 	serverTLS := GetPQCConfig()
 	cert, err := generateSelfSignedCert()
@@ -24,7 +31,7 @@ func TestQUICLoopbackTunnel(t *testing.T) {
 	}
 	serverTLS.Certificates = []tls.Certificate{cert}
 
-	server, err := Listen("127.0.0.1:0", serverTLS)
+	server, err := Listen("127.0.0.1:0", serverTLS, conf)
 	if err != nil {
 		t.Fatalf("failed to start server: %v", err)
 	}
@@ -68,7 +75,7 @@ func TestQUICLoopbackTunnel(t *testing.T) {
 	clientTLS := GetPQCConfig()
 	clientTLS.InsecureSkipVerify = true
 
-	client, err := Dial(context.Background(), serverAddr, clientTLS)
+	client, err := Dial(context.Background(), serverAddr, clientTLS, conf)
 	if err != nil {
 		t.Fatalf("failed to dial: %v", err)
 	}
