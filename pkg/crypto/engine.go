@@ -132,6 +132,16 @@ type Inspector interface {
 	Inspect(ectx *EngineContext, in io.Reader) (*HeaderInfo, error)
 }
 
+// TunnelService provides managed access to post-quantum L4 tunnels.
+type TunnelService interface {
+	// TunnelStart initializes the user-space netstack and establishes a PQC tunnel.
+	TunnelStart(ectx *EngineContext, opts TunnelOptions) (TunnelStatus, error)
+	// TunnelStop gracefully tears down the active tunnel and clears associated memory.
+	TunnelStop(ectx *EngineContext) error
+	// TunnelStatus returns the operational state of the tunnel.
+	TunnelStatus(ectx *EngineContext) (TunnelStatus, error)
+}
+
 // MaknoonEngine is the primary high-level facade for all Maknoon services.
 // It orchestrates low-level cryptographic primitives into high-level missions
 // while strictly enforcing the configured SecurityPolicy at every entry point.
@@ -146,6 +156,7 @@ type MaknoonEngine interface {
 	Utils
 	StateProvider
 	Inspector
+	TunnelService
 }
 
 // Engine is the central stateful service for Maknoon operations.
@@ -153,6 +164,10 @@ type Engine struct {
 	Policy     SecurityPolicy
 	Config     *Config
 	Identities *IdentityManager
+
+	// Tunnel State
+	activeTunnel *TunnelStatus
+	tunnelMu     sync.RWMutex
 }
 
 func (e *Engine) GetPolicy() SecurityPolicy { return e.Policy }
@@ -215,6 +230,39 @@ func (e *Engine) Inspect(_ *EngineContext, in io.Reader) (*HeaderInfo, error) {
 		IsSigned:       flags&FlagSigned != 0,
 		IsStealth:      flags&FlagStealth != 0,
 	}, nil
+}
+
+func (e *Engine) TunnelStart(ectx *EngineContext, opts TunnelOptions) (TunnelStatus, error) {
+	ectx = e.context(ectx)
+	if err := e.enforce(ectx, CapP2P); err != nil {
+		return TunnelStatus{}, err
+	}
+
+	e.tunnelMu.Lock()
+	defer e.tunnelMu.Unlock()
+
+	if e.activeTunnel != nil && e.activeTunnel.Active {
+		return *e.activeTunnel, fmt.Errorf("a tunnel is already active")
+	}
+
+	// Implementation logic will reside in Phase 2
+	return TunnelStatus{}, fmt.Errorf("tunnel implementation pending Phase 2")
+}
+
+func (e *Engine) TunnelStop(ectx *EngineContext) error {
+	e.tunnelMu.Lock()
+	defer e.tunnelMu.Unlock()
+	e.activeTunnel = nil
+	return nil
+}
+
+func (e *Engine) TunnelStatus(ectx *EngineContext) (TunnelStatus, error) {
+	e.tunnelMu.RLock()
+	defer e.tunnelMu.RUnlock()
+	if e.activeTunnel == nil {
+		return TunnelStatus{Active: false}, nil
+	}
+	return *e.activeTunnel, nil
 }
 
 // context ensures a valid context and policy are always available.

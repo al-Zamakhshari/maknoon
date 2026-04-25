@@ -399,3 +399,33 @@ func (e *AuditEngine) RemoveProfile(ectx *EngineContext, name string) error {
 func (e *AuditEngine) Inspect(ectx *EngineContext, in io.Reader) (*HeaderInfo, error) {
 	return e.Engine.Inspect(ectx, in)
 }
+
+func (e *AuditEngine) TunnelStart(ectx *EngineContext, opts TunnelOptions) (TunnelStatus, error) {
+	start := time.Now()
+	status, err := e.Engine.TunnelStart(ectx, opts)
+	duration := time.Since(start)
+
+	e.Logger.LogEvent("tunnel_start", map[string]any{
+		"remote":      opts.RemoteEndpoint,
+		"proxy_port":  opts.LocalProxyPort,
+		"duration_ms": duration.Milliseconds(),
+	}, err)
+
+	return status, err
+}
+
+func (e *AuditEngine) TunnelStop(ectx *EngineContext) error {
+	start := time.Now()
+	err := e.Engine.TunnelStop(ectx)
+	duration := time.Since(start)
+
+	e.Logger.LogEvent("tunnel_stop", map[string]any{
+		"duration_ms": duration.Milliseconds(),
+	}, err)
+
+	return err
+}
+
+func (e *AuditEngine) TunnelStatus(ectx *EngineContext) (TunnelStatus, error) {
+	return e.Engine.TunnelStatus(ectx)
+}
