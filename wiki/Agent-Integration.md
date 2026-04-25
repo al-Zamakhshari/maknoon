@@ -51,16 +51,14 @@ The engine activates **Agent Mode** when the following condition is met:
 For maximum security in production AI environments, Maknoon should be deployed as a containerized sandbox. This provides process-level isolation, preventing an AI agent from accessing any sensitive data outside the explicitly mounted workspace.
 
 ### Docker Implementation
-Maknoon utilizes a **multi-stage build** starting from an empty `scratch` image, resulting in a minimal (~15MB) container with **zero OS-level attack surface** (no shell, no package manager).
+Maknoon utilizes a **multi-stage build** starting from an empty `scratch` image, resulting in a minimal (~15MB) container with **zero OS-level attack surface**. Using **Docker Buildx** ensures optimized, multi-platform builds.
 
 ```bash
-# Build the secure sandbox image
-docker build -t maknoon-sandbox .
+# Build the secure sandbox image using BuildKit (buildx)
+docker buildx build -t maknoon-sandbox --load .
 
-# Execute a sandboxed encryption task
-docker run -v ~/workspace:/home/maknoon \
-  -e MAKNOON_AGENT_MODE=1 \
-  maknoon-sandbox encrypt secret.txt -s "mypass"
+# Multi-platform build (AMD64 + ARM64)
+docker buildx build --platform linux/amd64,linux/arm64 -t maknoon-sandbox .
 ```
 
 ### Orchestration via Docker Compose

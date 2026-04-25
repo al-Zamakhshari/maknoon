@@ -1,0 +1,12 @@
+.git
+.agents
+.gemini_security
+bin
+maknoon
+mcp_server
+*.makn
+*.sig
+*.vault
+dist
+node_modules
+tmp
