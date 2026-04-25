@@ -14,8 +14,8 @@ func TestMain(m *testing.M) {
 }
 
 func TestChatSession_BasicFlow(t *testing.T) {
-	if os.Getenv("MAKNOON_ALLOW_NETWORK") != "1" {
-		t.Skip("skipping network test (set MAKNOON_ALLOW_NETWORK=1 to enable)")
+	if testing.Short() || os.Getenv("GITHUB_ACTIONS") == "true" {
+		t.Skip("skipping network test in short mode or CI")
 	}
 
 	host := NewChatSession(ChatAppIDForTest)

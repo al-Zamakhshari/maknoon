@@ -267,8 +267,8 @@ func TestMCPServerTools(t *testing.T) {
 	})
 
 	t.Run("Start Chat Tool", func(t *testing.T) {
-		if os.Getenv("MAKNOON_ALLOW_NETWORK") != "1" {
-			t.Skip("skipping network test (set MAKNOON_ALLOW_NETWORK=1 to enable)")
+		if testing.Short() || os.Getenv("GITHUB_ACTIONS") == "true" {
+			t.Skip("skipping network test in short mode or CI")
 		}
 		req := json.RawMessage(`{
 			"jsonrpc": "2.0",

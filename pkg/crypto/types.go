@@ -68,3 +68,15 @@ type CommonResult struct {
 	Status  string `json:"status"`
 	Message string `json:"message,omitempty"`
 }
+
+// HeaderInfo represents the metadata extracted from a Maknoon file header.
+type HeaderInfo struct {
+	Magic          string `json:"magic"`
+	ProfileID      byte   `json:"profile_id"`
+	Flags          byte   `json:"flags"`
+	RecipientCount byte   `json:"recipient_count"`
+	IsCompressed   bool   `json:"is_compressed"`
+	IsArchive      bool   `json:"is_archive"`
+	IsSigned       bool   `json:"is_signed"`
+	IsStealth      bool   `json:"is_stealth"`
+}

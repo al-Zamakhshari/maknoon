@@ -1,16 +1,16 @@
 .TH MAKNOON 1 "April 2026" "3.0.0" "Maknoon Manual"
 .SH NAME
-maknoon \- High-performance, Post-Quantum CLI encryption tool.
+maknoon \- Enterprise-Grade Post-Quantum Encryption Engine and MCP Server.
 .SH SYNOPSIS
 .B maknoon
 [\fIcommand\fR] [\fIflags\fR]
 .SH DESCRIPTION
-Maknoon (مكنون) is an industrial-grade encryption tool designed for a post-quantum world. 
+Maknoon (مكنون) is an industrial-grade cryptographic engine designed for a post-quantum world. 
 It implements a stateful **Engine** architecture (v3.0) utilizing NIST-standard ML-KEM (Kyber1024) for asymmetric encryption, ML-DSA (Dilithium87) for digital signatures, and XChaCha20-Poly1305 for streaming data integrity.
 .PP
 The tool features a modular **Profile** system for cryptographic agility, multi-core parallelism, and a capability-based **Agent Sandbox** for secure execution by AI agents. All data is processed in 64KB chunks to ensure a constant memory footprint.
 .SH COMMANDS
-.SS Core Commands
+.SS Cryptographic Operations
 .TP
 .B encrypt [file/dir]
 Encrypt a file or directory. Directories are automatically archived (TAR).
@@ -18,7 +18,6 @@ Supports \-\-public-key for asymmetric mode and \-\-passphrase for symmetric mod
 .TP
 .B decrypt [file]
 Decrypt and restore data. Automatically detects encryption type, compression, and archiving.
-Use \-\-overwrite to bypass safety checks.
 .TP
 .B send [file/dir]
 Send data via secure ephemeral P2P transport (Magic Wormhole).
@@ -31,7 +30,7 @@ Start a secure, ephemeral Ghost Chat session. Supports TUI and JSONL (for agents
 .TP
 .B info [file]
 Displays detailed cryptographic metadata of an encrypted Maknoon file.
-.SS Identity Management
+.SS Identity & Trust
 .TP
 .B keygen
 Generate a full Post-Quantum identity (KEM + SIG + Nostr keys).
@@ -79,7 +78,7 @@ Generate a detached ML-DSA-87 signature for a file.
 .TP
 .B verify [file]
 Verify a file's integrity and origin using an ML-DSA public key.
-.SS Utilities & Secrets
+.SS Enterprise & System
 .TP
 .B vault [subcommand]
 Manage an encrypted password database (bbolt).
@@ -133,61 +132,27 @@ Manage cryptographic agility profiles.
 .RS
 .TP
 .B list
-List built-in (nist, aes, conservative) and custom profiles.
+List all built-in and custom profiles.
 .TP
-.B gen <name>
-Generate a randomized, validated custom profile.
+.B gen [name]
+Generate a new functional profile with Functional Smoke Testing.
 .TP
-.B rm <name>
+.B rm [name]
 Remove a custom profile from the configuration.
 .RE
 .TP
-.B schema
-Output the complete JSON Schema of all commands for AI Agent consumption.
-.SH OPTIONS
-.TP
-.B \-p, \-\-public-key
-Path to a recipient's public key (.kem.pub). Supports multiple keys.
-.TP
-.B \-k, \-\-private-key
-Path to your private key (.kem.key or .sig.key).
-.TP
-.B \-s, \-\-passphrase
-Passphrase for symmetric operations or unlocking keys.
-.TP
-.B \-c, \-\-compress
-Enable Zstd compression.
-.TP
-.B \-j, \-\-concurrency
-Number of parallel workers (0 for auto-scale).
-.TP
-.B \-\-stealth
-Headerless mode; makes ciphertext indistinguishable from random noise.
-.TP
-.B \-\-shred
-Securely delete the original file after successful encryption.
-.TP
-.B \-\-trust-on-first-use (tofu)
-Automatically trust and save unknown public keys encountered during decryption.
-.TP
-.B \-\-json
-Enable strict JSON output on stdout and errors on stderr.
-.TP
-.B \-\-fido2
-Use a hardware security key for KDF and authentication.
-.TP
-.B \-\-profile [id/name]
-Select a specific cryptographic profile.
+.B mcp
+Launch the native Model Context Protocol (MCP) server for AI agent integration.
 .SH ENVIRONMENT
-.TP
-.B MAKNOON_PASSPHRASE
-Used to unlock keys and vaults non-interactively.
 .TP
 .B MAKNOON_AGENT_MODE
 Set to "1" to enable the restricted Agent Sandbox.
 .TP
 .B MAKNOON_JSON
 Set to "1" to force JSON output mode globally.
+.TP
+.B MAKNOON_PASSPHRASE
+Provide a master passphrase via the environment to bypass interactive prompts.
 .SH FILES
 .TP
 .I ~/.maknoon/config.json

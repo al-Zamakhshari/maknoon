@@ -112,13 +112,13 @@ func DefaultConfig() *Config {
 			MaxThreads:  4,
 			MaxWorkers:  2,
 			AllowedURLs: []string{
-				"wss://relay.magic-wormhole.io:4000/v1",
-				"tcp:transit.magic-wormhole.io:4001",
+				"ws://relay.magic-wormhole.io:4000/v1",
+				"transit.magic-wormhole.io:4001",
 			},
 		},
 		Wormhole: WormholeConfig{
-			RendezvousURL: "wss://relay.magic-wormhole.io:4000/v1",
-			TransitRelay:  "tcp:transit.magic-wormhole.io:4001",
+			RendezvousURL: "ws://relay.magic-wormhole.io:4000/v1",
+			TransitRelay:  "transit.magic-wormhole.io:4001",
 		},
 		Nostr: NostrConfig{
 			Relays: []string{

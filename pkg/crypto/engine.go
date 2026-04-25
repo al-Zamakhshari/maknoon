@@ -118,6 +118,10 @@ type StateProvider interface {
 	RemoveProfile(ectx *EngineContext, name string) error
 }
 
+type Inspector interface {
+	Inspect(ectx *EngineContext, in io.Reader) (*HeaderInfo, error)
+}
+
 // MaknoonEngine is the unified facade for the Maknoon system, composing all specialized services.
 type MaknoonEngine interface {
 	Protector
@@ -126,6 +130,7 @@ type MaknoonEngine interface {
 	P2PService
 	Utils
 	StateProvider
+	Inspector
 }
 
 // Engine is the central stateful service for Maknoon operations.
@@ -176,6 +181,26 @@ func (e *Engine) RemoveProfile(ectx *EngineContext, name string) error {
 	}
 	delete(e.Config.Profiles, name)
 	return e.Config.Save()
+}
+
+func (e *Engine) Inspect(ectx *EngineContext, in io.Reader) (*HeaderInfo, error) {
+	ectx = e.context(ectx)
+	// Non-destructive read of the header
+	magic, profile, flags, recipients, err := ReadHeader(in, false)
+	if err != nil {
+		return nil, err
+	}
+
+	return &HeaderInfo{
+		Magic:          magic,
+		ProfileID:      profile,
+		Flags:          flags,
+		RecipientCount: recipients,
+		IsCompressed:   flags&FlagCompress != 0,
+		IsArchive:      flags&FlagArchive != 0,
+		IsSigned:       flags&FlagSigned != 0,
+		IsStealth:      flags&FlagStealth != 0,
+	}, nil
 }
 
 // context ensures a valid context and policy are always available.

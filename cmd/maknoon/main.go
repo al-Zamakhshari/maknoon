@@ -76,6 +76,7 @@ Post-Quantum Cryptography (PQC).`,
 	addCommand(commands.GenCmd(), "utils")
 	addCommand(commands.ConfigCmd(), "utils")
 	addCommand(commands.ProfilesCmd(), "utils")
+	addCommand(commands.MCPServerCmd(), "utils")
 
 	// Automation-only commands (Hidden from standard help)
 	schemaCmd := commands.SchemaCmd()
@@ -85,6 +86,10 @@ Post-Quantum Cryptography (PQC).`,
 	manCmd := commands.ManCmd()
 	manCmd.Hidden = true
 	rootCmd.AddCommand(manCmd)
+
+	mcpCmd := commands.MCPServerCmd()
+	mcpCmd.Hidden = true
+	rootCmd.AddCommand(mcpCmd)
 
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)

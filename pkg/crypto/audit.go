@@ -395,3 +395,7 @@ func (e *AuditEngine) RemoveProfile(ectx *EngineContext, name string) error {
 
 	return err
 }
+
+func (e *AuditEngine) Inspect(ectx *EngineContext, in io.Reader) (*HeaderInfo, error) {
+	return e.Engine.Inspect(ectx, in)
+}
