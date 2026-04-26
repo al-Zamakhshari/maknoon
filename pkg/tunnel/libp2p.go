@@ -30,7 +30,6 @@ type Libp2pSession struct {
 // OpenStream initiates a new multiplexed stream.
 func (s *Libp2pSession) OpenStream(ctx context.Context) (net.Conn, error) {
 	if s.singleStream != nil {
-		// Server side: we already have the stream from Accept()
 		st := s.singleStream
 		s.singleStream = nil
 		return &libp2pConn{Stream: st}, nil
@@ -91,7 +90,6 @@ func StartLibp2pListener(h host.Host) *Libp2pListener {
 }
 
 // NewLibp2pHost initializes a minimal libp2p host.
-// By avoiding libp2p.Defaults, we significantly reduce binary size.
 func NewLibp2pHost(extraOpts ...libp2p.Option) (host.Host, error) {
 	cmgr, err := connmgr.NewConnManager(10, 20)
 	if err != nil {
@@ -110,6 +108,7 @@ func NewLibp2pHost(extraOpts ...libp2p.Option) (host.Host, error) {
 		libp2p.Muxer("/yamux/1.0.0", yamux.DefaultTransport),
 		libp2p.EnableRelay(),
 		libp2p.EnableHolePunching(),
+		libp2p.FallbackDefaults,
 	}
 	opts = append(opts, extraOpts...)
 

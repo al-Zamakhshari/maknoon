@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	libp2pcrypto "github.com/libp2p/go-libp2p/core/crypto"
+	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/spf13/viper"
 )
 
@@ -624,4 +626,37 @@ func (id *Identity) Wipe() {
 	SafeClear(id.KEMPriv)
 	SafeClear(id.SIGPriv)
 	SafeClear(id.NostrPriv)
+}
+
+// AsLibp2pKey converts the Maknoon signing key to a libp2p private key.
+// In v3.1, we derive a deterministic Ed25519 key from the ML-DSA private key
+// to ensure compatibility with the libp2p ecosystem while maintaining PQC roots.
+func (id *Identity) AsLibp2pKey() (libp2pcrypto.PrivKey, error) {
+	if len(id.SIGPriv) == 0 {
+		return nil, fmt.Errorf("signing key not loaded")
+	}
+
+	// We use the first 32 bytes of the SIGPriv (the seed) to create a deterministic Ed25519 key.
+	// This ensures that the same Maknoon Identity always produces the same PeerID.
+	seed := id.SIGPriv
+	if len(seed) > 32 {
+		seed = seed[:32]
+	}
+
+	priv, _, err := libp2pcrypto.GenerateEd25519Key(bytes.NewReader(seed))
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate libp2p key: %w", err)
+	}
+
+	return priv, nil
+}
+
+// GetPeerID derives the libp2p PeerID from the identity's signing key.
+func (id *Identity) GetPeerID() (peer.ID, error) {
+	priv, err := id.AsLibp2pKey()
+	if err != nil {
+		return "", err
+	}
+
+	return peer.IDFromPrivateKey(priv)
 }

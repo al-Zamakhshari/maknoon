@@ -26,7 +26,7 @@ func ContactCmd() *cobra.Command {
 }
 
 func contactAddCmd() *cobra.Command {
-	var kemPubPath, sigPubPath, note string
+	var kemPubPath, sigPubPath, note, peerID string
 	cmd := &cobra.Command{
 		Use:   "add [petname]",
 		Short: "Add a new trusted contact",
@@ -54,6 +54,11 @@ func contactAddCmd() *cobra.Command {
 				}
 			}
 
+			// Automatic PeerID Derivation if not provided
+			if peerID == "" && len(sigPub) > 0 {
+				peerID, _ = crypto.DerivePeerID(sigPub)
+			}
+
 			cm, err := crypto.NewContactManager()
 			if err != nil {
 				return err
@@ -64,6 +69,7 @@ func contactAddCmd() *cobra.Command {
 				Petname:   petname,
 				KEMPubKey: kemPub,
 				SIGPubKey: sigPub,
+				PeerID:    peerID,
 				AddedAt:   time.Now(),
 				Notes:     note,
 			}
@@ -73,9 +79,12 @@ func contactAddCmd() *cobra.Command {
 			}
 
 			if JSONOutput {
-				printJSON(map[string]string{"status": "success", "petname": petname})
+				printJSON(map[string]string{"status": "success", "petname": petname, "peer_id": peerID})
 			} else {
 				fmt.Printf("✅ Contact '%s' added successfully.\n", petname)
+				if peerID != "" {
+					fmt.Printf("🆔 Derived PeerID: %s\n", peerID)
+				}
 			}
 			return nil
 		},
@@ -83,6 +92,7 @@ func contactAddCmd() *cobra.Command {
 
 	cmd.Flags().StringVar(&kemPubPath, "kem-pub", "", "Path to the contact's ML-KEM public key")
 	cmd.Flags().StringVar(&sigPubPath, "sig-pub", "", "Path to the contact's ML-DSA public key")
+	cmd.Flags().StringVar(&peerID, "peer-id", "", "Explicit libp2p Peer ID (optional)")
 	cmd.Flags().StringVarP(&note, "note", "n", "", "Optional note for this contact")
 
 	return cmd
@@ -111,10 +121,10 @@ func contactListCmd() *cobra.Command {
 					fmt.Println("No contacts found.")
 					return nil
 				}
-				fmt.Printf("%-20s %-20s %s\n", "PETNAME", "ADDED", "NOTES")
-				fmt.Println(strings.Repeat("-", 60))
+				fmt.Printf("%-20s %-45s %-12s %s\n", "PETNAME", "PEER ID", "ADDED", "NOTES")
+				fmt.Println(strings.Repeat("-", 100))
 				for _, c := range contacts {
-					fmt.Printf("%-20s %-20s %s\n", c.Petname, c.AddedAt.Format("2006-01-02"), c.Notes)
+					fmt.Printf("%-20s %-45s %-12s %s\n", c.Petname, c.PeerID, c.AddedAt.Format("2006-01-02"), c.Notes)
 				}
 			}
 			return nil

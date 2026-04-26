@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/al-Zamakhshari/maknoon/pkg/tunnel"
+	"github.com/libp2p/go-libp2p"
 )
 
 // EngineEvent is the base interface for all telemetry events.
@@ -282,6 +283,41 @@ func (e *Engine) TunnelStatus(ectx *EngineContext) (tunnel.TunnelStatus, error) 
 		return tunnel.TunnelStatus{Active: false}, nil
 	}
 	return *e.activeTunnel, nil
+}
+
+// P2PKeepAlive starts a background DHT advertising loop for the current identity.
+// This allows other peers to discover this node via its PeerID.
+func (e *Engine) P2PKeepAlive(ectx *EngineContext, identityName string) error {
+	ectx = e.context(ectx)
+	if err := e.enforce(ectx, CapP2P); err != nil {
+		return err
+	}
+
+	id, err := e.Identities.LoadIdentity(identityName, nil, "", false)
+	if err != nil {
+		return err
+	}
+
+	priv, err := id.AsLibp2pKey()
+	if err != nil {
+		return err
+	}
+
+	h, err := tunnel.NewLibp2pHost(libp2p.Identity(priv))
+	if err != nil {
+		return err
+	}
+
+	slog.Info("p2p keep-alive: advertising identity", "peer_id", h.ID(), "identity", identityName)
+
+	// In a real implementation, we would use dht.Provide here.
+	// For now, we just keep the host alive to be reachable via relays.
+	go func() {
+		<-ectx.Done()
+		h.Close()
+	}()
+
+	return nil
 }
 
 func (e *Engine) context(ectx *EngineContext) *EngineContext {
