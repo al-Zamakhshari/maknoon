@@ -88,7 +88,7 @@ func tunnelStartCmd() *cobra.Command {
 				LocalProxyPort: localPort,
 			}
 
-			status, err := GlobalContext.Engine.TunnelStart(nil, opts)
+			status, err := GlobalContext.Engine.TunnelStart(&crypto.EngineContext{Context: cmd.Context()}, opts)
 			if err != nil {
 				return err
 			}
