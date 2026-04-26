@@ -19,8 +19,12 @@ import (
 type EngineEvent interface{}
 
 // Telemetry Events
-type EventEncryptionStarted struct{ TotalBytes int64 }
-type EventDecryptionStarted struct{ TotalBytes int64 }
+type EventEncryptionStarted struct {
+	TotalBytes int64
+}
+type EventDecryptionStarted struct {
+	TotalBytes int64
+}
 type EventHandshakeComplete struct{}
 type EventChunkProcessed struct {
 	BytesProcessed int64
@@ -143,7 +147,9 @@ func (e *Engine) GetConfig() *Config        { return e.Config }
 
 func (e *Engine) UpdateConfig(ectx *EngineContext, newConf *Config) error {
 	ectx = e.context(ectx)
-	if !ectx.Policy.AllowConfigModification() { return &ErrPolicyViolation{Reason: "configuration modification prohibited"} }
+	if !ectx.Policy.AllowConfigModification() {
+		return &ErrPolicyViolation{Reason: "configuration modification is prohibited"}
+	}
 	if err := newConf.Validate(); err != nil { return err }
 	if err := newConf.Save(); err != nil { return err }
 	e.Config = newConf
@@ -193,7 +199,9 @@ func (e *Engine) TunnelStart(ectx *EngineContext, opts tunnel.TunnelOptions) (tu
 		if err != nil { return tunnel.TunnelStatus{}, err }
 		body, _ := io.ReadAll(msg)
 		signal := string(body)
-		if !strings.HasPrefix(signal, "maknoon-ghost-v1:") { return tunnel.TunnelStatus{}, fmt.Errorf("invalid ghost signal") }
+		if !strings.HasPrefix(signal, "maknoon-ghost-v1:") {
+			return tunnel.TunnelStatus{}, fmt.Errorf("invalid ghost signal")
+		}
 		remoteAddr = strings.TrimPrefix(signal, "maknoon-ghost-v1:")
 	}
 
@@ -218,7 +226,6 @@ func (e *Engine) TunnelListen(ectx *EngineContext, addr string, useWormhole bool
 	ectx = e.context(ectx)
 	if err := e.enforce(ectx, CapP2P); err != nil { return "", nil, err }
 	statusCh := make(chan tunnel.TunnelStatus, 5)
-
 	if !useWormhole {
 		tlsConf := tunnel.GetPQCConfig()
 		cert, err := tunnel.GenerateTestCertificate()
@@ -231,27 +238,27 @@ func (e *Engine) TunnelListen(ectx *EngineContext, addr string, useWormhole bool
 		statusCh <- tunnel.TunnelStatus{Active: true, LocalAddress: addr}
 		return "", statusCh, nil
 	}
-
+	
 	tlsConf := tunnel.GetPQCConfig()
 	cert, _ := tunnel.GenerateTestCertificate()
 	tlsConf.Certificates = []tls.Certificate{cert}
 	srv, err := tunnel.Listen(":0", tlsConf, e.Config.Tunnel)
 	if err != nil { return "", nil, err }
-	actualAddr := srv.Listener.Addr().String()
-
+	
 	c := wormhole.Client{RendezvousURL: e.Config.Wormhole.RendezvousURL}
-	code, status, err := c.SendText(ectx.Context, "maknoon-ghost-v1:"+actualAddr)
+	code, status, err := c.SendText(ectx.Context, "maknoon-ghost-v1:"+srv.Listener.Addr().String())
 	if err != nil { srv.Listener.Close(); return "", nil, err }
 
 	go func() {
 		defer close(statusCh)
-		server := &tunnel.TunnelServer{Listener: srv.Listener}
 		for s := range status {
 			if s.Error != nil { srv.Listener.Close(); return }
 		}
-		statusCh <- tunnel.TunnelStatus{Active: true, LocalAddress: actualAddr}
+		statusCh <- tunnel.TunnelStatus{Active: true, LocalAddress: srv.Listener.Addr().String()}
+		server := &tunnel.TunnelServer{Listener: srv.Listener}
 		server.Start(ectx.Context)
 	}()
+
 	return code, statusCh, nil
 }
 
@@ -286,6 +293,7 @@ func (e *Engine) enforce(ectx *EngineContext, cap Capability) error {
 }
 
 func (e *Engine) GeneratePassword(ectx *EngineContext, length int, noSymbols bool) (string, error) { return GeneratePassword(length, noSymbols) }
+
 func (e *Engine) GeneratePassphrase(ectx *EngineContext, words int, separator string) (string, error) { return GeneratePassphrase(words, separator) }
 
 var bufferPool = sync.Pool{
