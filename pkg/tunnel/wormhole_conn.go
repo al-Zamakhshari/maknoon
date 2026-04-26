@@ -1,80 +1,98 @@
 package tunnel
 
 import (
-	"context"
 	"encoding/binary"
+	"fmt"
 	"io"
 	"net"
 	"sync"
 	"time"
-
-	"github.com/psanford/wormhole-william/wormhole"
 )
 
-// WormholePacketConn adapts a generic io.ReadWriteCloser to net.PacketConn for QUIC.
-type WormholePacketConn struct {
-	Stream io.ReadWriteCloser
-	readMu sync.Mutex
+// WormholeAddr represents a virtual address for a Magic Wormhole connection.
+type WormholeAddr struct {
+	Code string
 }
 
-func (c *WormholePacketConn) ReadFrom(p []byte) (int, net.Addr, error) {
+func (a WormholeAddr) Network() string { return "magic-wormhole" }
+func (a WormholeAddr) String() string  { return a.Code }
+
+// WormholePacketConn adapts a stream-oriented io.ReadWriteCloser (like a Wormhole Transit stream)
+// to the net.PacketConn interface required by QUIC.
+type WormholePacketConn struct {
+	Stream io.ReadWriteCloser
+	Local  WormholeAddr
+	Remote WormholeAddr
+
+	readMu  sync.Mutex
+	writeMu sync.Mutex
+
+	closeOnce sync.Once
+	done      chan struct{}
+}
+
+// NewWormholePacketConn initializes a new adapter for the provided stream.
+func NewWormholePacketConn(stream io.ReadWriteCloser, localCode, remoteCode string) *WormholePacketConn {
+	return &WormholePacketConn{
+		Stream: stream,
+		Local:  WormholeAddr{Code: localCode},
+		Remote: WormholeAddr{Code: remoteCode},
+		done:   make(chan struct{}),
+	}
+}
+
+// ReadFrom reads a framed packet from the Wormhole stream.
+func (c *WormholePacketConn) ReadFrom(p []byte) (n int, addr net.Addr, err error) {
 	c.readMu.Lock()
 	defer c.readMu.Unlock()
+
+	// 1. Read 2-byte length header
 	var length uint16
 	if err := binary.Read(c.Stream, binary.BigEndian, &length); err != nil {
 		return 0, nil, err
 	}
-	n, err := io.ReadFull(c.Stream, p[:length])
-	return n, &net.UDPAddr{IP: net.IPv4zero, Port: 0}, err
+
+	if int(length) > len(p) {
+		return 0, nil, fmt.Errorf("packet too large: %d > %d", length, len(p))
+	}
+
+	// 2. Read exactly 'length' bytes
+	n, err = io.ReadFull(c.Stream, p[:length])
+	return n, c.Remote, err
 }
 
-func (c *WormholePacketConn) WriteTo(p []byte, addr net.Addr) (int, error) {
+// WriteTo frames the packet and writes it to the Wormhole stream.
+func (c *WormholePacketConn) WriteTo(p []byte, addr net.Addr) (n int, err error) {
+	c.writeMu.Lock()
+	defer c.writeMu.Unlock()
+
+	if len(p) > 65535 {
+		return 0, fmt.Errorf("packet exceeds maximum framing size")
+	}
+
+	// 1. Write 2-byte length header
 	if err := binary.Write(c.Stream, binary.BigEndian, uint16(len(p))); err != nil {
 		return 0, err
 	}
+
+	// 2. Write the packet payload
 	return c.Stream.Write(p)
 }
 
-func (c *WormholePacketConn) Close() error                       { return c.Stream.Close() }
-func (c *WormholePacketConn) LocalAddr() net.Addr                { return &net.UDPAddr{IP: net.IPv4zero, Port: 0} }
-func (c *WormholePacketConn) SetDeadline(t time.Time) error      { return nil }
-func (c *WormholePacketConn) SetReadDeadline(t time.Time) error  { return nil }
-func (c *WormholePacketConn) SetWriteDeadline(t time.Time) error { return nil }
-
-// EstablishGhostStream performs the Magic Wormhole handshake to get a raw data pipe.
-func EstablishGhostStream(ctx context.Context, rendezvous, code string, isServer bool) (io.ReadWriteCloser, error) {
-	c := wormhole.Client{RendezvousURL: rendezvous}
-	
-	if !isServer {
-		msg, err := c.Receive(ctx, code)
-		if err != nil {
-			return nil, err
-		}
-		// IncomingMessage is a Reader, but not a Closer.
-		return &transitBridge{Reader: msg, Writer: io.Discard, closeFunc: func() error { return nil }}, nil
-	}
-	
-	pr, pw := io.Pipe()
-	go func() {
-		_, status, _ := c.SendFile(ctx, "ghost-tunnel", &pipeSeeker{pr})
-		for range status {}
-	}()
-
-	return &transitBridge{Reader: pr, Writer: pw, closeFunc: pw.Close}, nil
+// Close gracefully shuts down the adapter and the underlying stream.
+func (c *WormholePacketConn) Close() error {
+	var err error
+	c.closeOnce.Do(func() {
+		close(c.done)
+		err = c.Stream.Close()
+	})
+	return err
 }
 
-type transitBridge struct {
-	io.Reader
-	io.Writer
-	closeFunc func() error
-}
-
-func (b *transitBridge) Close() error {
-	if b.closeFunc != nil {
-		return b.closeFunc()
-	}
+func (c *WormholePacketConn) LocalAddr() net.Addr  { return c.Local }
+func (c *WormholePacketConn) SetDeadline(t time.Time) error {
+	// Not strictly applicable to the virtual adapter; handled by underlying stream if supported
 	return nil
 }
-
-type pipeSeeker struct{ io.Reader }
-func (p *pipeSeeker) Seek(offset int64, whence int) (int64, error) { return 0, nil }
+func (c *WormholePacketConn) SetReadDeadline(t time.Time) error  { return nil }
+func (c *WormholePacketConn) SetWriteDeadline(t time.Time) error { return nil }
