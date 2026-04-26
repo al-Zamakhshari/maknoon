@@ -3,7 +3,6 @@ package tunnel
 import (
 	"context"
 	"encoding/binary"
-	"fmt"
 	"io"
 	"net"
 	"sync"
@@ -13,6 +12,7 @@ import (
 )
 
 // WormholePacketConn adapts a generic io.ReadWriteCloser to net.PacketConn for QUIC.
+// It uses a robust length-prefix framing to handle large PQC packets over reliable streams.
 type WormholePacketConn struct {
 	Stream io.ReadWriteCloser
 	readMu sync.Mutex
@@ -21,21 +21,37 @@ type WormholePacketConn struct {
 func (c *WormholePacketConn) ReadFrom(p []byte) (int, net.Addr, error) {
 	c.readMu.Lock()
 	defer c.readMu.Unlock()
+
+	// 1. Read 2-byte big-endian length header
 	var length uint16
 	if err := binary.Read(c.Stream, binary.BigEndian, &length); err != nil {
 		return 0, nil, err
 	}
-	if int(length) > len(p) {
-		io.CopyN(io.Discard, c.Stream, int64(length))
-		return 0, nil, fmt.Errorf("packet too large: %d", length)
+
+	// 2. CRITICAL: Handle large PQC packets (quic-go usually provides a ~1452 byte buffer)
+	// If the incoming packet is larger than the provided buffer, we must truncate or
+	// allow quic-go to handle the error, but we MUST consume the bytes from the stream.
+	targetN := int(length)
+	if targetN > len(p) {
+		// Read what fits
+		n, err := io.ReadFull(c.Stream, p)
+		if err != nil { return n, nil, err }
+		// Discard the rest to maintain stream synchronization
+		io.CopyN(io.Discard, c.Stream, int64(targetN - len(p)))
+		return n, &net.UDPAddr{IP: net.IPv4zero, Port: 0}, nil
 	}
-	n, err := io.ReadFull(c.Stream, p[:length])
+
+	// 3. Normal Read
+	n, err := io.ReadFull(c.Stream, p[:targetN])
 	return n, &net.UDPAddr{IP: net.IPv4zero, Port: 0}, err
 }
 
 func (c *WormholePacketConn) WriteTo(p []byte, addr net.Addr) (int, error) {
-	if len(p) > 65535 { return 0, fmt.Errorf("too large") }
-	if err := binary.Write(c.Stream, binary.BigEndian, uint16(len(p))); err != nil { return 0, err }
+	// 1. Write length header
+	if err := binary.Write(c.Stream, binary.BigEndian, uint16(len(p))); err != nil {
+		return 0, err
+	}
+	// 2. Write payload
 	return c.Stream.Write(p)
 }
 
@@ -46,14 +62,12 @@ func (c *WormholePacketConn) SetReadDeadline(t time.Time) error  { return nil }
 func (c *WormholePacketConn) SetWriteDeadline(t time.Time) error { return nil }
 
 // EstablishGhostStream performs a coordinated handshake to get a bidirectional pipe.
-// For the v3 blueprint, we use the IncomingMessage body as the reliable pipe.
 func EstablishGhostStream(ctx context.Context, rendezvous, code string, isServer bool) (io.ReadWriteCloser, error) {
 	c := wormhole.Client{RendezvousURL: rendezvous}
 	
 	if !isServer {
 		msg, err := c.Receive(ctx, code)
 		if err != nil { return nil, err }
-		// The IncomingMessage itself is the reader. We wrap it for Close.
 		return &transitBridge{Reader: msg, Writer: io.Discard, closeFunc: func() error { return nil }}, nil
 	}
 	

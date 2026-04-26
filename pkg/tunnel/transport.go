@@ -73,6 +73,20 @@ func (l *QUICListener) Accept(ctx context.Context) (TunnelMux, error) {
 func (l *QUICListener) Close() error { return l.ln.Close() }
 func (l *QUICListener) Addr() string { return l.ln.Addr().String() }
 
+// ListenWithConn starts a post-quantum QUIC listener over an existing PacketConn.
+func ListenWithConn(pconn net.PacketConn, address string, tlsConf *tls.Config, conf TunnelConfig) (TunnelListener, error) {
+	quicConf := &quic.Config{
+		MaxIdleTimeout:         time.Duration(conf.IdleTimeout) * time.Second,
+		KeepAlivePeriod:        10 * time.Second,
+		MaxIncomingStreams:     int64(conf.MaxStreams),
+		MaxIncomingUniStreams:  int64(conf.MaxStreams),
+		HandshakeIdleTimeout:   time.Duration(conf.HandshakeTimeout) * time.Second,
+	}
+	ln, err := quic.Listen(pconn, tlsConf, quicConf)
+	if err != nil { return nil, err }
+	return &QUICListener{ln: ln}, nil
+}
+
 // WrapStreamWithYamux upgrades a reliable stream with PQC-TLS and Yamux multiplexing.
 func WrapStreamWithYamux(ctx context.Context, stream io.ReadWriteCloser, tlsConf *tls.Config, isServer bool) (TunnelMux, error) {
 	var tlsConn *tls.Conn

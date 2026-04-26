@@ -5,87 +5,63 @@ import (
 	"io"
 	"log/slog"
 	"os"
-	"sync"
 	"time"
 
 	"github.com/al-Zamakhshari/maknoon/pkg/tunnel"
 )
 
-// AuditLogger defines the interface for recording engine operations.
+// AuditLogger defines the interface for persisting engine operation logs.
 type AuditLogger interface {
-	LogEvent(action string, metadata map[string]any, err error)
+	Log(op string, metadata map[string]any) error
 }
 
-// JSONFileLogger implements AuditLogger by writing to a local file.
+// NoopLogger is a strategy that discards all audit events.
+type NoopLogger struct{}
+func (l *NoopLogger) Log(_ string, _ map[string]any) error { return nil }
+
+// JSONFileLogger persists audit logs to a file in JSON format.
 type JSONFileLogger struct {
 	Path string
-	mu   sync.Mutex
 }
 
-func (l *JSONFileLogger) Close() error {
-	return nil
+func NewJSONFileLogger(path string) *JSONFileLogger {
+	return &JSONFileLogger{Path: path}
 }
 
-// NewJSONFileLogger creates a new audit logger that writes to a file.
-func NewJSONFileLogger(path string) (*JSONFileLogger, error) {
-	return &JSONFileLogger{Path: path}, nil
-}
-
-func (l *JSONFileLogger) LogEvent(action string, metadata map[string]any, err error) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
+func (l *JSONFileLogger) Log(op string, metadata map[string]any) error {
+	f, err := os.OpenFile(l.Path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
+	if err != nil { return err }
+	defer f.Close()
 
 	entry := map[string]any{
 		"timestamp": time.Now().Format(time.RFC3339),
-		"action":    action,
+		"operation": op,
 		"metadata":  metadata,
 	}
-	if err != nil {
-		entry["error"] = err.Error()
-	}
-
-	f, _ := os.OpenFile(l.Path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
-	if f != nil {
-		defer f.Close()
-		_ = json.NewEncoder(f).Encode(entry)
-	}
+	return json.NewEncoder(f).Encode(entry)
 }
 
-// NoopLogger discards all audit events.
-type NoopLogger struct{}
-func (l *NoopLogger) LogEvent(string, map[string]any, error) {}
-
-// AuditEngine is a decorator that records operations to an AuditLogger.
+// AuditEngine is a decorator that adds logging to engine operations.
 type AuditEngine struct {
-	Engine *Engine
-	Logger AuditLogger
+	Engine MaknoonEngine
+	Logger *slog.Logger
+	Audit  AuditLogger
+}
+
+func (e *AuditEngine) log(op string, metadata map[string]any) {
+	if e.Audit != nil { _ = e.Audit.Log(op, metadata) }
 }
 
 func (e *AuditEngine) Protect(ectx *EngineContext, inputName string, r io.Reader, w io.Writer, opts Options) (byte, error) {
-	start := time.Now()
-	res, err := e.Engine.Protect(ectx, inputName, r, w, opts)
-	duration := time.Since(start)
-
-	e.Logger.LogEvent("protect", map[string]any{
-		"input":       inputName,
-		"stealth":     opts.Stealth,
-		"duration_ms": duration.Milliseconds(),
-	}, err)
-
-	return res, err
+	e.Logger.Info("engine: protect started", "input", inputName)
+	e.log("protect", map[string]any{"input": inputName})
+	return e.Engine.Protect(ectx, inputName, r, w, opts)
 }
 
 func (e *AuditEngine) Unprotect(ectx *EngineContext, r io.Reader, w io.Writer, outPath string, opts Options) (byte, error) {
-	start := time.Now()
-	res, err := e.Engine.Unprotect(ectx, r, w, outPath, opts)
-	duration := time.Since(start)
-
-	e.Logger.LogEvent("unprotect", map[string]any{
-		"output_dir":  outPath,
-		"duration_ms": duration.Milliseconds(),
-	}, err)
-
-	return res, err
+	e.Logger.Info("engine: unprotect started", "output", outPath)
+	e.log("unprotect", map[string]any{"output": outPath})
+	return e.Engine.Unprotect(ectx, r, w, outPath, opts)
 }
 
 func (e *AuditEngine) FinalizeRestoration(ectx *EngineContext, pr io.Reader, w io.Writer, flags byte, outPath string, logger *slog.Logger) error {
@@ -112,147 +88,101 @@ func (e *AuditEngine) IdentityInfo(ectx *EngineContext, name string) (string, er
 	return e.Engine.IdentityInfo(ectx, name)
 }
 
-func (e *AuditEngine) IdentityRename(ectx *EngineContext, oldName, newName string) error {
-	return e.Engine.IdentityRename(ectx, oldName, newName)
+func (e *AuditEngine) IdentityRename(ectx *EngineContext, old, new string) error {
+	e.Logger.Info("engine: identity rename", "from", old, "to", new)
+	return e.Engine.IdentityRename(ectx, old, new)
 }
 
-func (e *AuditEngine) IdentitySplit(ectx *EngineContext, name string, threshold, shares int, passphrase string) ([]string, error) {
-	return e.Engine.IdentitySplit(ectx, name, threshold, shares, passphrase)
+func (e *AuditEngine) IdentitySplit(ectx *EngineContext, name string, t, s int, pass string) ([]string, error) {
+	e.Logger.Info("engine: identity split", "name", name, "shares", s)
+	return e.Engine.IdentitySplit(ectx, name, t, s, pass)
 }
 
-func (e *AuditEngine) IdentityCombine(ectx *EngineContext, mnemonics []string, output string, passphrase string, noPassword bool) (string, error) {
-	return e.Engine.IdentityCombine(ectx, mnemonics, output, passphrase, noPassword)
+func (e *AuditEngine) IdentityCombine(ectx *EngineContext, m []string, out, pass string, nopass bool) (string, error) {
+	e.Logger.Info("engine: identity combine", "output", out)
+	return e.Engine.IdentityCombine(ectx, m, out, pass, nopass)
 }
 
-func (e *AuditEngine) IdentityPublish(ectx *EngineContext, handle string, opts IdentityPublishOptions) error {
-	return e.Engine.IdentityPublish(ectx, handle, opts)
+func (e *AuditEngine) IdentityPublish(ectx *EngineContext, h string, opts IdentityPublishOptions) error {
+	e.Logger.Info("engine: identity publish", "handle", h)
+	return e.Engine.IdentityPublish(ectx, h, opts)
 }
 
-func (e *AuditEngine) VaultGet(ectx *EngineContext, vaultPath string, service string, passphrase []byte, pin string) (*VaultEntry, error) {
-	start := time.Now()
-	res, err := e.Engine.VaultGet(ectx, vaultPath, service, passphrase, pin)
-	duration := time.Since(start)
-
-	e.Logger.LogEvent("vault_get", map[string]any{
-		"vault":       vaultPath,
-		"service":     service,
-		"duration_ms": duration.Milliseconds(),
-	}, err)
-
-	return res, err
-}
-
-func (e *AuditEngine) VaultSet(ectx *EngineContext, vaultPath string, entry *VaultEntry, passphrase []byte, pin string) error {
-	start := time.Now()
-	err := e.Engine.VaultSet(ectx, vaultPath, entry, passphrase, pin)
-	duration := time.Since(start)
-
-	e.Logger.LogEvent("vault_set", map[string]any{
-		"vault":       vaultPath,
-		"service":     entry.Service,
-		"duration_ms": duration.Milliseconds(),
-	}, err)
-
-	return err
-}
-
-func (e *AuditEngine) VaultRename(ectx *EngineContext, oldName, newName string) error {
-	return e.Engine.VaultRename(ectx, oldName, newName)
-}
-
-func (e *AuditEngine) VaultDelete(ectx *EngineContext, name string) error {
-	return e.Engine.VaultDelete(ectx, name)
-}
-
-func (e *AuditEngine) VaultList(ectx *EngineContext, vaultPath string) ([]string, error) {
-	return e.Engine.VaultList(ectx, vaultPath)
-}
-
-func (e *AuditEngine) VaultSplit(ectx *EngineContext, vaultPath string, threshold, shares int, passphrase string) ([]string, error) {
-	return e.Engine.VaultSplit(ectx, vaultPath, threshold, shares, passphrase)
-}
-
-func (e *AuditEngine) VaultRecover(ectx *EngineContext, mnemonics []string, vaultPath string, output string, passphrase string) (string, error) {
-	return e.Engine.VaultRecover(ectx, mnemonics, vaultPath, output, passphrase)
-}
-
-func (e *AuditEngine) P2PSend(ectx *EngineContext, inputName string, r io.Reader, opts P2PSendOptions) (string, <-chan P2PStatus, error) {
-	start := time.Now()
-	code, status, err := e.Engine.P2PSend(ectx, inputName, r, opts)
-	duration := time.Since(start)
-
-	e.Logger.LogEvent("p2p_send", map[string]any{
-		"input":       inputName,
-		"duration_ms": duration.Milliseconds(),
-	}, err)
-
-	return code, status, err
-}
-
-func (e *AuditEngine) P2PReceive(ectx *EngineContext, code string, opts P2PReceiveOptions) (<-chan P2PStatus, error) {
-	start := time.Now()
-	status, err := e.Engine.P2PReceive(ectx, code, opts)
-	duration := time.Since(start)
-
-	e.Logger.LogEvent("p2p_receive", map[string]any{
-		"duration_ms": duration.Milliseconds(),
-	}, err)
-
-	return status, err
-}
-
-func (e *AuditEngine) ValidateWormholeURL(ectx *EngineContext, u string) error {
-	return e.Engine.ValidateWormholeURL(ectx, u)
-}
-
-func (e *AuditEngine) ContactAdd(ectx *EngineContext, petname, kemPub, sigPub, note string) error {
-
-	return e.Engine.ContactAdd(ectx, petname, kemPub, sigPub, note)
+func (e *AuditEngine) ContactAdd(ectx *EngineContext, petname, kem, sig, note string) error {
+	e.Logger.Info("engine: contact add", "petname", petname)
+	return e.Engine.ContactAdd(ectx, petname, kem, sig, note)
 }
 
 func (e *AuditEngine) ContactList(ectx *EngineContext) ([]*Contact, error) {
 	return e.Engine.ContactList(ectx)
 }
 
-func (e *AuditEngine) GeneratePassword(ectx *EngineContext, length int, noSymbols bool) (string, error) {
-	return e.Engine.GeneratePassword(ectx, length, noSymbols)
+func (e *AuditEngine) VaultGet(ectx *EngineContext, path, service string, pass []byte, pin string) (*VaultEntry, error) {
+	e.Logger.Info("engine: vault get", "service", service)
+	return e.Engine.VaultGet(ectx, path, service, pass, pin)
 }
 
-func (e *AuditEngine) GeneratePassphrase(ectx *EngineContext, words int, separator string) (string, error) {
-	return e.Engine.GeneratePassphrase(ectx, words, separator)
+func (e *AuditEngine) VaultSet(ectx *EngineContext, path string, entry *VaultEntry, pass []byte, pin string) error {
+	e.Logger.Info("engine: vault set", "service", entry.Service)
+	return e.Engine.VaultSet(ectx, path, entry, pass, pin)
 }
 
-
-func (e *AuditEngine) GetPolicy() SecurityPolicy { return e.Engine.Policy }
-func (e *AuditEngine) GetConfig() *Config        { return e.Engine.Config }
-
-func (e *AuditEngine) UpdateConfig(ectx *EngineContext, newConf *Config) error {
-	start := time.Now()
-	err := e.Engine.UpdateConfig(ectx, newConf)
-	duration := time.Since(start)
-
-	e.Logger.LogEvent("update_config", map[string]any{
-		"duration_ms": duration.Milliseconds(),
-	}, err)
-
-	return err
+func (e *AuditEngine) VaultRename(ectx *EngineContext, old, new string) error {
+	return e.Engine.VaultRename(ectx, old, new)
 }
 
-func (e *AuditEngine) RegisterProfile(ectx *EngineContext, name string, dp *DynamicProfile) error {
-	return e.Engine.RegisterProfile(ectx, name, dp)
+func (e *AuditEngine) VaultDelete(ectx *EngineContext, name string) error {
+	return e.Engine.VaultDelete(ectx, name)
 }
 
-func (e *AuditEngine) RemoveProfile(ectx *EngineContext, name string) error {
-	start := time.Now()
-	err := e.Engine.RemoveProfile(ectx, name)
-	duration := time.Since(start)
+func (e *AuditEngine) VaultList(ectx *EngineContext, path string) ([]string, error) {
+	return e.Engine.VaultList(ectx, path)
+}
 
-	e.Logger.LogEvent("remove_profile", map[string]any{
-		"name":        name,
-		"duration_ms": duration.Milliseconds(),
-	}, err)
+func (e *AuditEngine) VaultSplit(ectx *EngineContext, path string, t, s int, pass string) ([]string, error) {
+	return e.Engine.VaultSplit(ectx, path, t, s, pass)
+}
 
-	return err
+func (e *AuditEngine) VaultRecover(ectx *EngineContext, m []string, path, out, pass string) (string, error) {
+	return e.Engine.VaultRecover(ectx, m, path, out, pass)
+}
+
+func (e *AuditEngine) P2PSend(ectx *EngineContext, name string, r io.Reader, opts P2PSendOptions) (string, <-chan P2PStatus, error) {
+	e.Logger.Info("engine: p2p send", "input", name)
+	return e.Engine.P2PSend(ectx, name, r, opts)
+}
+
+func (e *AuditEngine) P2PReceive(ectx *EngineContext, code string, opts P2PReceiveOptions) (<-chan P2PStatus, error) {
+	e.Logger.Info("engine: p2p receive", "code", code)
+	return e.Engine.P2PReceive(ectx, code, opts)
+}
+
+func (e *AuditEngine) ValidateWormholeURL(ectx *EngineContext, u string) error {
+	return e.Engine.ValidateWormholeURL(ectx, u)
+}
+
+func (e *AuditEngine) GeneratePassword(ectx *EngineContext, l int, sym bool) (string, error) {
+	return e.Engine.GeneratePassword(ectx, l, sym)
+}
+
+func (e *AuditEngine) GeneratePassphrase(ectx *EngineContext, w int, sep string) (string, error) {
+	return e.Engine.GeneratePassphrase(ectx, w, sep)
+}
+
+func (e *AuditEngine) GetPolicy() SecurityPolicy { return e.Engine.GetPolicy() }
+func (e *AuditEngine) GetConfig() *Config        { return e.Engine.GetConfig() }
+
+func (e *AuditEngine) UpdateConfig(ectx *EngineContext, nc *Config) error {
+	e.Logger.Info("engine: config update")
+	return e.Engine.UpdateConfig(ectx, nc)
+}
+
+func (e *AuditEngine) RegisterProfile(ectx *EngineContext, n string, dp *DynamicProfile) error {
+	return e.Engine.RegisterProfile(ectx, n, dp)
+}
+
+func (e *AuditEngine) RemoveProfile(ectx *EngineContext, n string) error {
+	return e.Engine.RemoveProfile(ectx, n)
 }
 
 func (e *AuditEngine) Inspect(ectx *EngineContext, in io.Reader) (*HeaderInfo, error) {
@@ -260,43 +190,18 @@ func (e *AuditEngine) Inspect(ectx *EngineContext, in io.Reader) (*HeaderInfo, e
 }
 
 func (e *AuditEngine) TunnelStart(ectx *EngineContext, opts tunnel.TunnelOptions) (tunnel.TunnelStatus, error) {
-	start := time.Now()
-	status, err := e.Engine.TunnelStart(ectx, opts)
-	duration := time.Since(start)
-
-	e.Logger.LogEvent("tunnel_start", map[string]any{
-		"remote":      opts.RemoteEndpoint,
-		"proxy_port":  opts.LocalProxyPort,
-		"duration_ms": duration.Milliseconds(),
-	}, err)
-
-	return status, err
+	e.Logger.Info("engine: tunnel start", "remote", opts.RemoteEndpoint)
+	return e.Engine.TunnelStart(ectx, opts)
 }
 
-func (e *AuditEngine) TunnelListen(ectx *EngineContext, addr string, useWormhole bool) (string, <-chan tunnel.TunnelStatus, error) {
-	start := time.Now()
-	code, statusCh, err := e.Engine.TunnelListen(ectx, addr, useWormhole)
-	duration := time.Since(start)
-
-	e.Logger.LogEvent("tunnel_listen", map[string]any{
-		"address":      addr,
-		"use_wormhole": useWormhole,
-		"duration_ms":  duration.Milliseconds(),
-	}, err)
-
-	return code, statusCh, err
+func (e *AuditEngine) TunnelListen(ectx *EngineContext, addr string, w bool) (string, <-chan tunnel.TunnelStatus, error) {
+	e.Logger.Info("engine: tunnel listen", "addr", addr, "wormhole", w)
+	return e.Engine.TunnelListen(ectx, addr, w)
 }
 
 func (e *AuditEngine) TunnelStop(ectx *EngineContext) error {
-	start := time.Now()
-	err := e.Engine.TunnelStop(ectx)
-	duration := time.Since(start)
-
-	e.Logger.LogEvent("tunnel_stop", map[string]any{
-		"duration_ms": duration.Milliseconds(),
-	}, err)
-
-	return err
+	e.Logger.Info("engine: tunnel stop")
+	return e.Engine.TunnelStop(ectx)
 }
 
 func (e *AuditEngine) TunnelStatus(ectx *EngineContext) (tunnel.TunnelStatus, error) {

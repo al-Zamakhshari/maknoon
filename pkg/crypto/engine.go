@@ -184,20 +184,22 @@ func (e *Engine) TunnelStart(ectx *EngineContext, opts tunnel.TunnelOptions) (tu
 
 	var mux tunnel.TunnelMux
 	var err error
-	var transportType = "quic-direct"
+	var remoteEndpoint = opts.RemoteEndpoint
 
 	if opts.WormholeCode != "" {
-		transportType = "yamux-wormhole"
+		slog.Info("tunnel: establishing Magic Wormhole transit stream", "code", opts.WormholeCode)
 		stream, err := tunnel.EstablishGhostStream(ectx.Context, e.Config.Wormhole.RendezvousURL, opts.WormholeCode, false)
 		if err != nil { return tunnel.TunnelStatus{}, err }
+		
+		pconn := &tunnel.WormholePacketConn{Stream: stream}
 		tlsConf := tunnel.GetPQCConfig()
 		tlsConf.InsecureSkipVerify = true
-		mux, err = tunnel.WrapStreamWithYamux(ectx.Context, stream, tlsConf, false)
+		mux, err = tunnel.DialWithConn(ectx.Context, pconn, "ghost", tlsConf, e.Config.Tunnel)
 		if err != nil { return tunnel.TunnelStatus{}, err }
 	} else {
 		tlsConf := tunnel.GetPQCConfig()
 		tlsConf.InsecureSkipVerify = true
-		mux, err = tunnel.Dial(ectx.Context, opts.RemoteEndpoint, tlsConf, e.Config.Tunnel)
+		mux, err = tunnel.Dial(ectx.Context, remoteEndpoint, tlsConf, e.Config.Tunnel)
 		if err != nil { return tunnel.TunnelStatus{}, err }
 	}
 
@@ -206,7 +208,7 @@ func (e *Engine) TunnelStart(ectx *EngineContext, opts tunnel.TunnelOptions) (tu
 
 	e.activeTunnel = &tunnel.TunnelStatus{
 		Active: true, LocalAddress: fmt.Sprintf("127.0.0.1:%d", opts.LocalProxyPort),
-		RemoteEndpoint: transportType, HandshakeTime: time.Now().Format(time.RFC3339),
+		RemoteEndpoint: remoteEndpoint, HandshakeTime: time.Now().Format(time.RFC3339),
 	}
 	e.mux = mux; e.gateway = gw
 	return *e.activeTunnel, nil
@@ -236,22 +238,28 @@ func (e *Engine) TunnelListen(ectx *EngineContext, addr string, useWormhole bool
 		return "", statusCh, nil
 	}
 
-	// GHOST MODE: Coordinated Yamux-over-TLS-over-Wormhole
+	// REAL GHOST MODE: Coordinated QUIC-over-Wormhole
 	c := wormhole.Client{RendezvousURL: e.Config.Wormhole.RendezvousURL}
-	code, status, err := c.SendText(ectx.Context, "maknoon-ghost-v1:init")
+	pr, pw := io.Pipe()
+	code, status, err := c.SendFile(ectx.Context, "ghost-tunnel", &pipeSeeker{pr})
 	if err != nil { return "", nil, err }
 
 	go func() {
 		defer close(statusCh)
-		for s := range status {
-			if s.Error != nil { return }
-		}
-		// The v3 blueprint assumes a subsequent EstablishGhostStream call for the server
-		stream, _ := tunnel.EstablishGhostStream(ectx.Context, e.Config.Wormhole.RendezvousURL, code, true)
+		defer pw.Close()
+		for range status {}
+
+		pconn := &tunnel.WormholePacketConn{Stream: &tunnelTransitBridge{Reader: pr, Writer: pw}}
 		tlsConf := tunnel.GetPQCConfig()
 		cert, _ := tunnel.GenerateTestCertificate()
 		tlsConf.Certificates = []tls.Certificate{cert}
-		mux, _ := tunnel.WrapStreamWithYamux(ectx.Context, stream, tlsConf, true)
+		
+		ln, err := tunnel.ListenWithConn(pconn, "ghost", tlsConf, e.Config.Tunnel)
+		if err != nil { return }
+		
+		mux, err := ln.Accept(ectx.Context)
+		if err != nil { return }
+		
 		statusCh <- tunnel.TunnelStatus{Active: true, LocalAddress: "wormhole"}
 		server := &tunnel.TunnelServer{Mux: mux}
 		server.Start(ectx.Context)
@@ -259,6 +267,12 @@ func (e *Engine) TunnelListen(ectx *EngineContext, addr string, useWormhole bool
 
 	return code, statusCh, nil
 }
+
+type tunnelTransitBridge struct {
+	io.Reader
+	io.Writer
+}
+func (b *tunnelTransitBridge) Close() error { return nil }
 
 func (e *Engine) TunnelStop(ectx *EngineContext) error {
 	e.tunnelMu.Lock()
@@ -288,8 +302,12 @@ func (e *Engine) enforce(ectx *EngineContext, cap Capability) error {
 	return nil
 }
 
-func (e *Engine) GeneratePassword(ectx *EngineContext, length int, noSymbols bool) (string, error) {
- return GeneratePassword(length, noSymbols) }
+func (e *Engine) ValidateWormholeURL(ectx *EngineContext, urlStr string) error {
+	ectx = e.context(ectx)
+	return ectx.Policy.ValidateWormholeURL(urlStr, e.Config.AgentLimits.AllowedURLs)
+}
+
+func (e *Engine) GeneratePassword(ectx *EngineContext, length int, noSymbols bool) (string, error) { return GeneratePassword(length, noSymbols) }
 func (e *Engine) GeneratePassphrase(ectx *EngineContext, words int, separator string) (string, error) { return GeneratePassphrase(words, separator) }
 
 var bufferPool = sync.Pool{
@@ -300,3 +318,6 @@ func SafeClear(b []byte) {
 	if b == nil { return }
 	for i := range b { b[i] = 0 }
 }
+
+type pipeSeeker struct{ io.Reader }
+func (p *pipeSeeker) Seek(offset int64, whence int) (int64, error) { return 0, nil }

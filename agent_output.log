@@ -1,4 +1,5 @@
 🤖 Connecting to Maknoon SSE Gateway...
-🤖 Discovered POST endpoint: http://localhost:8080/message?sessionId=6169b998-f970-4250-a540-3f399b3c61de
+🤖 Discovered POST endpoint: http://localhost:8080/message?sessionId=131591dd-d377-4a38-9b82-0fc217306ed2
 🤖 Tool call accepted. Waiting for result in SSE stream...
-✅ GHOST_CODE:1-unravel-billiard
+🤖 Received Tool Result: {"jsonrpc":"2.0","id":"mission-rigor","result":{"content":[{"type":"text","text":"{\"addr\":\":4433\",\"code\":\"1-microscope-crowfoot\",\"status\":\"listening\"}"}]}}
+✅ GHOST_CODE:1-microscope-crowfoot

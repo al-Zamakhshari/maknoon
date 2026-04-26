@@ -1,6 +1,6 @@
-2026/04/26 12:21:30 INFO tunnel: establishing Magic Wormhole transit stream code=1-unravel-billiard
-2026/04/26 12:21:33 connection doesn't allow setting of receive buffer size. Not a *net.UDPConn?. See https://github.com/quic-go/quic-go/wiki/UDP-Buffer-Sizes for details.
-Error: failed to establish QUIC session: quic: transport closed: EOF
+2026/04/26 12:51:27 INFO tunnel: establishing Magic Wormhole transit stream code=1-microscope-crowfoot
+2026/04/26 12:51:29 connection doesn't allow setting of receive buffer size. Not a *net.UDPConn?. See https://github.com/quic-go/quic-go/wiki/UDP-Buffer-Sizes for details.
+Error: failed to establish QUIC session: quic: transport closed: packet too large: 28001 > 1452
 Usage:
   maknoon tunnel start [flags]
 

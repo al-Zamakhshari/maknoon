@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -365,15 +366,13 @@ func InitEngine() error {
 	var logger crypto.AuditLogger = &crypto.NoopLogger{}
 	if core.Config.Audit.Enabled && !isAgent {
 		// Only enable rich auditing in non-agent/human modes
-		l, err := crypto.NewJSONFileLogger(core.Config.Audit.LogFile)
-		if err == nil {
-			logger = l
-		}
+		logger = crypto.NewJSONFileLogger(core.Config.Audit.LogFile)
 	}
 
 	GlobalContext.Engine = &crypto.AuditEngine{
 		Engine: core,
-		Logger: logger,
+		Logger: slog.Default(),
+		Audit:  logger,
 	}
 
 	return nil

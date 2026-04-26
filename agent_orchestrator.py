@@ -3,7 +3,6 @@ import json
 import time
 import sys
 import re
-import threading
 from urllib.parse import urljoin
 
 BASE_URL = "http://localhost:8080"
@@ -13,6 +12,8 @@ def trigger_ghost_tunnel():
     # 1. Establish SSE session
     with requests.get(f"{BASE_URL}/sse", stream=True, timeout=60) as r:
         post_url = None
+        
+        # Generator to read SSE events
         def sse_events():
             current_event = None
             for line in r.iter_lines():
@@ -24,17 +25,21 @@ def trigger_ghost_tunnel():
                         data = line_str[5:].strip()
                         yield current_event, data
                         current_event = None
+
         events = sse_events()
+        
+        # 2. Get the endpoint
         for ev_type, data in events:
             if ev_type == "endpoint" or "/message" in data:
                 post_url = urljoin(BASE_URL, data)
                 print(f"🤖 Discovered POST endpoint: {post_url}")
                 break
+        
         if not post_url:
             print("❌ Failed to discover POST endpoint.")
             return None
 
-        # 3. Trigger the tool - MUST include jsonrpc: 2.0
+        # 3. Trigger the tool
         payload = {
             "jsonrpc": "2.0",
             "method": "tools/call",
@@ -42,7 +47,7 @@ def trigger_ghost_tunnel():
                 "name": "tunnel_listen",
                 "arguments": {"wormhole": True}
             },
-            "id": "mission-1"
+            "id": "mission-rigor"
         }
         
         resp = requests.post(post_url, json=payload)
@@ -52,14 +57,12 @@ def trigger_ghost_tunnel():
 
         print(f"🤖 Tool call accepted. Waiting for result in SSE stream...")
 
-        # 4. Listen for the result
+        # 4. Listen for the result in the SAME SSE stream
         for ev_type, data in events:
             if ev_type == "message":
                 msg = json.loads(data)
-                if msg.get("id") == "mission-1":
-                    if "error" in msg:
-                        print(f"❌ Tool error: {msg['error']}")
-                        return None
+                if msg.get("id") == "mission-rigor":
+                    print(f"🤖 Received Tool Result: {data}")
                     result = msg.get("result", {})
                     content = result.get("content", [])
                     if content:
@@ -69,6 +72,7 @@ def trigger_ghost_tunnel():
                     else:
                         print(f"❌ Result has no content: {data}")
                         return None
+    return None
 
 if __name__ == "__main__":
     code = trigger_ghost_tunnel()
