@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -219,33 +218,6 @@ func createMCPServer() *server.MCPServer {
 		})
 
 	// 3. P2P & Network Tools
-	s.AddTool(mcp.NewTool("tunnel_listen", mcp.WithDescription("Start a Post-Quantum Tunnel listener (Gateway Receiver)")),
-		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			args := getArgs(request)
-			addr := getString(args, "address", ":4433")
-			wormhole, _ := args["wormhole"].(bool)
-
-			code, statusCh, err := engine.TunnelListen(nil, addr, wormhole)
-			if err != nil {
-				return formatMCPError(err, "tunnel_listen")
-			}
-
-			resp := map[string]any{
-				"status": "listening",
-				"code":   code,
-				"addr":   addr,
-			}
-			// Monitor the status in the background
-			go func() {
-				for s := range statusCh {
-					slog.Info("mcp: tunnel status update", "active", s.Active, "addr", s.LocalAddress)
-				}
-			}()
-
-			res, _ := json.Marshal(resp)
-			return mcp.NewToolResultText(string(res)), nil
-		})
-
 	s.AddTool(mcp.NewTool("tunnel_start", mcp.WithDescription("Provision a Post-Quantum L4 tunnel and SOCKS5 gateway")),
 		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			args := getArgs(request)

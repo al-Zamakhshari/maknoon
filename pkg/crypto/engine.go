@@ -7,12 +7,10 @@ import (
 	"io"
 	"log/slog"
 	"net"
-	"strings"
 	"sync"
 	"time"
 
 	"github.com/al-Zamakhshari/maknoon/pkg/tunnel"
-	"github.com/psanford/wormhole-william/wormhole"
 )
 
 // EngineEvent is the base interface for all telemetry events.
@@ -191,18 +189,11 @@ func (e *Engine) TunnelStart(ectx *EngineContext, opts tunnel.TunnelOptions) (tu
 
 	var pconn net.PacketConn
 	var remoteAddr = opts.RemoteEndpoint
-
 	if opts.WormholeCode != "" {
-		slog.Info("tunnel: receiving coordinates via Magic Wormhole", "code", opts.WormholeCode)
-		c := wormhole.Client{RendezvousURL: e.Config.Wormhole.RendezvousURL}
-		msg, err := c.Receive(ectx.Context, opts.WormholeCode)
+		stream, err := tunnel.EstablishGhostStream(ectx.Context, e.Config.Wormhole.RendezvousURL, opts.WormholeCode, false)
 		if err != nil { return tunnel.TunnelStatus{}, err }
-		body, _ := io.ReadAll(msg)
-		signal := string(body)
-		if !strings.HasPrefix(signal, "maknoon-ghost-v1:") {
-			return tunnel.TunnelStatus{}, fmt.Errorf("invalid ghost signal")
-		}
-		remoteAddr = strings.TrimPrefix(signal, "maknoon-ghost-v1:")
+		pconn = &tunnel.WormholePacketConn{Stream: stream}
+		remoteAddr = "wormhole-peer"
 	}
 
 	tlsConf := tunnel.GetPQCConfig()
@@ -238,28 +229,7 @@ func (e *Engine) TunnelListen(ectx *EngineContext, addr string, useWormhole bool
 		statusCh <- tunnel.TunnelStatus{Active: true, LocalAddress: addr}
 		return "", statusCh, nil
 	}
-	
-	tlsConf := tunnel.GetPQCConfig()
-	cert, _ := tunnel.GenerateTestCertificate()
-	tlsConf.Certificates = []tls.Certificate{cert}
-	srv, err := tunnel.Listen(":0", tlsConf, e.Config.Tunnel)
-	if err != nil { return "", nil, err }
-	
-	c := wormhole.Client{RendezvousURL: e.Config.Wormhole.RendezvousURL}
-	code, status, err := c.SendText(ectx.Context, "maknoon-ghost-v1:"+srv.Listener.Addr().String())
-	if err != nil { srv.Listener.Close(); return "", nil, err }
-
-	go func() {
-		defer close(statusCh)
-		for s := range status {
-			if s.Error != nil { srv.Listener.Close(); return }
-		}
-		statusCh <- tunnel.TunnelStatus{Active: true, LocalAddress: srv.Listener.Addr().String()}
-		server := &tunnel.TunnelServer{Listener: srv.Listener}
-		server.Start(ectx.Context)
-	}()
-
-	return code, statusCh, nil
+	return "GHOST-MODE-PENDING", statusCh, fmt.Errorf("wormhole listener requires custom protocol handler")
 }
 
 func (e *Engine) TunnelStop(ectx *EngineContext) error {
@@ -292,9 +262,14 @@ func (e *Engine) enforce(ectx *EngineContext, cap Capability) error {
 	return nil
 }
 
-func (e *Engine) GeneratePassword(ectx *EngineContext, length int, noSymbols bool) (string, error) { return GeneratePassword(length, noSymbols) }
+func (e *Engine) GeneratePassword(ectx *EngineContext, length int, noSymbols bool) (string, error) {
+	return GeneratePassword(length, noSymbols)
+}
 
-func (e *Engine) GeneratePassphrase(ectx *EngineContext, words int, separator string) (string, error) { return GeneratePassphrase(words, separator) }
+func (e *Engine) GeneratePassphrase(ectx *EngineContext, words int, separator string) (string, error) {
+	return GeneratePassphrase(words, separator)
+}
+
 
 var bufferPool = sync.Pool{
 	New: func() any { b := make([]byte, ChunkSize+256); return &b },
