@@ -6,7 +6,8 @@ import (
 	"net"
 )
 
-// MuxSession abstracts the multiplexing layer (QUIC or Yamux).
+// MuxSession abstracts the multiplexing layer (QUIC, Yamux, or libp2p).
+// This enables Maknoon to support multiple L4 transport strategies seamlessly.
 type MuxSession interface {
 	io.Closer
 	OpenStream(ctx context.Context) (net.Conn, error)

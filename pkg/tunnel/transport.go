@@ -165,11 +165,11 @@ type quicConn struct {
 	session   *quic.Conn
 }
 
-func (c *quicConn) Read(b []byte) (n int, err error)   { return c.rawStream.Read(b) }
-func (c *quicConn) Write(b []byte) (n int, err error)  { return c.rawStream.Write(b) }
-func (c *quicConn) Close() error                       { return c.rawStream.Close() }
-func (c *quicConn) LocalAddr() net.Addr                { return c.session.LocalAddr() }
-func (c *quicConn) RemoteAddr() net.Addr               { return c.session.RemoteAddr() }
+func (c *quicConn) Read(b []byte) (n int, err error)  { return c.rawStream.Read(b) }
+func (c *quicConn) Write(b []byte) (n int, err error) { return c.rawStream.Write(b) }
+func (c *quicConn) Close() error                      { return c.rawStream.Close() }
+func (c *quicConn) LocalAddr() net.Addr               { return c.session.LocalAddr() }
+func (c *quicConn) RemoteAddr() net.Addr              { return c.session.RemoteAddr() }
 
 func (c *quicConn) SetDeadline(t time.Time) error {
 	c.rawStream.SetReadDeadline(t)

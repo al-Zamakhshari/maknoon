@@ -5,9 +5,12 @@ go 1.26.2
 require (
 	github.com/awnumar/memguard v0.23.0
 	github.com/cloudflare/circl v1.6.3
+	github.com/hashicorp/yamux v0.1.2
 	github.com/klauspost/compress v1.18.5
+	github.com/libp2p/go-libp2p v0.48.0
 	github.com/mark3labs/mcp-go v0.49.0
 	github.com/mohammadv184/go-fido2 v0.1.1
+	github.com/multiformats/go-multiaddr v0.16.1
 	github.com/nbd-wtf/go-nostr v0.52.3
 	github.com/psanford/wormhole-william v1.0.8
 	github.com/quic-go/quic-go v0.59.0
@@ -61,7 +64,6 @@ require (
 	github.com/google/jsonschema-go v0.4.2 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/gorilla/websocket v1.5.4-0.20250319132907-e064f32e3674 // indirect
-	github.com/hashicorp/yamux v0.1.2 // indirect
 	github.com/hdevalence/ed25519consensus v0.2.0 // indirect
 	github.com/huin/goupnp v1.3.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
@@ -76,7 +78,6 @@ require (
 	github.com/ldclabs/cose v1.3.2 // indirect
 	github.com/libp2p/go-buffer-pool v0.1.0 // indirect
 	github.com/libp2p/go-flow-metrics v0.2.0 // indirect
-	github.com/libp2p/go-libp2p v0.48.0 // indirect
 	github.com/libp2p/go-libp2p-asn-util v0.4.1 // indirect
 	github.com/libp2p/go-msgio v0.3.0 // indirect
 	github.com/libp2p/go-netroute v0.4.0 // indirect
@@ -98,7 +99,6 @@ require (
 	github.com/mr-tron/base58 v1.2.0 // indirect
 	github.com/multiformats/go-base32 v0.1.0 // indirect
 	github.com/multiformats/go-base36 v0.2.0 // indirect
-	github.com/multiformats/go-multiaddr v0.16.1 // indirect
 	github.com/multiformats/go-multiaddr-dns v0.4.1 // indirect
 	github.com/multiformats/go-multiaddr-fmt v0.1.0 // indirect
 	github.com/multiformats/go-multibase v0.2.0 // indirect

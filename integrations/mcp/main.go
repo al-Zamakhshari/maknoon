@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/al-Zamakhshari/maknoon/pkg/crypto"
+	"github.com/al-Zamakhshari/maknoon/pkg/tunnel"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 	"github.com/spf13/viper"

@@ -39,7 +39,7 @@ func (s *TunnelServer) Start(ctx context.Context) error {
 // StartYamux begins accepting streams from a Yamux session.
 func (s *TunnelServer) StartYamux(ctx context.Context) error {
 	if s.Session == nil {
-		return fmt.Errorf("Yamux session not initialized")
+		return fmt.Errorf("yamux session not initialized")
 	}
 	for {
 		stream, err := s.Session.Session.Accept()

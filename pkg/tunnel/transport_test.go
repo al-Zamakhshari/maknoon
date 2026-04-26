@@ -82,8 +82,8 @@ func TestQUICLoopbackTunnel(t *testing.T) {
 	defer client.Close()
 
 	gw := &TunnelGateway{
-		Port:   0,
-		Client: client,
+		Port:    0,
+		Session: client,
 	}
 	if err := gw.Start(); err != nil {
 		t.Fatalf("failed to start gateway: %v", err)

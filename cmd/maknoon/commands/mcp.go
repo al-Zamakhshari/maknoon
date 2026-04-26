@@ -221,7 +221,7 @@ func createMCPServer() *server.MCPServer {
 		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			args := getArgs(request)
 			remote := getString(args, "remote", "")
-			portVal, _ := args["port"]
+			portVal := args["port"]
 			var port int
 			switch v := portVal.(type) {
 			case float64:

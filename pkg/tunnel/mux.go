@@ -46,7 +46,7 @@ func WrapYamux(stream io.ReadWriteCloser, isServer bool) (*YamuxSession, error) 
 	conn := &connAdapter{stream}
 	config := yamux.DefaultConfig()
 	config.EnableKeepAlive = true
-	
+
 	if isServer {
 		session, err = yamux.Server(conn, config)
 	} else {
@@ -60,22 +60,5 @@ func WrapYamux(stream io.ReadWriteCloser, isServer bool) (*YamuxSession, error) 
 	return &YamuxSession{Session: session, raw: stream}, nil
 }
 
-// ghostConn bridges a wormhole IncomingMessage (ReadCloser) and a pipe for writing.
-// This is the cleanest way to get a bidirectional stream from wormhole-william's
-// high-level SendFile/Receive API without modifying the library.
-type ghostConn struct {
-	io.Reader
-	io.WriteCloser
-	onClose func()
-}
-
-func (g *ghostConn) Close() error {
-	if g.onClose != nil {
-		g.onClose()
-	}
-	return g.WriteCloser.Close()
-}
-
-// NOTE: Ghost Tunneling via Magic Wormhole is a complex multi-step handshake.
-// For the industrial-grade Maknoon v3.0, we will prioritize stability.
-// We'll use the "Pipe Hack" which is proven to work for reliable stream multiplexing.
+// NOTE: Ghost Tunneling via libp2p is now the standard for Maknoon v3.0.
+// We've moved away from experimental pipe hacks for reliable stream multiplexing.

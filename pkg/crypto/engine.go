@@ -259,7 +259,7 @@ func (e *Engine) TunnelStart(ectx *EngineContext, opts tunnel.TunnelOptions) (tu
 		if err != nil {
 			return tunnel.TunnelStatus{}, fmt.Errorf("failed to start libp2p host: %w", err)
 		}
-		
+
 		session, err = tunnel.DialLibp2p(ectx.Context, h, opts.P2PAddr)
 		if err != nil {
 			h.Close()
@@ -273,7 +273,7 @@ func (e *Engine) TunnelStart(ectx *EngineContext, opts tunnel.TunnelOptions) (tu
 		}
 		tlsConf := tunnel.GetPQCConfig()
 		tlsConf.InsecureSkipVerify = true
-		
+
 		conn, err := tls.Dial("tcp", opts.RemoteEndpoint, tlsConf)
 		if err != nil {
 			return tunnel.TunnelStatus{}, fmt.Errorf("failed to connect to remote via PQC-TCP: %w", err)
