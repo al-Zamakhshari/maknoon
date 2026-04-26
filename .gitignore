@@ -37,3 +37,17 @@ __pycache__/
 *$py.class
 wiki_repo/
 .agents/
+
+# Maknoon Platform Artifacts
+*.log
+*.tmp
+*.hash
+*.sha256
+call.json
+resp.json
+stdio_tunnel.log
+stdio_mission.log
+mcp_pipe
+mcp_in
+mcp_out
+sse_stream.pipe
