@@ -60,7 +60,7 @@ func tunnelListenCmd() *cobra.Command {
 			server := &tunnel.TunnelServer{Listener: srv.Listener}
 			fmt.Printf("🚀 PQC Tunnel Server listening on %s (UDP)\n", addr)
 
-			return server.Start(cmd.Context())
+			return server.Start(context.Background())
 		},
 	}
 
@@ -88,7 +88,7 @@ func tunnelStartCmd() *cobra.Command {
 				LocalProxyPort: localPort,
 			}
 
-			status, err := GlobalContext.Engine.TunnelStart(&crypto.EngineContext{Context: cmd.Context()}, opts)
+			status, err := GlobalContext.Engine.TunnelStart(&crypto.EngineContext{Context: context.Background()}, opts)
 			if err != nil {
 				return err
 			}
@@ -102,7 +102,7 @@ func tunnelStartCmd() *cobra.Command {
 			<-sig
 
 			fmt.Println("\n🛑 Tearing down tunnel...")
-			return GlobalContext.Engine.TunnelStop(&crypto.EngineContext{Context: cmd.Context()})
+			return GlobalContext.Engine.TunnelStop(&crypto.EngineContext{Context: context.Background()})
 		},
 	}
 
