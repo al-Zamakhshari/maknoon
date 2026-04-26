@@ -206,7 +206,6 @@ func (e *AuditEngine) ValidateWormholeURL(ectx *EngineContext, u string) error {
 }
 
 func (e *AuditEngine) ContactAdd(ectx *EngineContext, petname, kemPub, sigPub, note string) error {
-
 	return e.Engine.ContactAdd(ectx, petname, kemPub, sigPub, note)
 }
 

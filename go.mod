@@ -5,7 +5,6 @@ go 1.26.2
 require (
 	github.com/awnumar/memguard v0.23.0
 	github.com/cloudflare/circl v1.6.3
-	github.com/hashicorp/yamux v0.1.2
 	github.com/klauspost/compress v1.18.5
 	github.com/mark3labs/mcp-go v0.48.0
 	github.com/mohammadv184/go-fido2 v0.1.1

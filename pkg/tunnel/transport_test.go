@@ -16,12 +16,14 @@ import (
 )
 
 func TestQUICLoopbackTunnel(t *testing.T) {
+	// Setup test config
 	conf := TunnelConfig{
 		MaxStreams:       10,
 		IdleTimeout:      5,
 		HandshakeTimeout: 5,
 	}
 
+	// 1. Setup a Mock Remote Endpoint (QUIC Server)
 	serverTLS := GetPQCConfig()
 	cert, err := generateSelfSignedCert()
 	if err != nil {
@@ -29,33 +31,43 @@ func TestQUICLoopbackTunnel(t *testing.T) {
 	}
 	serverTLS.Certificates = []tls.Certificate{cert}
 
-	// Start QUIC Listener
-	ln, err := Listen("127.0.0.1:0", serverTLS, conf)
+	server, err := Listen("127.0.0.1:0", serverTLS, conf)
 	if err != nil {
-		t.Fatalf("failed to listen: %v", err)
+		t.Fatalf("failed to start server: %v", err)
 	}
-	defer ln.Close()
-	serverAddr := ln.Addr()
+	defer server.Listener.Close()
 
-	// Handle server connections in background
+	serverAddr := server.Listener.Addr().String()
+
+	// Server-side: handle incoming streams
 	go func() {
-		mux, err := ln.Accept(context.Background())
-		if err != nil { return }
-		defer mux.Close()
-		
 		for {
-			stream, err := mux.AcceptStream(context.Background())
-			if err != nil { return }
-			
-			// Echo handshake protocol: [1 byte len][address]
-			buf := make([]byte, 1)
-			if _, err := io.ReadFull(stream, buf); err != nil { return }
-			dLen := int(buf[0])
-			destBuf := make([]byte, dLen)
-			if _, err := io.ReadFull(stream, destBuf); err != nil { return }
-			
-			stream.Write([]byte("PQC-ACK: " + string(destBuf)))
-			stream.Close()
+			conn, err := server.Listener.Accept(context.Background())
+			if err != nil {
+				return
+			}
+			go func() {
+				for {
+					stream, err := conn.AcceptStream(context.Background())
+					if err != nil {
+						return
+					}
+					// Read destination (1 byte len + string)
+					buf := make([]byte, 1)
+					if _, err := io.ReadFull(stream, buf); err != nil {
+						return
+					}
+					dLen := int(buf[0])
+					destBuf := make([]byte, dLen)
+					if _, err := io.ReadFull(stream, destBuf); err != nil {
+						return
+					}
+					
+					// Echo back the acknowledgment
+					stream.Write([]byte("PQC-ACK: " + string(destBuf)))
+					stream.Close()
+				}
+			}()
 		}
 	}()
 
@@ -63,15 +75,15 @@ func TestQUICLoopbackTunnel(t *testing.T) {
 	clientTLS := GetPQCConfig()
 	clientTLS.InsecureSkipVerify = true
 
-	mux, err := Dial(context.Background(), serverAddr, clientTLS, conf)
+	client, err := Dial(context.Background(), serverAddr, clientTLS, conf)
 	if err != nil {
 		t.Fatalf("failed to dial: %v", err)
 	}
-	defer mux.Close()
+	defer client.Close()
 
 	gw := &TunnelGateway{
-		Port: 0,
-		Mux:  mux,
+		Port:   0,
+		Client: client,
 	}
 	if err := gw.Start(); err != nil {
 		t.Fatalf("failed to start gateway: %v", err)
@@ -85,10 +97,13 @@ func TestQUICLoopbackTunnel(t *testing.T) {
 	}
 	defer proxyConn.Close()
 
-	// SOCKS5 Handshake
+	// Handshake
 	proxyConn.Write([]byte{0x05, 0x01, 0x00})
 	authResp := make([]byte, 2)
 	io.ReadFull(proxyConn, authResp)
+	if authResp[1] != 0x00 {
+		t.Fatal("proxy handshake failed")
+	}
 
 	// Connect to mock-host:443
 	targetHost := "mock-host"
@@ -98,6 +113,9 @@ func TestQUICLoopbackTunnel(t *testing.T) {
 
 	resp := make([]byte, 10)
 	io.ReadFull(proxyConn, resp)
+	if resp[1] != 0x00 {
+		t.Fatalf("proxy connection failed: %x", resp[1])
+	}
 
 	// 4. Verify End-to-End communication
 	expected := "PQC-ACK: " + net.JoinHostPort(targetHost, "443")
@@ -116,17 +134,27 @@ func generateSelfSignedCert() (tls.Certificate, error) {
 	if err != nil {
 		return tls.Certificate{}, err
 	}
+
 	template := x509.Certificate{
 		SerialNumber: big.NewInt(1),
-		Subject: pkix.Name{Organization: []string{"Maknoon Test"}},
-		NotBefore: time.Now(), NotAfter: time.Now().Add(time.Hour),
-		KeyUsage: x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
-		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		Subject: pkix.Name{
+			Organization: []string{"Maknoon Test"},
+		},
+		NotBefore: time.Now(),
+		NotAfter:  time.Now().Add(time.Hour),
+
+		KeyUsage:              x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 		BasicConstraintsValid: true,
 	}
+
 	derBytes, err := x509.CreateCertificate(rand.Reader, &template, &template, &priv.PublicKey, priv)
 	if err != nil {
 		return tls.Certificate{}, err
 	}
-	return tls.Certificate{Certificate: [][]byte{derBytes}, PrivateKey: priv}, nil
+
+	return tls.Certificate{
+		Certificate: [][]byte{derBytes},
+		PrivateKey:  priv,
+	}, nil
 }

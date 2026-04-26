@@ -1,17 +1,17 @@
 package tunnel
 
 import (
-	"context"
 	"io"
 	"net"
 	"strconv"
+	"context"
 )
 
-// TunnelGateway implements a SOCKS5 proxy that routes traffic through a TunnelMux.
+// TunnelGateway implements a SOCKS5 proxy that routes traffic through a QUIC tunnel.
 type TunnelGateway struct {
-	Port int
-	Mux  TunnelMux
-	ln   net.Listener
+	Port   int
+	Client *QUICClient
+	ln     net.Listener
 }
 
 // Start launches the SOCKS5 gateway on the local address.
@@ -44,7 +44,7 @@ func (g *TunnelGateway) Start() error {
 func (g *TunnelGateway) handleConnection(conn net.Conn) {
 	defer conn.Close()
 
-	// 1. SOCKS5 Handshake (No Auth)
+	// Use a standard buffer for the handshake (non-sensitive control data)
 	buf := make([]byte, 256)
 	if _, err := io.ReadFull(conn, buf[:2]); err != nil || buf[0] != 0x05 {
 		return
@@ -55,7 +55,6 @@ func (g *TunnelGateway) handleConnection(conn net.Conn) {
 	}
 	conn.Write([]byte{0x05, 0x00})
 
-	// 2. Command Phase (CONNECT)
 	if _, err := io.ReadFull(conn, buf[:4]); err != nil || buf[1] != 0x01 {
 		return
 	}
@@ -78,15 +77,13 @@ func (g *TunnelGateway) handleConnection(conn net.Conn) {
 	port := int(buf[0])<<8 | int(buf[1])
 	dest := net.JoinHostPort(address, strconv.Itoa(port))
 
-	// 3. Open Multiplexed Stream & Transmit Destination
-	stream, err := g.Mux.OpenStream(context.Background())
+	stream, err := g.Client.OpenStream(context.Background())
 	if err != nil {
 		conn.Write([]byte{0x05, 0x05, 0x00, 0x01, 0, 0, 0, 0, 0, 0})
 		return
 	}
 	defer stream.Close()
 
-	// Write destination to the stream
 	if _, err := stream.Write([]byte{byte(len(dest))}); err != nil {
 		return
 	}
@@ -94,13 +91,14 @@ func (g *TunnelGateway) handleConnection(conn net.Conn) {
 		return
 	}
 
-	// 4. Finalize SOCKS5 Success
 	conn.Write([]byte{0x05, 0x00, 0x00, 0x01, 0, 0, 0, 0, 0, 0})
 
-	// 5. Hardened Pipe with Memory Hygiene
+	// HARDENED PIPE: Use GlobalPool enclaves for traffic processing
 	pipe := func(dst io.Writer, src io.Reader, done chan struct{}) {
+		// Get a locked buffer from the pool
 		lb := GlobalPool.Get()
 		defer GlobalPool.Put(lb)
+
 		for {
 			n, err := src.Read(lb.Bytes())
 			if n > 0 {

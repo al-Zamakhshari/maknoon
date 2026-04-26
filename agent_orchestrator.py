@@ -2,73 +2,39 @@ import requests
 import json
 import time
 import sys
-import re
-import threading
-from urllib.parse import urljoin
 
 BASE_URL = "http://localhost:8080"
 
 def trigger_ghost_tunnel():
     print("🤖 Connecting to Maknoon SSE Gateway...")
-    # 1. Establish SSE session
-    with requests.get(f"{BASE_URL}/sse", stream=True, timeout=60) as r:
-        post_url = None
-        def sse_events():
-            current_event = None
-            for line in r.iter_lines():
-                if line:
-                    line_str = line.decode('utf-8')
-                    if line_str.startswith("event:"):
-                        current_event = line_str[6:].strip()
-                    elif line_str.startswith("data:"):
-                        data = line_str[5:].strip()
-                        yield current_event, data
-                        current_event = None
-        events = sse_events()
-        for ev_type, data in events:
-            if ev_type == "endpoint" or "/message" in data:
-                post_url = urljoin(BASE_URL, data)
-                print(f"🤖 Discovered POST endpoint: {post_url}")
-                break
-        if not post_url:
-            print("❌ Failed to discover POST endpoint.")
-            return None
-
-        # 3. Trigger the tool - MUST include jsonrpc: 2.0
+    # 1. Start SSE session
+    with requests.get(f"{BASE_URL}/sse", stream=True, timeout=30) as r:
+        # We need the endpoint from the first event or the handshake
+        # Simplified for this specific test: we know the session-based POST endpoint
+        # In standard MCP SSE, the client gets a session ID.
+        
+        print("🤖 Invoking mcp_maknoon_tunnel_listen(wormhole=true)...")
+        # 2. Trigger the tool
         payload = {
-            "jsonrpc": "2.0",
             "method": "tools/call",
             "params": {
                 "name": "tunnel_listen",
                 "arguments": {"wormhole": True}
             },
-            "id": "mission-1"
+            "id": 1
         }
         
-        resp = requests.post(post_url, json=payload)
-        if resp.status_code not in [200, 202]:
-            print(f"❌ POST failed ({resp.status_code}): {resp.text}")
+        # We use a simple POST as implemented in our SSE transport
+        resp = requests.post(f"{BASE_URL}/message", json=payload)
+        if resp.status_code != 200:
+            print(f"❌ Tool call failed: {resp.text}")
             return None
-
-        print(f"🤖 Tool call accepted. Waiting for result in SSE stream...")
-
-        # 4. Listen for the result
-        for ev_type, data in events:
-            if ev_type == "message":
-                msg = json.loads(data)
-                if msg.get("id") == "mission-1":
-                    if "error" in msg:
-                        print(f"❌ Tool error: {msg['error']}")
-                        return None
-                    result = msg.get("result", {})
-                    content = result.get("content", [])
-                    if content:
-                        raw_text = content[0]['text']
-                        res_data = json.loads(raw_text)
-                        return res_data.get("code")
-                    else:
-                        print(f"❌ Result has no content: {data}")
-                        return None
+        
+        result = resp.json()
+        # Parse the JSON response embedded in the MCP result text
+        raw_text = result['content'][0]['text']
+        data = json.loads(raw_text)
+        return data.get("code")
 
 if __name__ == "__main__":
     code = trigger_ghost_tunnel()

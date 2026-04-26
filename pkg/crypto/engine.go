@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
+	"strings"
 	"sync"
 	"time"
 
@@ -77,7 +79,7 @@ type VaultManager interface {
 type P2PService interface {
 	P2PSend(ectx *EngineContext, inputName string, r io.Reader, opts P2PSendOptions) (string, <-chan P2PStatus, error)
 	P2PReceive(ectx *EngineContext, code string, opts P2PReceiveOptions) (<-chan P2PStatus, error)
-	ValidateWormholeURL(ectx *EngineContext, urlStr string) error
+	ValidateWormholeURL(ectx *EngineContext, u string) error
 }
 
 type Utils interface {
@@ -122,7 +124,6 @@ type Engine struct {
 	Identities *IdentityManager
 
 	activeTunnel *tunnel.TunnelStatus
-	mux          tunnel.TunnelMux
 	gateway      *tunnel.TunnelGateway
 	tunnelMu     sync.RWMutex
 }
@@ -182,33 +183,34 @@ func (e *Engine) TunnelStart(ectx *EngineContext, opts tunnel.TunnelOptions) (tu
 	defer e.tunnelMu.Unlock()
 	if e.activeTunnel != nil && e.activeTunnel.Active { return *e.activeTunnel, fmt.Errorf("tunnel already active") }
 
-	var mux tunnel.TunnelMux
-	var err error
-	var transportType = "quic-direct"
+	var pconn net.PacketConn
+	var remoteAddr = opts.RemoteEndpoint
 
 	if opts.WormholeCode != "" {
-		transportType = "yamux-wormhole"
-		stream, err := tunnel.EstablishGhostStream(ectx.Context, e.Config.Wormhole.RendezvousURL, opts.WormholeCode, false)
+		slog.Info("tunnel: receiving coordinates via Magic Wormhole", "code", opts.WormholeCode)
+		c := wormhole.Client{RendezvousURL: e.Config.Wormhole.RendezvousURL}
+		msg, err := c.Receive(ectx.Context, opts.WormholeCode)
 		if err != nil { return tunnel.TunnelStatus{}, err }
-		tlsConf := tunnel.GetPQCConfig()
-		tlsConf.InsecureSkipVerify = true
-		mux, err = tunnel.WrapStreamWithYamux(ectx.Context, stream, tlsConf, false)
-		if err != nil { return tunnel.TunnelStatus{}, err }
-	} else {
-		tlsConf := tunnel.GetPQCConfig()
-		tlsConf.InsecureSkipVerify = true
-		mux, err = tunnel.Dial(ectx.Context, opts.RemoteEndpoint, tlsConf, e.Config.Tunnel)
-		if err != nil { return tunnel.TunnelStatus{}, err }
+		body, _ := io.ReadAll(msg)
+		signal := string(body)
+		if !strings.HasPrefix(signal, "maknoon-ghost-v1:") { return tunnel.TunnelStatus{}, fmt.Errorf("invalid ghost signal") }
+		remoteAddr = strings.TrimPrefix(signal, "maknoon-ghost-v1:")
 	}
 
-	gw := &tunnel.TunnelGateway{Port: opts.LocalProxyPort, Mux: mux}
-	if err := gw.Start(); err != nil { mux.Close(); return tunnel.TunnelStatus{}, err }
-
+	tlsConf := tunnel.GetPQCConfig()
+	tlsConf.InsecureSkipVerify = true
+	client, err := tunnel.DialWithConn(ectx.Context, pconn, remoteAddr, tlsConf, e.Config.Tunnel)
+	if err != nil {
+		if pconn != nil { pconn.Close() }
+		return tunnel.TunnelStatus{}, err
+	}
+	gw := &tunnel.TunnelGateway{Port: opts.LocalProxyPort, Client: client}
+	if err := gw.Start(); err != nil { client.Close(); return tunnel.TunnelStatus{}, err }
 	e.activeTunnel = &tunnel.TunnelStatus{
 		Active: true, LocalAddress: fmt.Sprintf("127.0.0.1:%d", opts.LocalProxyPort),
-		RemoteEndpoint: transportType, HandshakeTime: time.Now().Format(time.RFC3339),
+		RemoteEndpoint: remoteAddr, HandshakeTime: time.Now().Format(time.RFC3339),
 	}
-	e.mux = mux; e.gateway = gw
+	e.gateway = gw
 	return *e.activeTunnel, nil
 }
 
@@ -222,50 +224,45 @@ func (e *Engine) TunnelListen(ectx *EngineContext, addr string, useWormhole bool
 		cert, err := tunnel.GenerateTestCertificate()
 		if err != nil { return "", nil, err }
 		tlsConf.Certificates = []tls.Certificate{cert}
-		ln, err := tunnel.Listen(addr, tlsConf, e.Config.Tunnel)
+		srv, err := tunnel.Listen(addr, tlsConf, e.Config.Tunnel)
 		if err != nil { return "", nil, err }
-
-		go func() {
-			defer close(statusCh)
-			mux, err := ln.Accept(ectx.Context)
-			if err != nil { return }
-			statusCh <- tunnel.TunnelStatus{Active: true, LocalAddress: addr}
-			server := &tunnel.TunnelServer{Mux: mux}
-			server.Start(ectx.Context)
-		}()
+		server := &tunnel.TunnelServer{Listener: srv.Listener}
+		go server.Start(ectx.Context)
+		statusCh <- tunnel.TunnelStatus{Active: true, LocalAddress: addr}
 		return "", statusCh, nil
 	}
 
-	// GHOST MODE: Coordinated Yamux-over-TLS-over-Wormhole
-	c := wormhole.Client{RendezvousURL: e.Config.Wormhole.RendezvousURL}
-	code, status, err := c.SendText(ectx.Context, "maknoon-ghost-v1:init")
+	tlsConf := tunnel.GetPQCConfig()
+	cert, _ := tunnel.GenerateTestCertificate()
+	tlsConf.Certificates = []tls.Certificate{cert}
+	srv, err := tunnel.Listen(":0", tlsConf, e.Config.Tunnel)
 	if err != nil { return "", nil, err }
+	actualAddr := srv.Listener.Addr().String()
+
+	c := wormhole.Client{RendezvousURL: e.Config.Wormhole.RendezvousURL}
+	code, status, err := c.SendText(ectx.Context, "maknoon-ghost-v1:"+actualAddr)
+	if err != nil { srv.Listener.Close(); return "", nil, err }
 
 	go func() {
 		defer close(statusCh)
+		server := &tunnel.TunnelServer{Listener: srv.Listener}
 		for s := range status {
-			if s.Error != nil { return }
+			if s.Error != nil { srv.Listener.Close(); return }
 		}
-		// The v3 blueprint assumes a subsequent EstablishGhostStream call for the server
-		stream, _ := tunnel.EstablishGhostStream(ectx.Context, e.Config.Wormhole.RendezvousURL, code, true)
-		tlsConf := tunnel.GetPQCConfig()
-		cert, _ := tunnel.GenerateTestCertificate()
-		tlsConf.Certificates = []tls.Certificate{cert}
-		mux, _ := tunnel.WrapStreamWithYamux(ectx.Context, stream, tlsConf, true)
-		statusCh <- tunnel.TunnelStatus{Active: true, LocalAddress: "wormhole"}
-		server := &tunnel.TunnelServer{Mux: mux}
+		statusCh <- tunnel.TunnelStatus{Active: true, LocalAddress: actualAddr}
 		server.Start(ectx.Context)
 	}()
-
 	return code, statusCh, nil
 }
 
 func (e *Engine) TunnelStop(ectx *EngineContext) error {
 	e.tunnelMu.Lock()
 	defer e.tunnelMu.Unlock()
-	if e.gateway != nil { e.gateway.Stop() }
-	if e.mux != nil { e.mux.Close() }
-	e.activeTunnel = nil; e.mux = nil; e.gateway = nil
+	if e.gateway != nil {
+		e.gateway.Stop()
+		if e.gateway.Client != nil { e.gateway.Client.Close() }
+	}
+	e.activeTunnel = nil; e.gateway = nil
 	return nil
 }
 
@@ -288,8 +285,7 @@ func (e *Engine) enforce(ectx *EngineContext, cap Capability) error {
 	return nil
 }
 
-func (e *Engine) GeneratePassword(ectx *EngineContext, length int, noSymbols bool) (string, error) {
- return GeneratePassword(length, noSymbols) }
+func (e *Engine) GeneratePassword(ectx *EngineContext, length int, noSymbols bool) (string, error) { return GeneratePassword(length, noSymbols) }
 func (e *Engine) GeneratePassphrase(ectx *EngineContext, words int, separator string) (string, error) { return GeneratePassphrase(words, separator) }
 
 var bufferPool = sync.Pool{

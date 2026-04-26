@@ -3,7 +3,6 @@ package tunnel
 import (
 	"context"
 	"encoding/binary"
-	"fmt"
 	"io"
 	"net"
 	"sync"
@@ -25,17 +24,14 @@ func (c *WormholePacketConn) ReadFrom(p []byte) (int, net.Addr, error) {
 	if err := binary.Read(c.Stream, binary.BigEndian, &length); err != nil {
 		return 0, nil, err
 	}
-	if int(length) > len(p) {
-		io.CopyN(io.Discard, c.Stream, int64(length))
-		return 0, nil, fmt.Errorf("packet too large: %d", length)
-	}
 	n, err := io.ReadFull(c.Stream, p[:length])
 	return n, &net.UDPAddr{IP: net.IPv4zero, Port: 0}, err
 }
 
 func (c *WormholePacketConn) WriteTo(p []byte, addr net.Addr) (int, error) {
-	if len(p) > 65535 { return 0, fmt.Errorf("too large") }
-	if err := binary.Write(c.Stream, binary.BigEndian, uint16(len(p))); err != nil { return 0, err }
+	if err := binary.Write(c.Stream, binary.BigEndian, uint16(len(p))); err != nil {
+		return 0, err
+	}
 	return c.Stream.Write(p)
 }
 
@@ -45,15 +41,16 @@ func (c *WormholePacketConn) SetDeadline(t time.Time) error      { return nil }
 func (c *WormholePacketConn) SetReadDeadline(t time.Time) error  { return nil }
 func (c *WormholePacketConn) SetWriteDeadline(t time.Time) error { return nil }
 
-// EstablishGhostStream performs a coordinated handshake to get a bidirectional pipe.
-// For the v3 blueprint, we use the IncomingMessage body as the reliable pipe.
+// EstablishGhostStream performs the Magic Wormhole handshake to get a raw data pipe.
 func EstablishGhostStream(ctx context.Context, rendezvous, code string, isServer bool) (io.ReadWriteCloser, error) {
 	c := wormhole.Client{RendezvousURL: rendezvous}
 	
 	if !isServer {
 		msg, err := c.Receive(ctx, code)
-		if err != nil { return nil, err }
-		// The IncomingMessage itself is the reader. We wrap it for Close.
+		if err != nil {
+			return nil, err
+		}
+		// IncomingMessage is a Reader, but not a Closer.
 		return &transitBridge{Reader: msg, Writer: io.Discard, closeFunc: func() error { return nil }}, nil
 	}
 	
@@ -62,6 +59,7 @@ func EstablishGhostStream(ctx context.Context, rendezvous, code string, isServer
 		_, status, _ := c.SendFile(ctx, "ghost-tunnel", &pipeSeeker{pr})
 		for range status {}
 	}()
+
 	return &transitBridge{Reader: pr, Writer: pw, closeFunc: pw.Close}, nil
 }
 
@@ -72,7 +70,9 @@ type transitBridge struct {
 }
 
 func (b *transitBridge) Close() error {
-	if b.closeFunc != nil { return b.closeFunc() }
+	if b.closeFunc != nil {
+		return b.closeFunc()
+	}
 	return nil
 }
 
