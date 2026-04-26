@@ -30,11 +30,43 @@ func TunnelCmd() *cobra.Command {
 func tunnelListenCmd() *cobra.Command {
 	var addr string
 	var certFile, keyFile string
+	var useYamux bool
 
 	cmd := &cobra.Command{
 		Use:   "listen",
 		Short: "Start a Post-Quantum Tunnel Server (Gateway Receiver)",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if useYamux {
+				// Setup PQC TLS for Yamux
+				tlsConf := tunnel.GetPQCConfig()
+				cert, err := tunnel.GenerateTestCertificate()
+				if err != nil {
+					return fmt.Errorf("failed to generate ephemeral cert: %w", err)
+				}
+				tlsConf.Certificates = []tls.Certificate{cert}
+
+				l, err := tls.Listen("tcp", addr, tlsConf)
+				if err != nil {
+					return fmt.Errorf("failed to start PQC-TCP listener: %w", err)
+				}
+				defer l.Close()
+
+				fmt.Printf("🚀 PQC-Yamux Tunnel Server listening on %s (TCP)\n", addr)
+				for {
+					conn, err := l.Accept()
+					if err != nil {
+						return err
+					}
+					sess, err := tunnel.WrapYamux(conn, true)
+					if err != nil {
+						conn.Close()
+						continue
+					}
+					server := &tunnel.TunnelServer{Session: sess}
+					go server.StartYamux(cmd.Context())
+				}
+			}
+
 			// 1. Setup PQC TLS
 			tlsConf := tunnel.GetPQCConfig()
 
@@ -60,13 +92,14 @@ func tunnelListenCmd() *cobra.Command {
 			server := &tunnel.TunnelServer{Listener: srv.Listener}
 			fmt.Printf("🚀 PQC Tunnel Server listening on %s (UDP)\n", addr)
 
-			return server.Start(context.Background())
+			return server.Start(cmd.Context())
 		},
 	}
 
-	cmd.Flags().StringVar(&addr, "address", ":4433", "Address to listen on (UDP)")
+	cmd.Flags().StringVar(&addr, "address", ":4433", "Address to listen on")
 	cmd.Flags().StringVar(&certFile, "tls-cert", "", "Path to TLS certificate")
 	cmd.Flags().StringVar(&keyFile, "tls-key", "", "Path to TLS private key")
+	cmd.Flags().BoolVar(&useYamux, "yamux", false, "Use TCP+Yamux (Foundation for Ghost Tunneling)")
 
 	return cmd
 }
@@ -74,6 +107,7 @@ func tunnelListenCmd() *cobra.Command {
 func tunnelStartCmd() *cobra.Command {
 	var remote string
 	var localPort int
+	var useYamux bool
 
 	cmd := &cobra.Command{
 		Use:   "start",
@@ -86,6 +120,7 @@ func tunnelStartCmd() *cobra.Command {
 			opts := tunnel.TunnelOptions{
 				RemoteEndpoint: remote,
 				LocalProxyPort: localPort,
+				UseYamux:       useYamux,
 			}
 
 			status, err := GlobalContext.Engine.TunnelStart(&crypto.EngineContext{Context: context.Background()}, opts)
@@ -108,6 +143,7 @@ func tunnelStartCmd() *cobra.Command {
 
 	cmd.Flags().StringVar(&remote, "remote", "", "Remote PQC Tunnel endpoint (host:port)")
 	cmd.Flags().IntVar(&localPort, "port", 1080, "Local SOCKS5 proxy port")
+	cmd.Flags().BoolVar(&useYamux, "yamux", false, "Use TCP+Yamux mode")
 	cmd.MarkFlagRequired("remote")
 
 	return cmd

@@ -2,6 +2,7 @@ package crypto
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"io"
 	"log/slog"
@@ -249,26 +250,46 @@ func (e *Engine) TunnelStart(ectx *EngineContext, opts tunnel.TunnelOptions) (tu
 		return *e.activeTunnel, fmt.Errorf("a tunnel is already active")
 	}
 
-	// 1. Establish PQC QUIC Connection
-	tlsConf := tunnel.GetPQCConfig()
-	tlsConf.InsecureSkipVerify = true // Prototype mode: assume trust on first use
+	var session tunnel.MuxSession
 
-	client, err := tunnel.Dial(ectx.Context, opts.RemoteEndpoint, tlsConf, e.Config.Tunnel)
-	if err != nil {
-		return tunnel.TunnelStatus{}, fmt.Errorf("failed to establish PQC tunnel: %w", err)
+	if opts.UseYamux {
+		// TCP + Yamux Path with PQC TLS (Bleeding-Edge Hybrid)
+		tlsConf := tunnel.GetPQCConfig()
+		tlsConf.InsecureSkipVerify = true
+		
+		conn, err := tls.Dial("tcp", opts.RemoteEndpoint, tlsConf)
+		if err != nil {
+			return tunnel.TunnelStatus{}, fmt.Errorf("failed to connect to remote via PQC-TCP: %w", err)
+		}
+		yamuxSess, err := tunnel.WrapYamux(conn, false)
+		if err != nil {
+			conn.Close()
+			return tunnel.TunnelStatus{}, err
+		}
+		session = yamuxSess
+	} else {
+		// Standard PQC QUIC Connection
+		tlsConf := tunnel.GetPQCConfig()
+		tlsConf.InsecureSkipVerify = true // Prototype mode
+
+		client, err := tunnel.Dial(ectx.Context, opts.RemoteEndpoint, tlsConf, e.Config.Tunnel)
+		if err != nil {
+			return tunnel.TunnelStatus{}, fmt.Errorf("failed to establish PQC tunnel: %w", err)
+		}
+		session = client
 	}
 
-	// 2. Start SOCKS5 Gateway
+	// Start SOCKS5 Gateway
 	gw := &tunnel.TunnelGateway{
-		Port:   opts.LocalProxyPort,
-		Client: client,
+		Port:    opts.LocalProxyPort,
+		Session: session,
 	}
 	if err := gw.Start(); err != nil {
-		client.Close()
+		session.Close()
 		return tunnel.TunnelStatus{}, fmt.Errorf("failed to start SOCKS5 gateway: %w", err)
 	}
 
-	// 3. Update State
+	// Update State
 	e.activeTunnel = &tunnel.TunnelStatus{
 		Active:         true,
 		LocalAddress:   fmt.Sprintf("127.0.0.1:%d", opts.LocalProxyPort),
@@ -286,8 +307,8 @@ func (e *Engine) TunnelStop(ectx *EngineContext) error {
 
 	if e.gateway != nil {
 		e.gateway.Stop()
-		if e.gateway.Client != nil {
-			e.gateway.Client.Close()
+		if e.gateway.Session != nil {
+			e.gateway.Session.Close()
 		}
 	}
 

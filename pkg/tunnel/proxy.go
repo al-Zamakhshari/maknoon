@@ -7,11 +7,11 @@ import (
 	"strconv"
 )
 
-// TunnelGateway implements a SOCKS5 proxy that routes traffic through a QUIC tunnel.
+// TunnelGateway implements a SOCKS5 proxy that routes traffic through a multiplexed tunnel.
 type TunnelGateway struct {
-	Port   int
-	Client *QUICClient
-	ln     net.Listener
+	Port    int
+	Session MuxSession
+	ln      net.Listener
 }
 
 // Start launches the SOCKS5 gateway on the local address.
@@ -77,7 +77,7 @@ func (g *TunnelGateway) handleConnection(conn net.Conn) {
 	port := int(buf[0])<<8 | int(buf[1])
 	dest := net.JoinHostPort(address, strconv.Itoa(port))
 
-	stream, err := g.Client.OpenStream(context.Background())
+	stream, err := g.Session.OpenStream(context.Background())
 	if err != nil {
 		conn.Write([]byte{0x05, 0x05, 0x00, 0x01, 0, 0, 0, 0, 0, 0})
 		return

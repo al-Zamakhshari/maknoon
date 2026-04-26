@@ -5,7 +5,7 @@ services:
       tunnel-net:
         ipv4_address: 172.20.0.5
 
-  gateway:
+  gateway-quic:
     build: .
     command: tunnel listen --address :4433
     ports:
@@ -13,6 +13,17 @@ services:
     networks:
       tunnel-net:
         ipv4_address: 172.20.0.10
+    environment:
+      - MAKNOON_PASSPHRASE=test-secret-tunnel
+
+  gateway-yamux:
+    build: .
+    command: tunnel listen --address :4434 --yamux
+    ports:
+      - "4434:4434"
+    networks:
+      tunnel-net:
+        ipv4_address: 172.20.0.11
     environment:
       - MAKNOON_PASSPHRASE=test-secret-tunnel
 

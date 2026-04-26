@@ -1,5 +1,17 @@
 package tunnel
 
+import (
+	"context"
+	"io"
+	"net"
+)
+
+// MuxSession abstracts the multiplexing layer (QUIC or Yamux).
+type MuxSession interface {
+	io.Closer
+	OpenStream(ctx context.Context) (net.Conn, error)
+}
+
 // TunnelOptions defines the parameters for establishing a post-quantum L4 tunnel.
 type TunnelOptions struct {
 	RemoteEndpoint string `json:"remote_endpoint"`
@@ -7,6 +19,7 @@ type TunnelOptions struct {
 	PublicKey      []byte `json:"public_key"`
 	PQPublicKey    []byte `json:"pq_public_key"`
 	Passphrase     []byte `json:"passphrase,omitempty"`
+	UseYamux       bool   `json:"use_yamux,omitempty"`
 }
 
 // TunnelStatus represents the current state of an active L4 tunnel.

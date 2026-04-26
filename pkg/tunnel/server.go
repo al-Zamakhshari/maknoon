@@ -9,13 +9,17 @@ import (
 	"net"
 )
 
-// TunnelServer handles incoming PQC QUIC connections and forwards them to internal targets.
+// TunnelServer handles incoming multiplexed connections and forwards them to internal targets.
 type TunnelServer struct {
 	Listener *quic.Listener
+	Session  *YamuxSession
 }
 
-// Start begins accepting connections and streams.
+// Start begins accepting QUIC connections.
 func (s *TunnelServer) Start(ctx context.Context) error {
+	if s.Listener == nil {
+		return fmt.Errorf("QUIC listener not initialized")
+	}
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -24,11 +28,25 @@ func (s *TunnelServer) Start(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		go s.handleConnection(conn)
+		go s.handleQUICConnection(conn)
 	}
 }
 
-func (s *TunnelServer) handleConnection(conn *quic.Conn) {
+// StartYamux begins accepting streams from a Yamux session.
+func (s *TunnelServer) StartYamux(ctx context.Context) error {
+	if s.Session == nil {
+		return fmt.Errorf("Yamux session not initialized")
+	}
+	for {
+		stream, err := s.Session.Session.Accept()
+		if err != nil {
+			return err
+		}
+		go s.handleStream(stream)
+	}
+}
+
+func (s *TunnelServer) handleQUICConnection(conn *quic.Conn) {
 	state := conn.ConnectionState()
 	slog.Info("tunnel server: new connection established",
 		"remote", conn.RemoteAddr(),
@@ -39,11 +57,11 @@ func (s *TunnelServer) handleConnection(conn *quic.Conn) {
 		if err != nil {
 			return
 		}
-		go s.handleStream(stream)
+		go s.handleStream(&quicConn{rawStream: stream, session: conn})
 	}
 }
 
-func (s *TunnelServer) handleStream(stream *quic.Stream) {
+func (s *TunnelServer) handleStream(stream net.Conn) {
 	defer stream.Close()
 
 	// 1. Read Destination Header [1 byte len][address string]
@@ -70,7 +88,7 @@ func (s *TunnelServer) handleStream(stream *quic.Stream) {
 	}
 	defer target.Close()
 
-	// 3. Bi-directional PQC-to-Plaintext Bridge
+	// 3. Bi-directional Multiplexed Bridge
 	done := make(chan struct{}, 2)
 
 	go func() {
