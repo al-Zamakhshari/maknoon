@@ -27,6 +27,27 @@ func (s *YamuxSession) Close() error {
 	return nil
 }
 
+// TCPListener implements MuxListener for TCP+Yamux fallback.
+type TCPListener struct {
+	net.Listener
+}
+
+func (l *TCPListener) Accept() (MuxSession, error) {
+	conn, err := l.Listener.Accept()
+	if err != nil {
+		return nil, err
+	}
+	return WrapYamux(conn, true)
+}
+
+func (l *TCPListener) Addr() net.Addr {
+	return l.Listener.Addr()
+}
+
+func (l *TCPListener) Close() error {
+	return l.Listener.Close()
+}
+
 // WrapYamux initializes a Yamux session over an existing reliable stream.
 func WrapYamux(stream io.ReadWriteCloser, isServer bool) (*YamuxSession, error) {
 	var session *yamux.Session

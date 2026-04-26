@@ -40,11 +40,11 @@ func tunnelListenCmd() *cobra.Command {
 		Use:   "listen",
 		Short: "Start a Post-Quantum Tunnel Server (Gateway Receiver)",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			var ln tunnel.MuxListener
+
 			if useP2P {
-				// Initialize libp2p with specific port if provided
 				var opts []libp2p.Option
 				if addr != "" {
-					// Convert :port to multiaddr
 					ma, err := multiaddr.NewMultiaddr(fmt.Sprintf("/ip4/0.0.0.0/tcp/%s", strings.TrimPrefix(addr, ":")))
 					if err == nil {
 						opts = append(opts, libp2p.ListenAddrs(ma))
@@ -55,21 +55,14 @@ func tunnelListenCmd() *cobra.Command {
 				if err != nil {
 					return err
 				}
-				defer h.Close()
-
 				fmt.Printf("🚀 P2P Tunnel Server active!\n")
 				fmt.Printf("🆔 Peer ID: %s\n", h.ID())
 				fmt.Println("📍 Multiaddrs:")
 				for _, addr := range h.Addrs() {
 					fmt.Printf("  - %s/p2p/%s\n", addr, h.ID())
 				}
-
-				server := &tunnel.TunnelServer{P2PHost: h}
-				return server.StartLibp2p(cmd.Context())
-			}
-
-			if useYamux {
-				// Setup PQC TLS for Yamux
+				ln = tunnel.StartLibp2pListener(h)
+			} else if useYamux {
 				tlsConf := tunnel.GetPQCConfig()
 				cert, err := tunnel.GenerateTestCertificate()
 				if err != nil {
@@ -77,54 +70,30 @@ func tunnelListenCmd() *cobra.Command {
 				}
 				tlsConf.Certificates = []tls.Certificate{cert}
 
-				l, err := tls.Listen("tcp", addr, tlsConf)
+				tl, err := tls.Listen("tcp", addr, tlsConf)
 				if err != nil {
 					return fmt.Errorf("failed to start PQC-TCP listener: %w", err)
 				}
-				defer l.Close()
-
 				fmt.Printf("🚀 PQC-Yamux Tunnel Server listening on %s (TCP)\n", addr)
-				for {
-					conn, err := l.Accept()
-					if err != nil {
-						return err
-					}
-					sess, err := tunnel.WrapYamux(conn, true)
-					if err != nil {
-						conn.Close()
-						continue
-					}
-					server := &tunnel.TunnelServer{Session: sess}
-					go server.StartYamux(cmd.Context())
-				}
-			}
-
-			// 1. Setup PQC TLS
-			tlsConf := tunnel.GetPQCConfig()
-
-			if certFile != "" && keyFile != "" {
-				// In v3.0, loading custom certs would happen here
-				return fmt.Errorf("loading custom certificates not yet implemented in CLI")
+				ln = &tunnel.TCPListener{Listener: tl}
 			} else {
-				fmt.Println("⚠️  Warning: Using ephemeral self-signed certificate for tunnel")
+				tlsConf := tunnel.GetPQCConfig()
 				cert, err := tunnel.GenerateTestCertificate()
 				if err != nil {
 					return fmt.Errorf("failed to generate ephemeral cert: %w", err)
 				}
 				tlsConf.Certificates = []tls.Certificate{cert}
+
+				ql, err := tunnel.Listen(addr, tlsConf, GlobalContext.Engine.GetConfig().Tunnel)
+				if err != nil {
+					return fmt.Errorf("failed to start listener: %w", err)
+				}
+				fmt.Printf("🚀 PQC Tunnel Server listening on %s (UDP)\n", addr)
+				ln = ql
 			}
 
-			// 2. Start Listener
-			srv, err := tunnel.Listen(addr, tlsConf, GlobalContext.Engine.GetConfig().Tunnel)
-			if err != nil {
-				return fmt.Errorf("failed to start listener: %w", err)
-			}
-			defer srv.Listener.Close()
-
-			server := &tunnel.TunnelServer{Listener: srv.Listener}
-			fmt.Printf("🚀 PQC Tunnel Server listening on %s (UDP)\n", addr)
-
-			return server.Start(cmd.Context())
+			server := &tunnel.TunnelServer{}
+			return server.Serve(cmd.Context(), ln)
 		},
 	}
 

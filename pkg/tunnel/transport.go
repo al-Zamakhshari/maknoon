@@ -20,18 +20,34 @@ type QUICClient struct {
 	Session *quic.Conn
 }
 
-// QUICServer represents the receiving end of a post-quantum tunnel.
-type QUICServer struct {
+// QUICListener represents the receiving end of a post-quantum tunnel.
+type QUICListener struct {
 	Listener *quic.Listener
 }
 
+func (l *QUICListener) Accept() (MuxSession, error) {
+	conn, err := l.Listener.Accept(context.Background())
+	if err != nil {
+		return nil, err
+	}
+	return &QUICClient{Session: conn}, nil
+}
+
+func (l *QUICListener) Addr() net.Addr {
+	return l.Listener.Addr()
+}
+
+func (l *QUICListener) Close() error {
+	return l.Listener.Close()
+}
+
 // Listen starts a post-quantum QUIC listener with governed settings.
-func Listen(address string, tlsConf *tls.Config, conf TunnelConfig) (*QUICServer, error) {
+func Listen(address string, tlsConf *tls.Config, conf TunnelConfig) (*QUICListener, error) {
 	return ListenWithConn(nil, address, tlsConf, conf)
 }
 
 // ListenWithConn starts a QUIC listener over a specific PacketConn.
-func ListenWithConn(pconn net.PacketConn, address string, tlsConf *tls.Config, conf TunnelConfig) (*QUICServer, error) {
+func ListenWithConn(pconn net.PacketConn, address string, tlsConf *tls.Config, conf TunnelConfig) (*QUICListener, error) {
 	// Enforce hard cap
 	if conf.MaxStreams > 2000 {
 		conf.MaxStreams = 2000
@@ -58,7 +74,7 @@ func ListenWithConn(pconn net.PacketConn, address string, tlsConf *tls.Config, c
 		return nil, fmt.Errorf("failed to start QUIC listener: %w", err)
 	}
 
-	return &QUICServer{Listener: ln}, nil
+	return &QUICListener{Listener: ln}, nil
 }
 
 // GenerateTestCertificate creates a self-signed TLS certificate for testing purposes.
@@ -77,9 +93,10 @@ func GenerateTestCertificate() (tls.Certificate, error) {
 		NotBefore: time.Now(),
 		NotAfter:  time.Now().Add(24 * time.Hour),
 
-		KeyUsage:              x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
-		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		KeyUsage:              x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth},
 		BasicConstraintsValid: true,
+		IsCA:                  true,
 	}
 
 	derBytes, err := x509.CreateCertificate(rand.Reader, &template, &template, &priv.PublicKey, priv)
@@ -93,7 +110,7 @@ func GenerateTestCertificate() (tls.Certificate, error) {
 	}, nil
 }
 
-// GetPQCConfig returns a TLS configuration optimized for Strict Post-Quantum Hybrid security.
+// GetPQCConfig returns a TLS 1.3 configuration that mandates ML-KEM-768 hybrid exchange.
 func GetPQCConfig() *tls.Config {
 	return &tls.Config{
 		MinVersion: tls.VersionTLS13,

@@ -13,6 +13,13 @@ type MuxSession interface {
 	OpenStream(ctx context.Context) (net.Conn, error)
 }
 
+// MuxListener abstracts the listening layer for multiplexed connections.
+type MuxListener interface {
+	io.Closer
+	Accept() (MuxSession, error)
+	Addr() net.Addr
+}
+
 // TunnelOptions defines the parameters for establishing a post-quantum L4 tunnel.
 type TunnelOptions struct {
 	RemoteEndpoint string `json:"remote_endpoint"`
