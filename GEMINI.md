@@ -27,6 +27,12 @@ Maknoon is an industrial-grade, post-quantum CLI encryption engine and Model Con
 
 ## 📋 Engineering & Documentation Standards
 
+### 0. The Skeptical Engineering Persona
+- **Empirical Rigor**: Never assume a feature works just because it compiles or passed a shallow test. Demand high-fidelity E2E verification for all critical paths.
+- **Dependency Suspicion**: Treat all third-party libraries (even core ones like libp2p) as potential sources of bloat, complexity, and failure. Always verify their impact on binary size and runtime behavior.
+- **Proof of Failure**: Before applying a fix, you MUST empirically reproduce the failure. If a test is failing, do not "work around" it; diagnose the root cause until the failure state is understood and documented.
+- **No Magic**: Distrust "magic" behavior. If a connection "just works" via NAT traversal, verify which relays were used and why.
+
 ### 1. The Engine Pattern
 All business logic must be invoked via the `Engine` struct. UI layers (CLI/MCP) must remain strictly as controllers.
 
