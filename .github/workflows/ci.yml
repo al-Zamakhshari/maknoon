@@ -68,8 +68,10 @@ jobs:
       - name: Run Tests
         run: go test -v ./...
 
-      - name: Run MCP Agent Readiness Tests
-        run: go test -v ./integrations/mcp/...
+      - name: Run P2P MCP Smoke Test
+        run: |
+          chmod +x scripts/smoke-p2p-mcp.sh
+          ./scripts/smoke-p2p-mcp.sh
 
   docker:
     name: Container Integrity
