@@ -1,9 +1,24 @@
 package crypto
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
+
+	"github.com/mark3labs/mcp-go/mcp"
 )
+
+// FormatMCPError converts a Go error into a structured MCP ToolResultError.
+func FormatMCPError(err error, tool string) (*mcp.CallToolResult, error) {
+	resp := map[string]interface{}{"error": err.Error(), "tool": tool}
+	var policyErr *ErrPolicyViolation
+	if As(err, &policyErr) {
+		resp["type"] = "security_policy_violation"
+		resp["is_security_violation"] = true
+	}
+	raw, _ := json.Marshal(resp)
+	return mcp.NewToolResultError(string(raw)), nil
+}
 
 // As is a wrapper for errors.As.
 func As(err error, target interface{}) bool {
