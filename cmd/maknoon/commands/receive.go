@@ -16,6 +16,7 @@ var (
 	quietRecv      bool
 	recvPrivateKey string
 	recvP2PMode    bool
+	recvIdentity   string
 )
 
 // ReceiveCmd returns the cobra command for receiving files via secure P2P.
@@ -59,7 +60,7 @@ func ReceiveCmd() *cobra.Command {
 				opts.PrivateKey = privBytes
 			}
 
-			status, err := GlobalContext.Engine.P2PReceive(&crypto.EngineContext{Context: context.Background()}, code, opts)
+			status, err := GlobalContext.Engine.P2PReceive(&crypto.EngineContext{Context: context.Background()}, recvIdentity, code, opts)
 			if err != nil {
 				return err
 			}
@@ -101,6 +102,7 @@ func ReceiveCmd() *cobra.Command {
 	cmd.Flags().BoolVarP(&quietRecv, "quiet", "q", false, "Suppress informational messages")
 	cmd.Flags().StringVarP(&recvPrivateKey, "private-key", "k", "", "Path to your private key")
 	cmd.Flags().BoolVar(&recvP2PMode, "p2p", true, "Use identity-first P2P (libp2p)")
+	cmd.Flags().StringVar(&recvIdentity, "identity", "", "Identity name to use (default: active identity)")
 
 	return cmd
 }

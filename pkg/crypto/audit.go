@@ -236,26 +236,28 @@ func (e *AuditEngine) VaultRecover(ectx *EngineContext, mnemonics []string, vaul
 	return path, err
 }
 
-func (e *AuditEngine) P2PSend(ectx *EngineContext, inputName string, r io.Reader, opts P2PSendOptions) (string, <-chan P2PStatus, error) {
+func (e *AuditEngine) P2PSend(ectx *EngineContext, identityName, inputName string, r io.Reader, opts P2PSendOptions) (string, <-chan P2PStatus, error) {
 	start := time.Now()
-	code, status, err := e.Engine.P2PSend(ectx, inputName, r, opts)
+	code, status, err := e.Engine.P2PSend(ectx, identityName, inputName, r, opts)
 	duration := time.Since(start)
 
-	e.Logger.LogEvent("p2p_send_init", map[string]any{
-		"input":       e.sanitizePath(inputName),
+	e.Logger.LogEvent("p2p_send", map[string]any{
+		"identity":    identityName,
+		"input":       inputName,
+		"target":      opts.To,
 		"duration_ms": duration.Milliseconds(),
-		"code":        code,
 	}, err)
 
 	return code, status, err
 }
 
-func (e *AuditEngine) P2PReceive(ectx *EngineContext, code string, opts P2PReceiveOptions) (<-chan P2PStatus, error) {
+func (e *AuditEngine) P2PReceive(ectx *EngineContext, identityName, code string, opts P2PReceiveOptions) (<-chan P2PStatus, error) {
 	start := time.Now()
-	status, err := e.Engine.P2PReceive(ectx, code, opts)
+	status, err := e.Engine.P2PReceive(ectx, identityName, code, opts)
 	duration := time.Since(start)
 
-	e.Logger.LogEvent("p2p_receive_init", map[string]any{
+	e.Logger.LogEvent("p2p_receive", map[string]any{
+		"identity":    identityName,
 		"code":        code,
 		"duration_ms": duration.Milliseconds(),
 	}, err)
@@ -432,12 +434,13 @@ func (e *AuditEngine) TunnelStatus(ectx *EngineContext) (tunnel.TunnelStatus, er
 	return e.Engine.TunnelStatus(ectx)
 }
 
-func (e *AuditEngine) ChatStart(ectx *EngineContext, target string) (*P2PChatSession, error) {
+func (e *AuditEngine) ChatStart(ectx *EngineContext, identityName string, target string) (*P2PChatSession, error) {
 	start := time.Now()
-	sess, err := e.Engine.ChatStart(ectx, target)
+	sess, err := e.Engine.ChatStart(ectx, identityName, target)
 	duration := time.Since(start)
 
 	e.Logger.LogEvent("chat_start", map[string]any{
+		"identity":    identityName,
 		"target":      target,
 		"duration_ms": duration.Milliseconds(),
 	}, err)

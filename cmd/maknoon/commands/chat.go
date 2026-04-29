@@ -42,7 +42,7 @@ func runAgentChat(args []string) error {
 		target = args[0]
 	}
 
-	sess, err := GlobalContext.Engine.ChatStart(&crypto.EngineContext{Context: ctx}, target)
+	sess, err := GlobalContext.Engine.ChatStart(&crypto.EngineContext{Context: ctx}, chatSignKey, target)
 	if err != nil {
 		printErrorJSON(err)
 		return err

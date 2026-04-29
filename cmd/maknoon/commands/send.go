@@ -22,6 +22,7 @@ var (
 	sendTofu       bool
 	useP2PMode     bool
 	sendTo         string
+	sendIdentity   string
 )
 
 // SendCmd returns the cobra command for sending files via secure P2P.
@@ -89,7 +90,7 @@ func SendCmd() *cobra.Command {
 				opts.Passphrase = []byte(p)
 			}
 
-			code, status, err := GlobalContext.Engine.P2PSend(&crypto.EngineContext{Context: context.Background()}, inputName, inputReader, opts)
+			code, status, err := GlobalContext.Engine.P2PSend(&crypto.EngineContext{Context: context.Background()}, sendIdentity, inputName, inputReader, opts)
 			if err != nil {
 				return err
 			}
@@ -141,6 +142,7 @@ func SendCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&sendTofu, "trust-on-first-use", false, "Automatically add unknown signers to contacts")
 	cmd.Flags().BoolVar(&useP2PMode, "p2p", true, "Use identity-first P2P (libp2p)")
 	cmd.Flags().StringVar(&sendTo, "to", "", "Recipient @petname or PeerID")
+	cmd.Flags().StringVar(&sendIdentity, "identity", "", "Identity name to use (default: active identity)")
 
 	return cmd
 }

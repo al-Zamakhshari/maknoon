@@ -25,6 +25,13 @@ Maknoon is an industrial-grade, post-quantum CLI encryption engine and Model Con
 2.  **Physical Isolation**: Containerized deployment removes shells and utilities, trapping the process in an immutable sandbox.
 3.  **Governance**: All state changes and cryptographic operations are logged with masked metadata via the `AuditEngine` decorator.
 
+## 🚀 P2P & Identity Lessons (Post-Quantum Handshakes)
+
+- **Identity Collision**: Never use `libp2p.FallbackDefaults` when providing a custom identity. This triggers a "cannot specify multiple identities" error in the libp2p host constructor.
+- **Explicit Identity**: All P2P operations (`send`, `receive`, `chat`) must support explicit identity selection via the `--identity` flag (CLI) or `identity` argument (MCP). Never hardcode "default" for agent-orchestrated missions.
+- **MCP-over-SSE Protocol**: Remember that in MCP SSE transport, tool responses are pushed through the long-lived SSE stream (`/sse`), not the POST body. Orchestration scripts must maintain an active SSE connection and filter the stream for matching JSON-RPC IDs.
+- **Sandbox Provisioning**: In isolated environments (e.g., Docker `scratch`), identities must be proactively generated via `keygen --no-password` before P2P tools can bind to a transport.
+
 ## 📋 Engineering & Documentation Standards
 
 ### 0. The Skeptical Engineering Persona

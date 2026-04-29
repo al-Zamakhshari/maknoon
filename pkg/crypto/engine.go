@@ -103,8 +103,8 @@ type VaultManager interface {
 
 // P2PService handles peer-to-peer transfers.
 type P2PService interface {
-	P2PSend(ectx *EngineContext, inputName string, r io.Reader, opts P2PSendOptions) (string, <-chan P2PStatus, error)
-	P2PReceive(ectx *EngineContext, code string, opts P2PReceiveOptions) (<-chan P2PStatus, error)
+	P2PSend(ectx *EngineContext, identityName string, inputName string, r io.Reader, opts P2PSendOptions) (string, <-chan P2PStatus, error)
+	P2PReceive(ectx *EngineContext, identityName string, code string, opts P2PReceiveOptions) (<-chan P2PStatus, error)
 	ValidateWormholeURL(ectx *EngineContext, u string) error
 }
 
@@ -138,7 +138,7 @@ type TunnelService interface {
 
 // ChatService handles persistent identity-bound chat missions.
 type ChatService interface {
-	ChatStart(ectx *EngineContext, target string) (*P2PChatSession, error)
+	ChatStart(ectx *EngineContext, identityName string, target string) (*P2PChatSession, error)
 }
 
 // MaknoonEngine is the primary high-level facade for all Maknoon services.
@@ -292,15 +292,17 @@ func (e *Engine) TunnelStatus(ectx *EngineContext) (tunnel.TunnelStatus, error) 
 	return *e.activeTunnel, nil
 }
 
-func (e *Engine) ChatStart(ectx *EngineContext, target string) (*P2PChatSession, error) {
+func (e *Engine) ChatStart(ectx *EngineContext, identityName string, target string) (*P2PChatSession, error) {
 	ectx = e.context(ectx)
 	if err := e.enforce(ectx, CapP2P); err != nil {
 		return nil, err
 	}
 
 	// 1. Load active identity
-	conf := e.GetConfig()
-	idName := conf.DefaultIdentity
+	idName := identityName
+	if idName == "" {
+		idName = e.GetConfig().DefaultIdentity
+	}
 	if idName == "" {
 		idName = "default"
 	}

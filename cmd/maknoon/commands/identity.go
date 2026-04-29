@@ -372,7 +372,7 @@ func identityCombineCmd() *cobra.Command {
 			}
 			defer crypto.SafeClear(pass)
 
-			if err := writeIdentityKeys(basePath, output, kemPub, kemPriv, sigPub, sigPriv, nostrPub, nostrPriv, pass, 1); err != nil {
+			if err := m.SaveIdentity(basePath, output, kemPub, kemPriv, sigPub, sigPriv, nostrPub, nostrPriv, pass, 1); err != nil {
 				if JSONOutput {
 					printErrorJSON(err)
 					return nil

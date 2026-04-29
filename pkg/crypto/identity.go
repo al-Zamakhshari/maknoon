@@ -103,6 +103,88 @@ func (m *IdentityManager) ResolveKeyPath(path, envVar string) string {
 	return ""
 }
 
+// SaveIdentity persists an identity's keys to disk, optionally encrypted.
+func (m *IdentityManager) SaveIdentity(basePath, baseName string, kemPub, kemPriv, sigPub, sigPriv, nostrPub, nostrPriv, passphrase []byte, profileID byte) error {
+	writeKey := func(path string, data []byte, isPrivate bool) error {
+		if len(data) == 0 {
+			return nil
+		}
+		finalData := data
+		if isPrivate {
+			var b bytes.Buffer
+			if err := EncryptStream(bytes.NewReader(data), &b, passphrase, FlagNone, 1, profileID); err != nil {
+				return err
+			}
+			finalData = b.Bytes()
+		}
+		mode := os.FileMode(0644)
+		if isPrivate {
+			mode = 0600
+		}
+		return os.WriteFile(path, finalData, mode)
+	}
+
+	if err := writeKey(basePath+".kem.key", kemPriv, true); err != nil {
+		return err
+	}
+	if err := writeKey(basePath+".kem.pub", kemPub, false); err != nil {
+		return err
+	}
+	if err := writeKey(basePath+".sig.key", sigPriv, true); err != nil {
+		return err
+	}
+	if err := writeKey(basePath+".sig.pub", sigPub, false); err != nil {
+		return err
+	}
+	if err := writeKey(basePath+".nostr.key", nostrPriv, true); err != nil {
+		return err
+	}
+	if err := writeKey(basePath+".nostr.pub", nostrPub, false); err != nil {
+		return err
+	}
+	return nil
+}
+
+// CreateIdentity generates and saves a new Post-Quantum identity.
+func (m *IdentityManager) CreateIdentity(name string, passphrase []byte, pin string, isStdin bool, profile string) (*IdentityResult, error) {
+	profileID := byte(1)
+	if profile == "aes" {
+		profileID = 2
+	} else if profile == "conservative" {
+		profileID = 3
+	}
+
+	if err := EnsureMaknoonDirs(); err != nil {
+		return nil, err
+	}
+
+	kemPub, kemPriv, sigPub, sigPriv, nostrPub, nostrPriv, err := GeneratePQKeyPair(profileID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate keypairs: %w", err)
+	}
+
+	defer func() {
+		SafeClear(kemPriv)
+		SafeClear(sigPriv)
+		SafeClear(nostrPriv)
+	}()
+
+	basePath, baseName, err := m.ResolveBaseKeyPath(name)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := m.SaveIdentity(basePath, baseName, kemPub, kemPriv, sigPub, sigPriv, nostrPub, nostrPriv, passphrase, profileID); err != nil {
+		return nil, err
+	}
+
+	return &IdentityResult{
+		Status:   "success",
+		BasePath: basePath,
+		BaseName: baseName,
+	}, nil
+}
+
 func (m *IdentityManager) ResolveBaseKeyPath(name string) (string, string, error) {
 	if name == "" {
 		return "", "", &ErrState{Reason: "identity name required"}

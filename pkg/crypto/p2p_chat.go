@@ -43,6 +43,15 @@ func NewP2PChatSession(h host.Host) *P2PChatSession {
 	}
 }
 
+// Multiaddrs returns the host's multiaddrs for direct connectivity.
+func (s *P2PChatSession) Multiaddrs() []string {
+	var res []string
+	for _, addr := range s.Host.Addrs() {
+		res = append(res, fmt.Sprintf("%s/p2p/%s", addr, s.Host.ID()))
+	}
+	return res
+}
+
 // StartHost registers the chat protocol and waits for a peer.
 func (s *P2PChatSession) StartHost(ctx context.Context) (string, error) {
 	s.Host.SetStreamHandler(P2PChatProtocol, func(stream network.Stream) {

@@ -1,7 +1,6 @@
 package commands
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -112,35 +111,13 @@ func KeygenCmd() *cobra.Command {
 				}
 				fmt.Printf("Generating bleeding-edge %s identity...\n", pName)
 			}
-			kemPub, kemPriv, sigPub, sigPriv, nostrPub, nostrPriv, err := crypto.GeneratePQKeyPair(profileID)
-			if err != nil {
-				err := fmt.Errorf("failed to generate keypairs: %w", err)
-				if JSONOutput {
-					printErrorJSON(err)
-					return nil
-				}
-				return err
-			}
-
-			defer func() {
-				crypto.SafeClear(kemPriv)
-				crypto.SafeClear(sigPriv)
-				crypto.SafeClear(nostrPriv)
-			}()
 
 			im := crypto.NewIdentityManager()
-			basePath, baseName, err := im.ResolveBaseKeyPath(output)
+			res, err := im.CreateIdentity(output, password, "", false, profileStr)
 			if err != nil {
 				if JSONOutput {
 					printErrorJSON(err)
 					return nil
-				}
-				return err
-			}
-			if err := writeIdentityKeys(basePath, baseName, kemPub, kemPriv, sigPub, sigPriv, nostrPub, nostrPriv, password, profileID); err != nil {
-				if JSONOutput {
-					printErrorJSON(err)
-					return err
 				}
 				return err
 			}
@@ -155,7 +132,7 @@ func KeygenCmd() *cobra.Command {
 					}
 					return err
 				}
-				if err := os.WriteFile(basePath+".fido2", raw, 0644); err != nil {
+				if err := os.WriteFile(res.BasePath+".fido2", raw, 0644); err != nil {
 					err := fmt.Errorf("failed to write fido2 metadata: %w", err)
 					if JSONOutput {
 						printErrorJSON(err)
@@ -166,18 +143,14 @@ func KeygenCmd() *cobra.Command {
 			}
 
 			if !JSONOutput && !quiet {
-				fmt.Printf("Success! Identity generated in %s\n", filepath.Dir(basePath))
-				fmt.Printf("  - Encryption Keys: %s.kem.{key,pub}\n", baseName)
-				fmt.Printf("  - Signing Keys:    %s.sig.{key,pub}\n", baseName)
-				fmt.Printf("  - Nostr Keys:      %s.nostr.{key,pub}\n", baseName)
+				fmt.Printf("Success! Identity generated in %s\n", filepath.Dir(res.BasePath))
+				fmt.Printf("  - Encryption Keys: %s.kem.{key,pub}\n", res.BaseName)
+				fmt.Printf("  - Signing Keys:    %s.sig.{key,pub}\n", res.BaseName)
+				fmt.Printf("  - Nostr Keys:      %s.nostr.{key,pub}\n", res.BaseName)
 			}
 
 			if JSONOutput {
-				printJSON(crypto.IdentityResult{
-					Status:   "success",
-					BasePath: basePath,
-					BaseName: baseName,
-				})
+				printJSON(res)
 			}
 
 			return nil
@@ -231,45 +204,4 @@ func getInitialPassphrase(noPassword bool, manual string) ([]byte, error) {
 		}
 	}
 	return p, nil
-}
-
-func writeIdentityKeys(basePath, baseName string, kemPub, kemPriv, sigPub, sigPriv, nostrPub, nostrPriv, password []byte, profileID byte) error {
-	writeKey := func(path string, data []byte, isPrivate bool) error {
-		if len(data) == 0 {
-			return nil
-		}
-		finalData := data
-		if isPrivate {
-			var b bytes.Buffer
-			if err := crypto.EncryptStream(bytes.NewReader(data), &b, password, crypto.FlagNone, 1, profileID); err != nil {
-				return err
-			}
-			finalData = b.Bytes()
-		}
-		mode := os.FileMode(0644)
-		if isPrivate {
-			mode = 0600
-		}
-		return os.WriteFile(path, finalData, mode)
-	}
-
-	if err := writeKey(basePath+".kem.key", kemPriv, true); err != nil {
-		return err
-	}
-	if err := writeKey(basePath+".kem.pub", kemPub, false); err != nil {
-		return err
-	}
-	if err := writeKey(basePath+".sig.key", sigPriv, true); err != nil {
-		return err
-	}
-	if err := writeKey(basePath+".sig.pub", sigPub, false); err != nil {
-		return err
-	}
-	if err := writeKey(basePath+".nostr.key", nostrPriv, true); err != nil {
-		return err
-	}
-	if err := writeKey(basePath+".nostr.pub", nostrPub, false); err != nil {
-		return err
-	}
-	return nil
 }

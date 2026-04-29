@@ -108,7 +108,6 @@ func NewLibp2pHost(extraOpts ...libp2p.Option) (host.Host, error) {
 		libp2p.Muxer("/yamux/1.0.0", yamux.DefaultTransport),
 		libp2p.EnableRelay(),
 		libp2p.EnableHolePunching(),
-		libp2p.FallbackDefaults,
 	}
 	opts = append(opts, extraOpts...)
 

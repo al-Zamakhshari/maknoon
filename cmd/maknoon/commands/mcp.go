@@ -297,24 +297,60 @@ func createMCPServer() *server.MCPServer {
 				P2PMode:    true,
 				To:         getString(args, "to", ""),
 			}
-			code, _, err := engine.P2PSend(&crypto.EngineContext{Context: ctx}, name, r, opts)
+			identity := getString(args, "identity", "")
+			code, _, err := engine.P2PSend(&crypto.EngineContext{Context: ctx}, identity, name, r, opts)
 			if err != nil {
 				return formatMCPError(err, "p2p_send")
 			}
 			return mcp.NewToolResultText(fmt.Sprintf(`{"peer_id":"%s","status":"established"}`, code)), nil
 		})
 
+	s.AddTool(mcp.NewTool("p2p_receive", mcp.WithDescription("Wait for and receive a secure P2P file transfer")),
+		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			args := getArgs(request)
+			peerID := getString(args, "peer_id", "")
+			output := getString(args, "output", "")
+
+			opts := crypto.P2PReceiveOptions{
+				Passphrase: []byte(viper.GetString("passphrase")),
+				OutputDir:  output,
+				P2PMode:    true,
+			}
+			identity := getString(args, "identity", "")
+
+			statusChan, err := engine.P2PReceive(&crypto.EngineContext{Context: ctx}, identity, peerID, opts)
+			if err != nil {
+				return formatMCPError(err, "p2p_receive")
+			}
+
+			var lastStatus crypto.P2PStatus
+			for s := range statusChan {
+				lastStatus = s
+				if s.Phase == "success" || s.Phase == "error" {
+					break
+				}
+			}
+
+			if lastStatus.Error != nil {
+				return formatMCPError(lastStatus.Error, "p2p_receive")
+			}
+
+			return mcp.NewToolResultText(fmt.Sprintf(`{"status":"success","path":"%s"}`, lastStatus.FileName)), nil
+		})
+
 	s.AddTool(mcp.NewTool("chat_start", mcp.WithDescription("Initiate an identity-bound P2P Chat session")),
 		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			args := getArgs(request)
 			target := getString(args, "target", "")
-			sess, err := engine.ChatStart(&crypto.EngineContext{Context: ctx}, target)
+			identity := getString(args, "identity", "")
+			sess, err := engine.ChatStart(&crypto.EngineContext{Context: ctx}, identity, target)
 			if err != nil {
 				return formatMCPError(err, "chat_start")
 			}
-			res := map[string]string{
+			res := map[string]interface{}{
 				"status":  "established",
 				"peer_id": sess.Host.ID().String(),
+				"addrs":   sess.Multiaddrs(),
 			}
 			raw, _ := json.Marshal(res)
 			return mcp.NewToolResultText(string(raw)), nil

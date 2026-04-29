@@ -38,12 +38,20 @@ type P2PReceiveOptions struct {
 }
 
 // P2PSend initiates a libp2p P2P transfer.
-func (e *Engine) P2PSend(ectx *EngineContext, inputName string, r io.Reader, opts P2PSendOptions) (string, <-chan P2PStatus, error) {
+func (e *Engine) P2PSend(ectx *EngineContext, identityName string, inputName string, r io.Reader, opts P2PSendOptions) (string, <-chan P2PStatus, error) {
 	ectx = e.context(ectx)
 	status := make(chan P2PStatus, 10)
 
-	// libp2p Path (The only path in v3.1)
-	id, err := e.Identities.LoadIdentity("", nil, "", false)
+	// 1. Load active identity
+	idName := identityName
+	if idName == "" {
+		idName = e.GetConfig().DefaultIdentity
+	}
+	if idName == "" {
+		idName = "default"
+	}
+
+	id, err := e.Identities.LoadIdentity(idName, nil, "", false)
 	if err != nil {
 		return "", nil, err
 	}
@@ -60,12 +68,20 @@ func (e *Engine) P2PSend(ectx *EngineContext, inputName string, r io.Reader, opt
 }
 
 // P2PReceive completes a libp2p P2P transfer.
-func (e *Engine) P2PReceive(ectx *EngineContext, code string, opts P2PReceiveOptions) (<-chan P2PStatus, error) {
+func (e *Engine) P2PReceive(ectx *EngineContext, identityName string, code string, opts P2PReceiveOptions) (<-chan P2PStatus, error) {
 	ectx = e.context(ectx)
 	status := make(chan P2PStatus, 10)
 
-	// libp2p Path (The only path in v3.1)
-	id, err := e.Identities.LoadIdentity("", nil, "", false)
+	// 1. Load active identity
+	idName := identityName
+	if idName == "" {
+		idName = e.GetConfig().DefaultIdentity
+	}
+	if idName == "" {
+		idName = "default"
+	}
+
+	id, err := e.Identities.LoadIdentity(idName, nil, "", false)
 	if err != nil {
 		return nil, err
 	}

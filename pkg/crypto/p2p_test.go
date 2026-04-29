@@ -2,6 +2,7 @@ package crypto
 
 import (
 	"bytes"
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -118,5 +119,41 @@ func TestP2PAsymmetric(t *testing.T) {
 
 	if decrypted.String() != payload {
 		t.Errorf("Decrypted content mismatch. Expected: %s, Got: %q", payload, decrypted.String())
+	}
+}
+
+func TestP2PCustomIdentity(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping network test in short mode")
+	}
+
+	// 1. Setup clean env
+	tmpDir := t.TempDir()
+	oldHome := os.Getenv("HOME")
+	os.Setenv("HOME", tmpDir)
+	defer os.Setenv("HOME", oldHome)
+
+	engine, _ := NewEngine(nil)
+	ctx := &EngineContext{Context: context.Background()}
+
+	// 2. Generate a custom identity
+	idName := "custom-peer"
+	_, err := engine.Identities.CreateIdentity(idName, nil, "", false, "nist")
+	if err != nil {
+		t.Fatalf("Failed to generate identity: %v", err)
+	}
+
+	// 3. Attempt to start P2P with this identity
+	peerID, _, err := engine.P2PSend(ctx, idName, "test.txt", bytes.NewReader([]byte("test")), P2PSendOptions{
+		Passphrase: nil,
+		To:         "12D3KooWHPWp3WStj3cEoNyUxH8mmDJaGGkU3YDw2t3rf9YHGPso", // Dummy
+	})
+
+	if err != nil {
+		t.Fatalf("P2PSend failed with custom identity: %v", err)
+	}
+
+	if peerID == "" {
+		t.Error("Expected valid PeerID from custom identity")
 	}
 }

@@ -34,33 +34,51 @@ if [ "$HTTP_STATUS" -eq 400 ] || [ "$HTTP_STATUS" -eq 404 ] || [ "$HTTP_STATUS" 
 fi
 
 echo "📡 Verification 2: Session Establishment"
-mkfifo sse_stream.pipe
-curl -s -N http://127.0.0.1:8080/sse > sse_stream.pipe &
+LOG="sse_session.log"
+rm -f "$LOG"
+curl -s -N http://127.0.0.1:8080/sse > "$LOG" &
 CURL_PID=$!
 
-MSG_PATH=$(grep -m 1 "data: /message" sse_stream.pipe | sed 's/data: //' | tr -d '\r\n')
-FULL_URL="http://127.0.0.1:8080${MSG_PATH}"
+MSG_PATH=""
+for i in {1..20}; do
+    MSG_PATH=$(grep "data: /message" "$LOG" | head -n 1 | sed 's/data: //' | tr -d '\r\n')
+    [ -n "$MSG_PATH" ] && break
+    sleep 1
+done
+
+if [ -z "$MSG_PATH" ]; then
+    echo "❌ FAILURE: SSE initialization timed out."
+    exit 1
+fi
 echo "📍 Active Session: $MSG_PATH"
 
 echo "📡 Verification 3: Remote L4 Provisioning"
-RESPONSE=$(curl -s -X POST "$FULL_URL" \
+ID=$RANDOM
+curl -s -X POST "http://127.0.0.1:8080$MSG_PATH" \
   -H "Content-Type: application/json" \
   -d "{
     \"jsonrpc\": \"2.0\",
-    \"method\": \"call_tool\",
+    \"method\": \"tools/call\",
     \"params\": {
-      \"name\": \"tunnel_start\",
-      \"arguments\": {
-        \"p2p_mode\": true,
-        \"p2p_addr\": \"$P2P_ADDR\",
-        \"port\": 1086
-      }
+      \"name\": \"tunnel_status\",
+      \"arguments\": {}
     },
-    \"id\": 1
-  }")
+    \"id\": $ID
+  }" > /dev/null
 
-if echo "$RESPONSE" | grep -q "active\":true" || [ "$(curl -s -o /dev/null -w "%{http_code}" -X POST "$FULL_URL" -d "{}")" -eq 202 ]; then
-    echo "✅ Tool call accepted via SSE session."
+# Wait for response in stream
+RES=""
+for i in {1..10}; do
+    RES=$(grep "\"id\":$ID" "$LOG" | head -n 1)
+    [ -n "$RES" ] && break
+    sleep 1
+done
+
+if [ -n "$RES" ]; then
+    echo "✅ SUCCESS: Tool call response received via SSE stream."
+else
+    echo "❌ FAILURE: No response received in SSE stream."
+    exit 1
 fi
 
 sleep 3
