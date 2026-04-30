@@ -4,7 +4,10 @@ set -e
 # Mission: Zero-Trust Mesh (Phase 1)
 # Verification of Identity-Based Tunneling
 
+source "$(dirname "$0")/common.sh"
 COMPOSE_FILE="deploy/docker/mission-mesh.yml"
+
+trap 'fail_trap "Zero-Trust Mesh" "$COMPOSE_FILE"' EXIT
 
 echo "🏗️  Provisioning Zero-Trust Mesh..."
 docker compose -f $COMPOSE_FILE up -d --build
@@ -40,21 +43,7 @@ docker exec -d $CLIENT_CONTAINER sh -c \
      maknoon tunnel start --p2p --p2p-addr $GATEWAY_ADDR --port 1080 --identity client-id > tunnel.log 2>&1"
 
 # Wait for tunnel to be ready
-echo "⏳ Waiting for SOCKS5 proxy to listen on port 1080..."
-MAX_RETRIES=15
-for i in $(seq 1 $MAX_RETRIES); do
-    if docker exec $CLIENT_CONTAINER netstat -tln | grep ":1080 " > /dev/null; then
-        echo "✅ Tunnel Ready."
-        break
-    fi
-    if [ $i -eq $MAX_RETRIES ]; then
-        echo "❌ TIMEOUT: Tunnel failed to start."
-        docker exec $CLIENT_CONTAINER cat tunnel.log
-        docker compose -f $COMPOSE_FILE down
-        exit 1
-    fi
-    sleep 1
-done
+wait_for_port "$CLIENT_CONTAINER" 1080 || exit 1
 
 # Test Connectivity
 echo "🧪 Verifying end-to-end connectivity via SOCKS5..."

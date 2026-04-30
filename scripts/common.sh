@@ -1,0 +1,40 @@
+#!/bin/bash
+
+# Maknoon CI Common Helpers
+
+# fail_trap captures logs and teardown on failure
+fail_trap() {
+    local exit_code=$?
+    local mission_name=$1
+    local compose_file=$2
+
+    if [ $exit_code -ne 0 ]; then
+        echo ""
+        echo "❌ ERROR: Mission '$mission_name' failed with exit code $exit_code"
+        echo "🔍 Capturing container logs for diagnostic..."
+        if [ ! -z "$compose_file" ]; then
+            docker compose -f "$compose_file" logs --tail 200
+            echo "🧹 Tearing down failed mission infrastructure..."
+            docker compose -f "$compose_file" down
+        fi
+        exit $exit_code
+    fi
+}
+
+# wait_for_port waits for a specific port to be open in a container
+wait_for_port() {
+    local container=$1
+    local port=$2
+    local timeout=${3:-15}
+    
+    echo "⏳ Waiting for port $port in $container..."
+    for i in $(seq 1 $timeout); do
+        if docker exec "$container" netstat -tln | grep ":$port " > /dev/null; then
+            echo "✅ Port $port is active."
+            return 0
+        fi
+        sleep 1
+    done
+    echo "❌ TIMEOUT: Port $port never became active in $container."
+    return 1
+}

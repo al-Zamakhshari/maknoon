@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -185,6 +186,10 @@ func getPassphrase(prompt string) ([]byte, bool, error) {
 	}
 	if GlobalContext.Engine != nil && GlobalContext.Engine.GetPolicy().IsAgent() {
 		return nil, false, fmt.Errorf("passphrase required via MAKNOON_PASSPHRASE (interaction prohibited in agent mode)")
+	}
+
+	if GlobalContext.UI.JSON || !GlobalContext.UI.Interactive {
+		fmt.Fprintf(os.Stderr, "⚠️  WARNING: Command requested interactive passphrase in non-interactive mode. This will likely hang or fail.\n")
 	}
 
 	fmt.Print(prompt)
@@ -417,6 +422,14 @@ func InitEngine() error {
 
 	// 2. Initialize Engine with DI
 	conf := crypto.GetGlobalConfig()
+
+	if viper.GetBool("trace") {
+		handler := slog.NewTextHandler(GlobalContext.UI.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug})
+		slog.SetDefault(slog.New(handler))
+		slog.Debug("Maknoon Engine initializing", "version", "v4.0 Alpha", "args", os.Args)
+		slog.Debug("Paths resolved", "home", crypto.GetUserHomeDir(), "keys", conf.Paths.KeysDir, "vaults", conf.Paths.VaultsDir)
+	}
+
 	idMgr := crypto.NewIdentityManager()
 	core, err := crypto.NewEngine(policy, idMgr, conf, nil)
 	if err != nil {

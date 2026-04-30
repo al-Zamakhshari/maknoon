@@ -4,7 +4,10 @@ set -e
 # Mission: Threshold Quorum (Phase 2)
 # Verification of Distributed Key Resilience
 
+source "$(dirname "$0")/common.sh"
 COMPOSE_FILE="deploy/docker/mission-quorum.yml"
+
+trap 'fail_trap "Threshold Quorum" "$COMPOSE_FILE"' EXIT
 
 echo "🏗️  Provisioning Threshold Quorum Mesh..."
 docker compose -f $COMPOSE_FILE up -d --build

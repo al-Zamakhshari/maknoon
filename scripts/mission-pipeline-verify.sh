@@ -4,9 +4,13 @@ set -e
 # Mission: Crypto-Processing Pipeline (Phase 3)
 # Verification of Scalable Transformer Architecture (Shared Volume Mode)
 
+source "$(dirname "$0")/common.sh"
 COMPOSE_FILE="deploy/docker/mission-pipeline.yml"
 
+trap 'fail_trap "Crypto-Processing Pipeline" "$COMPOSE_FILE"' EXIT
+
 echo "🏗️  Provisioning Crypto Pipeline (Shared Volume)..."
+
 docker compose -f $COMPOSE_FILE up -d --build
 
 # Wait for Ingestor data (with timeout)
@@ -45,7 +49,7 @@ docker compose -f $COMPOSE_FILE exec sink ls -l /home/maknoon/data/large_data.bi
 # Final Integrity Check: Decrypt and Compare
 echo "🧪 Verifying Pipeline Integrity..."
 docker compose -f $COMPOSE_FILE exec sink maknoon decrypt /home/maknoon/data/large_data.bin.makn \
-    -o /home/maknoon/data/recovered.bin -s pipe-pass
+    -o /home/maknoon/data/recovered.bin -s pipe-pass --overwrite
 
 ORIG_HASH=$(docker compose -f $COMPOSE_FILE exec ingestor sha256sum /home/maknoon/data/large_data.bin | awk '{print $1}')
 RECOV_HASH=$(docker compose -f $COMPOSE_FILE exec sink sha256sum /home/maknoon/data/recovered.bin | awk '{print $1}')
