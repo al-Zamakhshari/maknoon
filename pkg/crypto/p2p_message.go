@@ -8,8 +8,9 @@ import (
 
 // P2PMessageHeader defines the universal header for any Maknoon P2P transport.
 type P2PMessageHeader struct {
-	Name string `json:"name"`
-	Size int64  `json:"size"`
+	TraceID string `json:"trace_id,omitempty"`
+	Name    string `json:"name"`
+	Size    int64  `json:"size"`
 }
 
 // P2PPackMessage prepares a secure payload for P2P transmission.
@@ -40,8 +41,8 @@ func (e *Engine) P2PUnpackMessage(ectx *EngineContext, r io.Reader, w io.Writer,
 }
 
 // P2PWriteProtocolHeader writes the JSON header to a P2P stream.
-func P2PWriteProtocolHeader(w io.Writer, name string, size int64) error {
-	header := P2PMessageHeader{Name: name, Size: size}
+func P2PWriteProtocolHeader(w io.Writer, name string, size int64, traceID string) error {
+	header := P2PMessageHeader{TraceID: traceID, Name: name, Size: size}
 	return json.NewEncoder(w).Encode(header)
 }
 

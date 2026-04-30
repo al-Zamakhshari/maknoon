@@ -19,6 +19,7 @@ type Engine struct {
 	Config     *Config
 	Identities *IdentityManager
 	Vaults     VaultStore
+	Logger     *slog.Logger
 
 	// Tunnel State
 	activeTunnel *tunnel.TunnelStatus
@@ -294,7 +295,7 @@ func (e *Engine) enforce(ectx *EngineContext, cap Capability) error {
 	return nil
 }
 
-func NewEngine(policy SecurityPolicy, idMgr *IdentityManager, conf *Config, vaultStore VaultStore) (*Engine, error) {
+func NewEngine(policy SecurityPolicy, idMgr *IdentityManager, conf *Config, vaultStore VaultStore, logger *slog.Logger) (*Engine, error) {
 	if conf == nil {
 		var err error
 		conf, err = LoadConfig()
@@ -313,11 +314,16 @@ func NewEngine(policy SecurityPolicy, idMgr *IdentityManager, conf *Config, vaul
 		}
 	}
 
+	if logger == nil {
+		logger = slog.Default()
+	}
+
 	return &Engine{
 		Policy:     policy,
 		Config:     conf,
 		Identities: idMgr,
 		Vaults:     vaultStore,
+		Logger:     logger,
 	}, nil
 }
 

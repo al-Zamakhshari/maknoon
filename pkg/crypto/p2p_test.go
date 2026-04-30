@@ -133,7 +133,7 @@ func TestP2PCustomIdentity(t *testing.T) {
 	os.Setenv("HOME", tmpDir)
 	defer os.Setenv("HOME", oldHome)
 
-	engine, _ := NewEngine(nil, nil, nil, nil)
+	engine, _ := NewEngine(nil, nil, nil, nil, nil)
 	ctx := &EngineContext{Context: context.Background()}
 
 	// 2. Generate a custom identity

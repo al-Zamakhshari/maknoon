@@ -1,5 +1,35 @@
 package crypto
 
+import (
+	"log/slog"
+)
+
+// SecretBytes is a slice of bytes that automatically redacts itself when logged or printed.
+type SecretBytes []byte
+
+// String implements fmt.Stringer.
+func (s SecretBytes) String() string {
+	return "[REDACTED]"
+}
+
+// LogValue implements slog.LogValuer.
+func (s SecretBytes) LogValue() slog.Value {
+	return slog.StringValue("[REDACTED]")
+}
+
+// SecretString is a string that automatically redacts itself when logged or printed.
+type SecretString string
+
+// String implements fmt.Stringer.
+func (s SecretString) String() string {
+	return "[REDACTED]"
+}
+
+// LogValue implements slog.LogValuer.
+func (s SecretString) LogValue() slog.Value {
+	return slog.StringValue("[REDACTED]")
+}
+
 // EncryptResult is the standard JSON output for the encrypt command.
 type EncryptResult struct {
 	Status       string            `json:"status"`

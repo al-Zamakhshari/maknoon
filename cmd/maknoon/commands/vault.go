@@ -638,7 +638,7 @@ func vaultDeleteCmd() *cobra.Command {
 				}
 			}
 
-			if err := crypto.SecureDelete(path); err != nil {
+			if err := GlobalContext.Engine.SecureDelete(path); err != nil {
 				p.RenderError(err)
 				return nil
 			}

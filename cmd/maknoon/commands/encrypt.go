@@ -143,7 +143,7 @@ func EncryptCmd() *cobra.Command {
 			}
 
 			if shred && inputPath != "-" {
-				if err := crypto.SecureDelete(inputPath); err != nil {
+				if err := GlobalContext.Engine.SecureDelete(inputPath); err != nil {
 					if !quiet {
 						p.RenderMessage(fmt.Sprintf("Warning: failed to shred original file: %v", err))
 					}

@@ -22,14 +22,17 @@ func (e *Engine) runLibp2pReceive(ectx *EngineContext, h host.Host, opts P2PRece
 		// 1. Read Header
 		header, err := P2PReadProtocolHeader(stream)
 		if err != nil {
-			slog.Error("p2p: failed to read header", "err", err)
+			e.Logger.Error("p2p: failed to read header", "err", err)
 			return
 		}
+
+		e.Logger.Debug("P2P transfer received", "trace_id", header.TraceID, "file", header.Name, "size", header.Size)
 
 		status <- P2PStatus{
 			Phase:      "transferring",
 			FileName:   header.Name,
 			BytesTotal: header.Size,
+			TraceID:    header.TraceID,
 		}
 
 		// 2. Download to temp file

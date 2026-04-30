@@ -35,11 +35,11 @@ func IsAgentMode() bool {
 type Identity struct {
 	Name      string
 	KEMPub    []byte
-	KEMPriv   []byte
+	KEMPriv   SecretBytes
 	SIGPub    []byte
-	SIGPriv   []byte
+	SIGPriv   SecretBytes
 	NostrPub  []byte
-	NostrPriv []byte
+	NostrPriv SecretBytes
 }
 
 // IdentityManager handles local key storage and resolution.

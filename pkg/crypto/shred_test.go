@@ -7,6 +7,8 @@ import (
 )
 
 func TestSecureDelete(t *testing.T) {
+	e, _ := NewEngine(nil, nil, nil, nil, nil)
+
 	// 1. Test single file
 	tmpFile, err := os.CreateTemp("", "maknoon-shred-test")
 	if err != nil {
@@ -19,7 +21,7 @@ func TestSecureDelete(t *testing.T) {
 	}
 	_ = tmpFile.Close()
 
-	if err := SecureDelete(tmpFilePath); err != nil {
+	if err := e.SecureDelete(tmpFilePath); err != nil {
 		t.Fatalf("SecureDelete(file) failed: %v", err)
 	}
 
@@ -48,7 +50,7 @@ func TestSecureDelete(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := SecureDelete(tmpDir); err != nil {
+	if err := e.SecureDelete(tmpDir); err != nil {
 		t.Fatalf("SecureDelete(dir) failed: %v", err)
 	}
 

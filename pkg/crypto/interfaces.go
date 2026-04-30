@@ -107,6 +107,7 @@ type P2PService interface {
 type Utils interface {
 	GeneratePassword(ectx *EngineContext, length int, noSymbols bool) (string, error)
 	GeneratePassphrase(ectx *EngineContext, words int, separator string) (string, error)
+	SecureDelete(path string) error
 }
 
 // StateProvider provides a standardized interface for accessing and managing

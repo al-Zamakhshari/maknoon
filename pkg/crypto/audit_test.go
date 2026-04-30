@@ -21,7 +21,7 @@ func (m *MockAuditLogger) LogEvent(action string, metadata map[string]any, err e
 func (m *MockAuditLogger) Close() error { return nil }
 
 func TestAuditEngineDecorator(t *testing.T) {
-	core, _ := NewEngine(&HumanPolicy{}, nil, nil, nil)
+	core, _ := NewEngine(&HumanPolicy{}, nil, nil, nil, nil)
 	mockLogger := &MockAuditLogger{}
 	ae := &AuditEngine{
 		Engine: core,

@@ -72,7 +72,10 @@ func (e *Engine) runLibp2pSend(ectx *EngineContext, inputName string, r io.Reade
 	}
 
 	// 2. Send Header
-	if err := P2PWriteProtocolHeader(stream, filepath.Base(inputName)+".makn", totalBytes); err != nil {
+	traceID := GenerateTraceID()
+	e.Logger.Debug("P2P transfer starting", "trace_id", traceID, "file", inputName, "target", target)
+
+	if err := P2PWriteProtocolHeader(stream, filepath.Base(inputName)+".makn", totalBytes, traceID); err != nil {
 		status <- P2PStatus{Phase: "error", Error: fmt.Errorf("failed to send header: %w", err)}
 		return
 	}

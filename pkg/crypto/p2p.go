@@ -1,15 +1,19 @@
 package crypto
 
 import (
+	"crypto/rand"
+	"encoding/hex"
+	"io"
+
 	"github.com/al-Zamakhshari/maknoon/pkg/tunnel"
 	"github.com/libp2p/go-libp2p"
-	"io"
 )
 
 // P2PStatus represents a progress update in a P2P transfer.
 type P2PStatus struct {
 	Phase        string // "encrypting", "connecting", "transferring", "decrypting", "success", "error"
 	Code         string
+	TraceID      string
 	Addrs        []string
 	FileName     string
 	BytesTotal   int64
@@ -17,6 +21,15 @@ type P2PStatus struct {
 	Passphrase   string
 	IsAsymmetric bool
 	Error        error
+}
+
+// GenerateTraceID creates a unique correlation ID for cross-node tracing.
+func GenerateTraceID() string {
+	b := make([]byte, 8)
+	if _, err := rand.Read(b); err != nil {
+		return "unknown"
+	}
+	return hex.EncodeToString(b)
 }
 
 // P2PSendOptions settings for P2P sending.

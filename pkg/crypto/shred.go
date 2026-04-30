@@ -9,20 +9,21 @@ import (
 )
 
 // SecureDelete securely wipes and removes a file or directory.
-// Note: On modern SSDs and COW filesystems, this is a "best effort" operation.
-func SecureDelete(path string) error {
+func (e *Engine) SecureDelete(path string) error {
+	e.Logger.Debug("securely deleting path", "path", path)
 	info, err := os.Stat(path)
 	if err != nil {
 		return err
 	}
 
 	if info.IsDir() {
-		return shredDirectory(path)
+		return e.shredDirectory(path)
 	}
-	return shredFile(path)
+	return e.shredFile(path)
 }
 
-func shredFile(path string) error {
+func (e *Engine) shredFile(path string) error {
+	e.Logger.Debug("shredding file", "path", path)
 	// Open file for writing only
 	f, err := os.OpenFile(path, os.O_WRONLY, 0)
 	if err != nil {
@@ -79,7 +80,8 @@ func shredFile(path string) error {
 	return os.Remove(finalPath)
 }
 
-func shredDirectory(path string) error {
+func (e *Engine) shredDirectory(path string) error {
+	e.Logger.Debug("shredding directory", "path", path)
 	entries, err := os.ReadDir(path)
 	if err != nil {
 		return err
@@ -88,11 +90,11 @@ func shredDirectory(path string) error {
 	for _, entry := range entries {
 		fullPath := filepath.Join(path, entry.Name())
 		if entry.IsDir() {
-			if err := shredDirectory(fullPath); err != nil {
+			if err := e.shredDirectory(fullPath); err != nil {
 				return err
 			}
 		} else {
-			if err := shredFile(fullPath); err != nil {
+			if err := e.shredFile(fullPath); err != nil {
 				return err
 			}
 		}

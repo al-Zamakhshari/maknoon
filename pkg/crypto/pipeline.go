@@ -17,12 +17,12 @@ import (
 
 // Options defines settings for the protection process.
 type Options struct {
-	Passphrase      []byte
-	PublicKey       []byte   // Deprecated: use Recipients
-	Recipients      [][]byte // Supports multi-recipient encryption
-	LocalPrivateKey []byte   // Local KEM private key for decryption
-	SigningKey      []byte   // ML-DSA private key for integrated signing
-	ProfileID       byte     // 0 for default
+	Passphrase      SecretBytes
+	PublicKey       []byte      // Deprecated: use Recipients
+	Recipients      [][]byte    // Supports multi-recipient encryption
+	LocalPrivateKey SecretBytes // Local KEM private key for decryption
+	SigningKey      SecretBytes // ML-DSA private key for integrated signing
+	ProfileID       byte        // 0 for default
 	Compress        bool
 	IsArchive       bool
 	Concurrency     int                // 0 for auto (NumCPU), 1 for sequential
@@ -31,6 +31,7 @@ type Options struct {
 	ProgressReader  io.Reader          // Deprecated: use EventStream
 	Verbose         bool               // Enables internal slog tracing
 	Stealth         bool               // Enables fingerprint resistance (headerless)
+	TraceID         string             // Correlation ID for distributed observability
 }
 
 func (o *Options) Emit(ev EngineEvent) {
@@ -43,12 +44,19 @@ func (o *Options) Emit(ev EngineEvent) {
 // Protect handles the full encryption pipeline under the active policy.
 func (e *Engine) Protect(ectx *EngineContext, inputName string, r io.Reader, w io.Writer, opts Options) (EncryptResult, error) {
 	ectx = e.context(ectx)
+	traceID := opts.TraceID
+	if traceID == "" {
+		traceID = GenerateTraceID()
+	}
+	log := e.Logger.With("trace_id", traceID, "action", "protect", "input", inputName)
+
 	if opts.EventStream != nil && ectx.Events == nil {
 		ectx.Events = opts.EventStream
 	}
 
 	if inputName != "-" && inputName != "" {
 		if err := ectx.Policy.ValidatePath(inputName); err != nil {
+			log.Error("path validation failed", "err", err)
 			return EncryptResult{}, err
 		}
 	}
@@ -64,6 +72,8 @@ func (e *Engine) Protect(ectx *EngineContext, inputName string, r io.Reader, w i
 	if opts.Stealth {
 		flags |= FlagStealth
 	}
+
+	log.Debug("pipeline initializing", "flags", flags, "concurrency", opts.Concurrency, "profile_id", opts.ProfileID)
 
 	var totalBytes int64
 	if inputName != "-" && inputName != "" {
@@ -124,18 +134,25 @@ func (e *Engine) Protect(ectx *EngineContext, inputName string, r io.Reader, w i
 // Unprotect handles the full decryption pipeline: Handshake -> Decrypt -> Decompress -> Extract.
 func (e *Engine) Unprotect(ectx *EngineContext, r io.Reader, w io.Writer, outPath string, opts Options) (DecryptResult, error) {
 	ectx = e.context(ectx)
+	traceID := opts.TraceID
+	if traceID == "" {
+		traceID = GenerateTraceID()
+	}
+	log := e.Logger.With("trace_id", traceID, "action", "unprotect", "output", outPath)
+
 	if opts.EventStream != nil && ectx.Events == nil {
 		ectx.Events = opts.EventStream
 	}
 
 	if outPath != "-" && outPath != "" {
 		if err := ectx.Policy.ValidatePath(outPath); err != nil {
+			log.Error("path validation failed", "err", err)
 			return DecryptResult{}, err
 		}
 	}
 	opts.Concurrency = ectx.Policy.ClampConcurrency(opts.Concurrency, e.Config.AgentLimits.MaxWorkers)
 
-	flags, err := unprotectInternal(ectx, r, w, outPath, opts)
+	flags, err := e.unprotectInternal(ectx, r, w, outPath, opts, log)
 	if err != nil {
 		return DecryptResult{}, err
 	}
@@ -147,14 +164,8 @@ func (e *Engine) Unprotect(ectx *EngineContext, r io.Reader, w io.Writer, outPat
 	}, nil
 }
 
-func unprotectInternal(ectx *EngineContext, r io.Reader, w io.Writer, outPath string, opts Options) (byte, error) {
-	var logger *slog.Logger
-	if opts.Verbose {
-		logger = slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
-	} else {
-		logger = slog.New(slog.NewTextHandler(io.Discard, nil))
-	}
-
+func (e *Engine) unprotectInternal(ectx *EngineContext, r io.Reader, w io.Writer, outPath string, opts Options, log *slog.Logger) (byte, error) {
+	log.Debug("restoration pipeline starting")
 	ectx.Emit(EventDecryptionStarted{TotalBytes: opts.TotalSize})
 
 	// 1. Peek at the header to determine flags
@@ -164,9 +175,9 @@ func unprotectInternal(ectx *EngineContext, r io.Reader, w io.Writer, outPath st
 	}
 
 	if magic == MagicHeaderSym {
-		logger.Info("handshake complete", "mode", "symmetric")
+		log.Debug("handshake complete", "mode", "symmetric")
 	} else if magic == MagicHeaderAsym {
-		logger.Info("handshake complete", "mode", "asymmetric", "recipients", recipientCount)
+		log.Debug("handshake complete", "mode", "asymmetric", "recipients", recipientCount)
 	}
 
 	// Reconstruct input for the actual decryption
@@ -198,7 +209,7 @@ func unprotectInternal(ectx *EngineContext, r io.Reader, w io.Writer, outPath st
 	}()
 
 	// 3. Finalize Post-Processing (Decompress -> Extract)
-	err = FinalizeRestoration(pr, w, flags, outPath, logger)
+	err = e.FinalizeRestoration(ectx, pr, w, flags, outPath, log)
 	if err != nil {
 		return flags, err
 	}
@@ -226,7 +237,7 @@ func Protect(inputName string, r io.Reader, w io.Writer, opts Options) (byte, er
 	}
 
 	// Create a minimal engine to call the method
-	e := &Engine{Config: GetGlobalConfig()}
+	e := &Engine{Config: GetGlobalConfig(), Logger: slog.Default()}
 	res, err := e.Protect(ectx, inputName, r, w, opts)
 	return res.Flags, err
 }
@@ -240,20 +251,16 @@ func Unprotect(r io.Reader, w io.Writer, outPath string, opts Options) (byte, er
 		Policy:  &HumanPolicy{},
 	}
 
-	e := &Engine{Config: GetGlobalConfig()}
+	e := &Engine{Config: GetGlobalConfig(), Logger: slog.Default()}
 	res, err := e.Unprotect(ectx, r, w, outPath, opts)
 	return res.Flags, err
 }
 
 // FinalizeRestoration handles the post-decryption steps: decompression and archive extraction.
-func FinalizeRestoration(pr io.Reader, w io.Writer, flags byte, outPath string, logger *slog.Logger) error {
-	if logger == nil {
-		logger = slog.New(slog.NewTextHandler(io.Discard, nil))
-	}
-
+func (e *Engine) FinalizeRestoration(ectx *EngineContext, pr io.Reader, w io.Writer, flags byte, outPath string, log *slog.Logger) error {
 	var decReader io.Reader = pr
 	if flags&FlagCompress != 0 {
-		logger.Info("decompressing zstd stream")
+		log.Debug("decompressing zstd stream")
 		zr, err := zstd.NewReader(pr)
 		if err != nil {
 			return &ErrCrypto{Reason: fmt.Sprintf("failed to initialize zstd reader: %v", err)}
@@ -263,7 +270,7 @@ func FinalizeRestoration(pr io.Reader, w io.Writer, flags byte, outPath string, 
 	}
 
 	if flags&FlagArchive != 0 {
-		logger.Info("extracting tar archive", "target", outPath)
+		log.Debug("extracting tar archive", "target", outPath)
 		if err := ExtractArchive(decReader, outPath); err != nil {
 			return &ErrIO{Path: outPath, Reason: fmt.Sprintf("failed to extract archive: %v", err)}
 		}
@@ -425,10 +432,6 @@ func ExtractArchive(r io.Reader, outputDir string) error {
 		}
 	}
 	return nil
-}
-
-func (e *Engine) FinalizeRestoration(ectx *EngineContext, pr io.Reader, w io.Writer, flags byte, outPath string, logger *slog.Logger) error {
-	return FinalizeRestoration(pr, w, flags, outPath, logger)
 }
 
 func Sha256Sum(data []byte) []byte {

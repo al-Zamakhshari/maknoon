@@ -369,6 +369,19 @@ func (e *AuditEngine) GeneratePassphrase(ectx *EngineContext, words int, separat
 	return e.Engine.GeneratePassphrase(ectx, words, separator)
 }
 
+func (e *AuditEngine) SecureDelete(path string) error {
+	start := time.Now()
+	err := e.Engine.SecureDelete(path)
+	duration := time.Since(start)
+
+	e.Logger.LogEvent("secure_delete", map[string]any{
+		"path":        e.sanitizePath(path),
+		"duration_ms": duration.Milliseconds(),
+	}, err)
+
+	return err
+}
+
 func (e *AuditEngine) GetPolicy() SecurityPolicy {
 	return e.Engine.Policy
 }

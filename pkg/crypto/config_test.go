@@ -78,7 +78,7 @@ func TestEngineUpdateConfigPolicy(t *testing.T) {
 	defer os.Setenv("HOME", origHome)
 
 	// 1. Human Policy (Allowed)
-	engine, _ := NewEngine(&HumanPolicy{}, nil, nil, nil)
+	engine, _ := NewEngine(&HumanPolicy{}, nil, nil, nil, nil)
 	newConf := DefaultConfig()
 	newConf.DefaultIdentity = "human-updated"
 
@@ -87,7 +87,7 @@ func TestEngineUpdateConfigPolicy(t *testing.T) {
 	}
 
 	// 2. Agent Policy (Denied)
-	agentEngine, _ := NewEngine(&AgentPolicy{}, nil, nil, nil)
+	agentEngine, _ := NewEngine(&AgentPolicy{}, nil, nil, nil, nil)
 	if err := agentEngine.UpdateConfig(nil, newConf); err == nil {
 		t.Error("Agent policy should deny config update, got nil")
 	} else if _, ok := err.(*ErrPolicyViolation); !ok {
@@ -102,7 +102,7 @@ func TestConfigPersistence(t *testing.T) {
 	defer os.Setenv("HOME", origHome)
 
 	ResetGlobalConfig()
-	engine, _ := NewEngine(&HumanPolicy{}, nil, nil, nil)
+	engine, _ := NewEngine(&HumanPolicy{}, nil, nil, nil, nil)
 
 	// 1. Update config via engine
 	conf := engine.GetConfig()

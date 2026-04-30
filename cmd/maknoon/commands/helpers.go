@@ -422,33 +422,35 @@ func InitEngine() error {
 
 	// 2. Initialize Engine with DI
 	conf := crypto.GetGlobalConfig()
+	var engineLogger *slog.Logger = slog.Default()
 
 	if viper.GetBool("trace") {
 		handler := slog.NewTextHandler(GlobalContext.UI.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug})
-		slog.SetDefault(slog.New(handler))
+		engineLogger = slog.New(handler)
+		slog.SetDefault(engineLogger)
 		slog.Debug("Maknoon Engine initializing", "version", "v4.0 Alpha", "args", os.Args)
 		slog.Debug("Paths resolved", "home", crypto.GetUserHomeDir(), "keys", conf.Paths.KeysDir, "vaults", conf.Paths.VaultsDir)
 	}
 
 	idMgr := crypto.NewIdentityManager()
-	core, err := crypto.NewEngine(policy, idMgr, conf, nil)
+	core, err := crypto.NewEngine(policy, idMgr, conf, nil, engineLogger)
 	if err != nil {
 		return err
 	}
 
 	// Setup Audit Logging
-	var logger crypto.AuditLogger = &crypto.ConsoleAuditLogger{Writer: GlobalContext.UI.Stderr}
+	var auditLogger crypto.AuditLogger = &crypto.ConsoleAuditLogger{Writer: GlobalContext.UI.Stderr}
 	if !viper.GetBool("verbose") && core.Config.Audit.Enabled && !isAgent {
 		// Fallback to file only if not verbose and enabled
 		l, err := crypto.NewJSONFileLogger(core.Config.Audit.LogFile)
 		if err == nil {
-			logger = l
+			auditLogger = l
 		}
 	}
 
 	GlobalContext.Engine = &crypto.AuditEngine{
 		Engine: core,
-		Logger: logger,
+		Logger: auditLogger,
 	}
 
 	return nil

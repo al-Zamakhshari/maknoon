@@ -150,11 +150,11 @@ func (e *Engine) resolveVaultPath(name string) (string, error) {
 
 // VaultEntry represents a single secret stored in the vault.
 type VaultEntry struct {
-	Service  string `json:"service"`
-	Username string `json:"username"`
-	Password []byte `json:"password"`
-	URL      string `json:"url,omitempty"`
-	Note     string `json:"note,omitempty"` // Legacy compatibility
+	Service  string      `json:"service"`
+	Username string      `json:"username"`
+	Password SecretBytes `json:"password"`
+	URL      string      `json:"url,omitempty"`
+	Note     string      `json:"note,omitempty"` // Legacy compatibility
 }
 
 // SetVaultEntry is the package-level helper that performs the actual bbolt operation.
