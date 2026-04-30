@@ -8,7 +8,7 @@
 Maknoon is an industrial-grade cryptographic engine and Model Context Protocol (MCP) server designed to secure data against classical and quantum computational threats. By implementing NIST-standardized Post-Quantum Cryptography (PQC) within a constant-memory streaming architecture, Maknoon provides a scalable, zero-OS sandbox for securing sensitive assets.
 
 ## Executive Summary
-Maknoon utilizes a **Unified Binary Architecture**—hosting both its CLI and native MCP server in a single, statically linked binary. It offers dual-transport capabilities for AI agents (Stdio/SSE) and features a physically isolated container sandbox to prevent unauthorized data access.
+Maknoon utilizes a **Unified Binary Architecture**—hosting both its CLI and native MCP server in a single, statically linked binary. It offers dual-transport capabilities for AI agents (Stdio/SSE), features industrial-grade diagnostic tracing via `--trace`, and features a physically isolated container sandbox to prevent unauthorized data access.
 
 ---
 
@@ -21,6 +21,7 @@ Maknoon utilizes a **Unified Binary Architecture**—hosting both its CLI and na
 | **Dual-Transport MCP** | Support for local `stdio` and remote `sse` (HTTPS) agent integrations. |
 | **Secure Transport** | Native **Post-Quantum TLS 1.3** prioritization (ML-KEM hybrid). |
 | **Streaming Engine** | 64KB chunked pipeline ensuring $O(1)$ memory complexity. |
+| **Observability** | Structured internal tracing (`--trace`) with automatic PII redaction. |
 | **Container Sandbox** | Minimal 13MB `scratch` build with zero OS attack surface. |
 | **Configuration** | Standardized **Viper** management with environment-variable overrides. |
 

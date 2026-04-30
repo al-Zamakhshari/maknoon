@@ -1,4 +1,4 @@
-.TH MAKNOON 1 "April 2026" "3.0.0" "Maknoon Manual"
+.TH MAKNOON 1 "April 2026" "4.0.0" "Maknoon Manual"
 .SH NAME
 maknoon \- Enterprise-Grade Post-Quantum Encryption Engine and MCP Server.
 .SH SYNOPSIS
@@ -6,9 +6,21 @@ maknoon \- Enterprise-Grade Post-Quantum Encryption Engine and MCP Server.
 [\fIcommand\fR] [\fIflags\fR]
 .SH DESCRIPTION
 Maknoon (مكنون) is an industrial-grade cryptographic engine designed for a post-quantum world. 
-It implements a stateful **Engine** architecture (v3.0) utilizing NIST-standard ML-KEM (Kyber1024) for asymmetric encryption, ML-DSA (Dilithium87) for digital signatures, and XChaCha20-Poly1305 for streaming data integrity.
+It implements a stateful **Engine** architecture (v4.0 Alpha) utilizing NIST-standard ML-KEM (Kyber1024) for asymmetric encryption, ML-DSA (Dilithium87) for digital signatures, and XChaCha20-Poly1305 for streaming data integrity.
 .PP
 The tool features a modular **Profile** system for cryptographic agility, multi-core parallelism, and a capability-based **Agent Sandbox** for secure execution by AI agents. All data is processed in 64KB chunks to ensure a constant memory footprint.
+.PP
+The v4.0 architecture emphasizes **Industrial Observability**, providing low-level diagnostic tracing (\-\-trace) with automatic redaction of sensitive material.
+.SH GLOBAL FLAGS
+.TP
+.B \-\-json
+Output results in structured JSON format for automation and agent consumption.
+.TP
+.B \-\-trace
+Enable low-level diagnostic tracing to stderr. Outputs internal path resolution, argv state, and pipeline transitions. Automatically redacts cryptographic keys and passphrases.
+.TP
+.B \-\-verbose
+Enable verbose console output for human operators.
 .SH COMMANDS
 .SS Cryptographic Operations
 .TP
