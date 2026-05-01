@@ -54,6 +54,7 @@ type SecurityConfig struct {
 type PerformanceConfig struct {
 	Concurrency      int  `json:"concurrency" mapstructure:"concurrency"`
 	CompressionLevel int  `json:"compression_level" mapstructure:"compression_level"`
+	DefaultCompress  bool `json:"default_compress" mapstructure:"default_compress"`
 	DefaultStealth   bool `json:"default_stealth" mapstructure:"default_stealth"`
 	DefaultProfile   byte `json:"default_profile" mapstructure:"default_profile"`
 }
@@ -107,9 +108,11 @@ func DefaultConfig() *Config {
 		Performance: PerformanceConfig{
 			Concurrency:      0,
 			CompressionLevel: 3,
+			DefaultCompress:  false,
 			DefaultStealth:   false,
-			DefaultProfile:   1,
+			DefaultProfile:   1, // NIST/Hybrid
 		},
+
 		AgentLimits: AgentLimitsConfig{
 			MaxMemoryKB: 512 * 1024, // 512MB
 			MaxTime:     5,
@@ -182,6 +185,8 @@ func LoadConfig() (*Config, error) {
 	v.SetEnvPrefix("MAKNOON")
 	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	v.AutomaticEnv()
+	_ = v.BindEnv("performance.default_compress")
+	_ = v.BindEnv("performance.default_stealth")
 	_ = v.BindEnv("desec_token", "DESEC_TOKEN")
 
 	home := GetUserHomeDir()

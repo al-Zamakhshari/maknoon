@@ -93,10 +93,13 @@ func registerNetworkTools(s *server.MCPServer, engine crypto.MaknoonEngine) {
 			}
 			opts := crypto.P2PSendOptions{
 				Passphrase: []byte(viper.GetString("passphrase")),
-				Stealth:    getBool(args, "stealth", false),
 				P2PMode:    true,
 				To:         getString(args, "to", ""),
 			}
+			if s, ok := args["stealth"].(bool); ok {
+				opts.Stealth = crypto.BoolPtr(s)
+			}
+
 			identity := getString(args, "identity", "")
 			code, _, err := engine.P2PSend(&crypto.EngineContext{Context: ctx}, identity, name, r, opts)
 			if err != nil {
@@ -116,6 +119,10 @@ func registerNetworkTools(s *server.MCPServer, engine crypto.MaknoonEngine) {
 				OutputDir:  output,
 				P2PMode:    true,
 			}
+			if s, ok := args["stealth"].(bool); ok {
+				opts.Stealth = crypto.BoolPtr(s)
+			}
+
 			identity := getString(args, "identity", "")
 
 			statusChan, err := engine.P2PReceive(&crypto.EngineContext{Context: ctx}, identity, peerID, opts)

@@ -32,7 +32,7 @@ func DecryptCmd() *cobra.Command {
 		Use:   "decrypt [file]",
 		Short: "Decrypt a .makn file or directory",
 		Args:  cobra.ExactArgs(1),
-		RunE: func(_ *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			p := GlobalContext.UI.GetPresenter()
 			inputFile := args[0]
 			in, _, totalSize, err := resolveDecryptInput(inputFile)
@@ -142,11 +142,18 @@ func DecryptCmd() *cobra.Command {
 				Passphrase:      finalKey,
 				LocalPrivateKey: finalPriv,
 				PublicKey:       senderKey,
-				Concurrency:     concurrency,
-				Stealth:         stealth,
 				TotalSize:       totalSize,
 				EventStream:     events,
-				Verbose:         verbose,
+			}
+
+			if cmd.Flags().Changed("concurrency") {
+				opts.Concurrency = crypto.IntPtr(concurrency)
+			}
+			if cmd.Flags().Changed("verbose") {
+				opts.Verbose = crypto.BoolPtr(verbose)
+			}
+			if cmd.Flags().Changed("stealth") {
+				opts.Stealth = crypto.BoolPtr(stealth)
 			}
 
 			done := make(chan struct{})

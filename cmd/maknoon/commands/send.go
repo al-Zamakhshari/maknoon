@@ -75,10 +75,13 @@ func SendCmd() *cobra.Command {
 
 			opts := crypto.P2PSendOptions{
 				Passphrase:  crypto.SecretBytes(sendPassphrase),
-				Stealth:     useStealth,
 				IsDirectory: isDir,
 				P2PMode:     true,
 				To:          sendTo,
+			}
+
+			if cmd.Flags().Changed("stealth") {
+				opts.Stealth = crypto.BoolPtr(useStealth)
 			}
 
 			if sendPublicKey != "" {

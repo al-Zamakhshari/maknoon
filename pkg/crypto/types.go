@@ -158,6 +158,7 @@ type DiagnosticResult struct {
 		AgentMode      bool   `json:"agent_mode_active"`
 		AuditEnabled   bool   `json:"audit_enabled"`
 	} `json:"engine"`
+	Performance PerformanceConfig `json:"performance"`
 }
 
 // NetStatusResult provides a snapshot of the P2P network and tunnel state.

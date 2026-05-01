@@ -19,9 +19,9 @@ func (e *Engine) P2PPackMessage(ectx *EngineContext, name string, r io.Reader, w
 		Passphrase:  opts.Passphrase,
 		PublicKey:   opts.PublicKey,
 		Stealth:     opts.Stealth,
-		Compress:    true,
+		Compress:    BoolPtr(true),
 		IsArchive:   opts.IsDirectory,
-		Concurrency: e.Config.AgentLimits.MaxWorkers,
+		Concurrency: IntPtr(e.Config.AgentLimits.MaxWorkers),
 	}
 
 	_, err := e.Protect(ectx, name, r, w, protectOpts)
@@ -34,7 +34,7 @@ func (e *Engine) P2PUnpackMessage(ectx *EngineContext, r io.Reader, w io.Writer,
 		Passphrase:      opts.Passphrase,
 		LocalPrivateKey: opts.PrivateKey,
 		Stealth:         opts.Stealth,
-		Concurrency:     e.Config.AgentLimits.MaxWorkers,
+		Concurrency:     IntPtr(e.Config.AgentLimits.MaxWorkers),
 	}
 
 	return e.Unprotect(ectx, r, w, outputDir, unprotectOpts)

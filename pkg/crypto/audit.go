@@ -109,13 +109,20 @@ func (e *AuditEngine) Protect(ectx *EngineContext, inputName string, r io.Reader
 	res, err := e.Engine.Protect(ectx, inputName, r, w, opts)
 	duration := time.Since(start)
 
-	e.Logger.LogEvent("protect", map[string]any{
+	metadata := map[string]any{
 		"input":       e.sanitizePath(inputName),
-		"profile_id":  opts.ProfileID,
-		"concurrency": opts.Concurrency,
 		"duration_ms": duration.Milliseconds(),
 		"flags":       res.Flags,
-	}, err)
+	}
+
+	if opts.ProfileID != nil {
+		metadata["profile_id"] = *opts.ProfileID
+	}
+	if opts.Concurrency != nil {
+		metadata["concurrency"] = *opts.Concurrency
+	}
+
+	e.Logger.LogEvent("protect", metadata, err)
 
 	return res, err
 }

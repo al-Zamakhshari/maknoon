@@ -57,10 +57,3 @@ func getString(args map[string]any, key string, def string) string {
 	}
 	return def
 }
-
-func getBool(args map[string]any, key string, def bool) bool {
-	if val, ok := args[key].(bool); ok {
-		return val
-	}
-	return def
-}

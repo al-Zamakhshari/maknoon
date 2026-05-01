@@ -37,7 +37,7 @@ func EncryptCmd() *cobra.Command {
 		Use:   "encrypt [file/dir]",
 		Short: "Encrypt a file or directory symmetrically or asymmetrically",
 		Args:  cobra.ExactArgs(1),
-		RunE: func(_ *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			p := GlobalContext.UI.GetPresenter()
 			inputPath := args[0]
 			input, _, _, isDir, err := resolveEncryptInput(inputPath)
@@ -80,12 +80,24 @@ func EncryptCmd() *cobra.Command {
 			}
 
 			opts := crypto.Options{
-				Compress:    compress,
-				IsArchive:   isDir,
-				Concurrency: concurrency,
-				ProfileID:   profileID,
-				Verbose:     verbose,
-				Stealth:     stealth,
+				IsArchive: isDir,
+				TotalSize: -1, // Resolved below
+			}
+
+			if cmd.Flags().Changed("compress") {
+				opts.Compress = crypto.BoolPtr(compress)
+			}
+			if cmd.Flags().Changed("concurrency") {
+				opts.Concurrency = crypto.IntPtr(concurrency)
+			}
+			if cmd.Flags().Changed("verbose") {
+				opts.Verbose = crypto.BoolPtr(verbose)
+			}
+			if cmd.Flags().Changed("stealth") {
+				opts.Stealth = crypto.BoolPtr(stealth)
+			}
+			if cmd.Flags().Changed("profile") || cmd.Flags().Changed("profile-file") {
+				opts.ProfileID = crypto.BytePtr(profileID)
 			}
 
 			if err := resolveEncryptionKeysMulti(&opts, pubKeyPaths, passphrase, inputPath, tofu); err != nil {

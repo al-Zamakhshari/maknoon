@@ -21,7 +21,7 @@ func TestProtectFullFlow(t *testing.T) {
 	// Protect with Compression
 	_, err := Protect(srcFile, nil, &encrypted, Options{
 		Passphrase: passphrase,
-		Compress:   true,
+		Compress:   BoolPtr(true),
 	})
 	if err != nil {
 		t.Fatalf("Protect failed: %v", err)

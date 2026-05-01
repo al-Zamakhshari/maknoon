@@ -457,5 +457,7 @@ func (e *Engine) Diagnostic() DiagnosticResult {
 	}
 	res.Engine.AuditEnabled = e.Config.Audit.Enabled
 
+	res.Performance = e.Config.Performance
+
 	return res
 }

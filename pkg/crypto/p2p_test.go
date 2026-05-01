@@ -16,7 +16,7 @@ func TestP2PFlowCorruption(t *testing.T) {
 	// 1. Encrypt with compression
 	flags, err := Protect("-", bytes.NewReader([]byte(text)), &encrypted, Options{
 		Passphrase: passphrase,
-		Compress:   true,
+		Compress:   BoolPtr(true),
 	})
 	if err != nil {
 		t.Fatalf("Protect failed: %v", err)
@@ -51,7 +51,7 @@ func TestP2PDirectoryFlow(t *testing.T) {
 	_, err := Protect(srcDir, nil, &encrypted, Options{
 		Passphrase: passphrase,
 		IsArchive:  true,
-		Compress:   true,
+		Compress:   BoolPtr(true),
 	})
 	if err != nil {
 		t.Fatalf("Protect failed: %v", err)
@@ -80,7 +80,7 @@ func TestP2PTextTransfer(t *testing.T) {
 	text := "top-secret-p2p-text"
 	var encrypted bytes.Buffer
 
-	_, err := Protect("-", bytes.NewReader([]byte(text)), &encrypted, Options{Passphrase: passphrase, Compress: true})
+	_, err := Protect("-", bytes.NewReader([]byte(text)), &encrypted, Options{Passphrase: passphrase, Compress: BoolPtr(true)})
 	if err != nil {
 		t.Fatalf("Protect failed: %v", err)
 	}
@@ -103,7 +103,7 @@ func TestP2PAsymmetric(t *testing.T) {
 
 	_, err := Protect("-", bytes.NewReader([]byte(payload)), &encrypted, Options{
 		PublicKey: kemPub,
-		Compress:  true,
+		Compress:  BoolPtr(true),
 	})
 	if err != nil {
 		t.Fatalf("Protect failed: %v", err)

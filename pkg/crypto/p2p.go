@@ -36,7 +36,7 @@ func GenerateTraceID() string {
 type P2PSendOptions struct {
 	Passphrase  SecretBytes
 	PublicKey   []byte
-	Stealth     bool
+	Stealth     *bool
 	IsDirectory bool
 	P2PMode     bool   // Always true in v3.1
 	To          string // Remote PeerID or @petname
@@ -47,7 +47,7 @@ type P2PSendOptions struct {
 type P2PReceiveOptions struct {
 	Passphrase SecretBytes
 	PrivateKey SecretBytes
-	Stealth    bool
+	Stealth    *bool
 	OutputDir  string
 	P2PMode    bool // Always true in v3.1
 	TraceID    string

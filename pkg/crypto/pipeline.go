@@ -22,15 +22,15 @@ type Options struct {
 	Recipients      [][]byte    // Supports multi-recipient encryption
 	LocalPrivateKey SecretBytes // Local KEM private key for decryption
 	SigningKey      SecretBytes // ML-DSA private key for integrated signing
-	ProfileID       byte        // 0 for default
-	Compress        bool
+	ProfileID       *byte       // nil for default
+	Compress        *bool
 	IsArchive       bool
-	Concurrency     int                // 0 for auto (NumCPU), 1 for sequential
+	Concurrency     *int               // nil for auto
 	TotalSize       int64              // Known total size of input for progress tracking
 	EventStream     chan<- EngineEvent // Optional channel for telemetry
 	ProgressReader  io.Reader          // Deprecated: use EventStream
-	Verbose         bool               // Enables internal slog tracing
-	Stealth         bool               // Enables fingerprint resistance (headerless)
+	Verbose         *bool              // Enables internal slog tracing
+	Stealth         *bool              // Enables fingerprint resistance (headerless)
 	TraceID         string             // Correlation ID for distributed observability
 }
 
@@ -60,25 +60,38 @@ func (e *Engine) Protect(ectx *EngineContext, inputName string, r io.Reader, w i
 			return EncryptResult{}, err
 		}
 	}
-	opts.Concurrency = ectx.Policy.ClampConcurrency(opts.Concurrency, e.Config.AgentLimits.MaxWorkers)
+
+	// Merge options with configuration defaults
+	if opts.Concurrency == nil {
+		opts.Concurrency = &e.Config.Performance.Concurrency
+	}
+	*opts.Concurrency = ectx.Policy.ClampConcurrency(*opts.Concurrency, e.Config.AgentLimits.MaxWorkers)
+
+	if opts.Compress == nil {
+		opts.Compress = &e.Config.Performance.DefaultCompress
+	}
+
+	if opts.Stealth == nil {
+		opts.Stealth = &e.Config.Performance.DefaultStealth
+	}
+
+	if opts.ProfileID == nil {
+		opts.ProfileID = &e.Config.Performance.DefaultProfile
+		log.Debug("using default profile from config", "profile_id", *opts.ProfileID)
+	}
 
 	var flags byte
 	if opts.IsArchive {
 		flags |= FlagArchive
 	}
-	if opts.Compress {
+	if *opts.Compress {
 		flags |= FlagCompress
 	}
-	if opts.Stealth {
+	if *opts.Stealth {
 		flags |= FlagStealth
 	}
 
-	log.Debug("pipeline initializing", "flags", flags, "concurrency", opts.Concurrency, "profile_id", opts.ProfileID)
-
-	if opts.ProfileID == 0 {
-		opts.ProfileID = e.Config.Performance.DefaultProfile
-		log.Debug("using default profile from config", "profile_id", opts.ProfileID)
-	}
+	log.Debug("pipeline initializing", "flags", flags, "concurrency", *opts.Concurrency, "profile_id", *opts.ProfileID)
 
 	var totalBytes int64
 	if inputName != "-" && inputName != "" {
@@ -104,7 +117,7 @@ func (e *Engine) Protect(ectx *EngineContext, inputName string, r io.Reader, w i
 		}
 	}
 
-	if opts.Compress {
+	if *opts.Compress {
 		sourceReader = wrapWithCompressor(sourceReader, nil)
 	}
 
@@ -115,9 +128,9 @@ func (e *Engine) Protect(ectx *EngineContext, inputName string, r io.Reader, w i
 
 	var err error
 	if len(allPublicKeys) > 0 {
-		err = EncryptStreamWithPublicKeysAndEvents(sourceReader, w, allPublicKeys, opts.SigningKey, flags, opts.Concurrency, opts.ProfileID, ectx)
+		err = EncryptStreamWithPublicKeysAndEvents(sourceReader, w, allPublicKeys, opts.SigningKey, flags, *opts.Concurrency, *opts.ProfileID, ectx)
 	} else {
-		err = EncryptStreamWithEvents(sourceReader, w, opts.Passphrase, flags, opts.Concurrency, opts.ProfileID, ectx)
+		err = EncryptStreamWithEvents(sourceReader, w, opts.Passphrase, flags, *opts.Concurrency, *opts.ProfileID, ectx)
 	}
 
 	if err != nil {
@@ -128,11 +141,11 @@ func (e *Engine) Protect(ectx *EngineContext, inputName string, r io.Reader, w i
 		Status:     "success",
 		Output:     inputName,
 		Flags:      flags,
-		ProfileID:  opts.ProfileID,
-		Compressed: opts.Compress,
+		ProfileID:  *opts.ProfileID,
+		Compressed: *opts.Compress,
 		IsArchive:  opts.IsArchive,
 		IsSigned:   len(opts.SigningKey) > 0,
-		IsStealth:  opts.Stealth,
+		IsStealth:  *opts.Stealth,
 	}, nil
 }
 
@@ -155,7 +168,15 @@ func (e *Engine) Unprotect(ectx *EngineContext, r io.Reader, w io.Writer, outPat
 			return DecryptResult{}, err
 		}
 	}
-	opts.Concurrency = ectx.Policy.ClampConcurrency(opts.Concurrency, e.Config.AgentLimits.MaxWorkers)
+
+	if opts.Concurrency == nil {
+		opts.Concurrency = &e.Config.Performance.Concurrency
+	}
+	*opts.Concurrency = ectx.Policy.ClampConcurrency(*opts.Concurrency, e.Config.AgentLimits.MaxWorkers)
+
+	if opts.Stealth == nil {
+		opts.Stealth = &e.Config.Performance.DefaultStealth
+	}
 
 	flags, err := e.unprotectInternal(ectx, r, w, outPath, opts, log)
 	if err != nil {
@@ -174,7 +195,7 @@ func (e *Engine) unprotectInternal(ectx *EngineContext, r io.Reader, w io.Writer
 	ectx.Emit(EventDecryptionStarted{TotalBytes: opts.TotalSize})
 
 	// 1. Peek at the header to determine flags
-	magic, profileID, flags, recipientCount, err := ReadHeader(r, opts.Stealth)
+	magic, profileID, flags, recipientCount, err := ReadHeader(r, *opts.Stealth)
 	if err != nil {
 		return 0, err
 	}
@@ -187,7 +208,7 @@ func (e *Engine) unprotectInternal(ectx *EngineContext, r io.Reader, w io.Writer
 
 	// Reconstruct input for the actual decryption
 	var headerBytes []byte
-	if !opts.Stealth {
+	if !*opts.Stealth {
 		headerBytes = append([]byte(magic), profileID, flags)
 		if magic == MagicHeaderAsym {
 			headerBytes = append(headerBytes, recipientCount)
@@ -199,13 +220,15 @@ func (e *Engine) unprotectInternal(ectx *EngineContext, r io.Reader, w io.Writer
 
 	// 2. Core Decryption (returns decrypted payload via a pipe)
 	pr, pw := io.Pipe()
+	concurrency := *opts.Concurrency
+	stealth := *opts.Stealth
 	go func() {
 		defer pw.Close()
 		var dErr error
 		if magic == MagicHeaderAsym || (opts.LocalPrivateKey != nil || opts.PublicKey != nil) {
-			_, _, dErr = DecryptStreamWithPrivateKeyAndEvents(fullIn, pw, opts.LocalPrivateKey, opts.PublicKey, opts.Concurrency, opts.Stealth, ectx)
+			_, _, dErr = DecryptStreamWithPrivateKeyAndEvents(fullIn, pw, opts.LocalPrivateKey, opts.PublicKey, concurrency, stealth, ectx)
 		} else {
-			_, _, dErr = DecryptStreamWithEvents(fullIn, pw, opts.Passphrase, opts.Concurrency, opts.Stealth, ectx)
+			_, _, dErr = DecryptStreamWithEvents(fullIn, pw, opts.Passphrase, concurrency, stealth, ectx)
 		}
 
 		if dErr != nil {
@@ -222,6 +245,12 @@ func (e *Engine) unprotectInternal(ectx *EngineContext, r io.Reader, w io.Writer
 	return flags, nil
 }
 
+// --- Helpers for Options ---
+
+func BoolPtr(b bool) *bool { return &b }
+func IntPtr(i int) *int    { return &i }
+func BytePtr(b byte) *byte { return &b }
+
 // --- Legacy Shims ---
 
 // Protect handles the full encryption pipeline for a source (file, directory, or reader).
@@ -235,8 +264,8 @@ func Protect(inputName string, r io.Reader, w io.Writer, opts Options) (byte, er
 
 	// Temporarily bypass pipeline for legacy shim to avoid circular return type issues
 	// or use a dummy Engine if needed. Better: reuse protectInternal-like logic
-	if opts.ProfileID != 0 {
-		if _, err := GetProfile(opts.ProfileID, nil); err != nil {
+	if opts.ProfileID != nil && *opts.ProfileID != 0 {
+		if _, err := GetProfile(*opts.ProfileID, nil); err != nil {
 			return 0, err
 		}
 	}

@@ -44,9 +44,12 @@ func ReceiveCmd() *cobra.Command {
 
 			opts := crypto.P2PReceiveOptions{
 				Passphrase: []byte(recvPassphrase),
-				Stealth:    recvStealth,
 				OutputDir:  recvOutput,
 				P2PMode:    true,
+			}
+
+			if cmd.Flags().Changed("stealth") {
+				opts.Stealth = crypto.BoolPtr(recvStealth)
 			}
 
 			if recvPrivateKey != "" {
