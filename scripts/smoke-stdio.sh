@@ -4,11 +4,13 @@ set -e
 # Maknoon L4 - MCP Stdio Mission Lifecycle Test
 # Verifies that the tunnel remains active after tool call.
 
+export MAKNOON_HOME=$(mktemp -d)
 export MAKNOON_PASSPHRASE=smoke-test-secret
 
 cleanup() {
     echo "🧹 Cleaning up..."
     docker compose -p maknoon -f deploy/docker/test.yml down
+    rm -rf "$MAKNOON_HOME"
     rm -f call.json resp.json stdio_tunnel.log mcp_pipe
 }
 
@@ -23,7 +25,7 @@ PEER_ID=$(docker compose -p maknoon -f deploy/docker/test.yml logs gateway-p2p |
 P2P_ADDR="/ip4/127.0.0.1/tcp/4435/p2p/$PEER_ID"
 
 echo "🔐 Seeding Vault..."
-echo "pqc-secret-123" | ./maknoon vault set "gateway-mission-1" --user "admin" --json > /dev/null
+echo "pqc-secret-123" | ./maknoon vault set "gateway-mission-1" --user "admin" --overwrite --json > /dev/null
 
 echo "📡 Verification 1: Tool Discovery"
 echo '{"jsonrpc":"2.0","method":"tools/list","params":{},"id":1}' | ./maknoon mcp --transport stdio > resp.json 2>/dev/null || true

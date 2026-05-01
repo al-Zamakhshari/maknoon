@@ -244,7 +244,43 @@ func (e *Engine) VaultRecover(ectx *EngineContext, mnemonics []string, vaultPath
 	if err != nil {
 		return "", err
 	}
-	return RecoverVault(mnemonics, path, output, passphrase)
+
+	// 1. Recover the master passphrase from shards
+	recoveredPass, err := RecoverVault(mnemonics, path, output, passphrase)
+	if err != nil {
+		return "", err
+	}
+
+	// 2. If output is specified, migrate entries to the new vault
+	if output != "" {
+		// List entries from source vault
+		entries, err := e.VaultList(ectx, path, []byte(recoveredPass))
+		if err != nil {
+			return "", fmt.Errorf("failed to list entries from source vault: %w", err)
+		}
+
+		// Create/Open target vault
+		outputPath, err := e.resolveVaultPath(output)
+		if err != nil {
+			return "", err
+		}
+
+		for _, entry := range entries {
+			// Get full entry (with password)
+			fullEntry, err := e.VaultGet(ectx, path, entry.Service, []byte(recoveredPass), "")
+			if err != nil {
+				return "", fmt.Errorf("failed to get entry '%s': %w", entry.Service, err)
+			}
+
+			// Set in new vault
+			err = e.VaultSet(ectx, outputPath, fullEntry, []byte(recoveredPass), "", true)
+			if err != nil {
+				return "", fmt.Errorf("failed to set entry '%s' in recovered vault: %w", entry.Service, err)
+			}
+		}
+	}
+
+	return recoveredPass, nil
 }
 
 func (e *Engine) resolveVaultPath(name string) (string, error) {

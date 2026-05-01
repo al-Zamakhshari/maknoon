@@ -29,6 +29,10 @@ type Engine struct {
 	Contacts   *ContactManager
 	Logger     *slog.Logger
 
+	// Contacts State
+	contactsMu   sync.Mutex
+	contactsPath string
+
 	// Tunnel State
 	activeTunnel *tunnel.TunnelStatus
 	gateway      *tunnel.TunnelGateway
@@ -330,30 +334,45 @@ func NewEngine(policy SecurityPolicy, idMgr *IdentityManager, conf *Config, vaul
 	}
 
 	e := &Engine{
-		Policy:     policy,
-		Config:     conf,
-		Identities: idMgr,
-		Vaults:     vaultStore,
-		Logger:     logger,
-	}
-
-	// Initialize Contact Manager
-	contactsPath := filepath.Join(conf.Paths.VaultsDir, "..", "contacts.db")
-	store, err := vaultStore.Open(contactsPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open contacts store: %w", err)
-	}
-	e.Contacts = NewContactManager(store)
-	if idMgr != nil {
-		idMgr.Contacts = e.Contacts
+		Policy:       policy,
+		Config:       conf,
+		Identities:   idMgr,
+		Vaults:       vaultStore,
+		Logger:       logger,
+		contactsPath: filepath.Join(conf.Paths.VaultsDir, "..", "contacts.db"),
 	}
 
 	return e, nil
 }
 
+func (e *Engine) ensureContacts() error {
+	e.contactsMu.Lock()
+	defer e.contactsMu.Unlock()
+
+	if e.Contacts != nil {
+		return nil
+	}
+
+	store, err := e.Vaults.Open(e.contactsPath)
+	if err != nil {
+		return fmt.Errorf("failed to open contacts store: %w", err)
+	}
+
+	e.Contacts = NewContactManager(store)
+	if e.Identities != nil {
+		e.Identities.Contacts = e.Contacts
+	}
+
+	return nil
+}
+
 func (e *Engine) ContactAdd(ectx *EngineContext, petname, kemPub, sigPub, note string) error {
 	ectx = e.context(ectx)
 	if err := e.enforce(ectx, CapIdentity); err != nil {
+		return err
+	}
+
+	if err := e.ensureContacts(); err != nil {
 		return err
 	}
 
@@ -388,12 +407,18 @@ func (e *Engine) ContactList(ectx *EngineContext) ([]*Contact, error) {
 	if err := e.enforce(ectx, CapIdentity); err != nil {
 		return nil, err
 	}
+	if err := e.ensureContacts(); err != nil {
+		return nil, err
+	}
 	return e.Contacts.List()
 }
 
 func (e *Engine) ContactDelete(ectx *EngineContext, petname string) error {
 	ectx = e.context(ectx)
 	if err := e.enforce(ectx, CapIdentity); err != nil {
+		return err
+	}
+	if err := e.ensureContacts(); err != nil {
 		return err
 	}
 	return e.Contacts.Delete(petname)
@@ -405,6 +430,14 @@ func (e *Engine) ResolvePublicKey(ectx *EngineContext, input string, tofu bool) 
 	if err := e.enforce(ectx, CapIdentity); err != nil {
 		return nil, err
 	}
+
+	// Only ensure contacts if input is a petname (@handle)
+	if strings.HasPrefix(input, "@") {
+		if err := e.ensureContacts(); err != nil {
+			return nil, err
+		}
+	}
+
 	return e.Identities.ResolvePublicKey(input, tofu)
 }
 

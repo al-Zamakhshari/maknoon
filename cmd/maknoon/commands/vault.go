@@ -1,7 +1,6 @@
 package commands
 
 import (
-	"crypto/sha256"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -62,9 +61,6 @@ func vaultSplitCmd() *cobra.Command {
 				}
 			}
 			defer crypto.SafeClear(pass)
-
-			h := sha256.Sum256(pass)
-			fmt.Fprintf(os.Stderr, "DEBUG: Original Passphrase Hash: %x\n", h)
 
 			// Resolve vault path
 			path, err := resolveVaultPath(vaultName)

@@ -27,7 +27,6 @@ func ReceiveCmd() *cobra.Command {
 		Long:  `Downloads and decrypts data directly from a peer via libp2p.`,
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			fmt.Fprintf(os.Stderr, "DEBUG: receive command starting\n")
 			if err := InitEngine(); err != nil {
 				return err
 			}

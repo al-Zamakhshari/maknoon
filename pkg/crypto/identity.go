@@ -480,6 +480,9 @@ func (e *Engine) IdentityPublish(ectx *EngineContext, handle string, opts Identi
 	if err := e.enforce(ectx, CapIdentity); err != nil {
 		return err
 	}
+	if err := e.ensureContacts(); err != nil {
+		return err
+	}
 	return e.Identities.IdentityPublish(ectx.Context, handle, opts)
 }
 
