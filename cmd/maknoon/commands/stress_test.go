@@ -68,7 +68,7 @@ func TestIntegrationSecurityScenarios(t *testing.T) {
 
 		// Clean up previous test runs
 		home, _ := os.UserHomeDir()
-		dbPath := filepath.Join(home, crypto.MaknoonDir, crypto.VaultsDir, vaultPath+".db")
+		dbPath := filepath.Join(home, crypto.MaknoonDir, crypto.VaultsDir, vaultPath+".vault")
 		_ = os.Remove(dbPath)
 		defer os.Remove(dbPath)
 
@@ -85,9 +85,17 @@ func TestIntegrationSecurityScenarios(t *testing.T) {
 			t.Fatal(err)
 		}
 		setCmd.SetArgs([]string{"--vault", vaultPath, "--passphrase", pass, "set", "SERVICE1", "--json"})
+		err := setCmd.Execute()
+		if err == nil {
+			t.Error("Expected collision error, got nil")
+		}
+
+		// Now set with overwrite
+		setCmd.SetArgs([]string{"--vault", vaultPath, "--passphrase", pass, "set", "SERVICE1", "--json", "--overwrite"})
 		if err := setCmd.Execute(); err != nil {
 			t.Fatal(err)
 		}
+
 		os.Unsetenv("MAKNOON_PASSWORD")
 
 		getCmd := VaultCmd()

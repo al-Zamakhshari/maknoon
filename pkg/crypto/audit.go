@@ -175,9 +175,9 @@ func (e *AuditEngine) VaultGet(ectx *EngineContext, vaultPath string, service st
 	return entry, err
 }
 
-func (e *AuditEngine) VaultSet(ectx *EngineContext, vaultPath string, entry *VaultEntry, passphrase []byte, pin string) error {
+func (e *AuditEngine) VaultSet(ectx *EngineContext, vaultPath string, entry *VaultEntry, passphrase []byte, pin string, overwrite bool) error {
 	start := time.Now()
-	err := e.Engine.VaultSet(ectx, vaultPath, entry, passphrase, pin)
+	err := e.Engine.VaultSet(ectx, vaultPath, entry, passphrase, pin, overwrite)
 	duration := time.Since(start)
 
 	var service string
@@ -188,6 +188,7 @@ func (e *AuditEngine) VaultSet(ectx *EngineContext, vaultPath string, entry *Vau
 	e.Logger.LogEvent("vault_set", map[string]any{
 		"vault":       e.sanitizePath(vaultPath),
 		"service":     service,
+		"overwrite":   overwrite,
 		"duration_ms": duration.Milliseconds(),
 	}, err)
 
@@ -221,8 +222,8 @@ func (e *AuditEngine) VaultDelete(ectx *EngineContext, name string) error {
 	return err
 }
 
-func (e *AuditEngine) VaultList(ectx *EngineContext, vaultPath string) ([]string, error) {
-	return e.Engine.VaultList(ectx, vaultPath)
+func (e *AuditEngine) VaultList(ectx *EngineContext, vaultPath string, passphrase []byte) ([]VaultListEntry, error) {
+	return e.Engine.VaultList(ectx, vaultPath, passphrase)
 }
 
 func (e *AuditEngine) VaultSplit(ectx *EngineContext, vaultPath string, threshold, shares int, passphrase string) ([]string, error) {

@@ -21,6 +21,7 @@ func TestMain(m *testing.M) {
 }
 
 func runRootCmd(args ...string) string {
+	crypto.ResetGlobalConfig()
 	isJSON := false
 	for _, arg := range args {
 		if arg == "--json" {
@@ -822,6 +823,8 @@ func TestIntegrationVaultMaintenance(t *testing.T) {
 	oldHome := os.Getenv("HOME")
 	os.Setenv("HOME", tmpDir)
 	defer os.Setenv("HOME", oldHome)
+
+	crypto.ResetGlobalConfig()
 	_ = commands.InitEngine()
 
 	vaultName := "maint_test"

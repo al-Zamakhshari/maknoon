@@ -22,20 +22,24 @@ const (
 )
 
 // VaultSet encrypts and saves a vault entry to disk.
-func (e *Engine) VaultSet(ectx *EngineContext, vaultPath string, entry *VaultEntry, passphrase []byte, pin string) error {
+func (e *Engine) VaultSet(ectx *EngineContext, vaultPath string, entry *VaultEntry, passphrase []byte, pin string, overwrite bool) error {
 	ectx = e.context(ectx)
 	if err := e.enforce(ectx, CapVaultWrite); err != nil {
 		return err
 	}
 	if vaultPath == "" {
-		vaultPath = filepath.Join(e.Config.Paths.VaultsDir, "default.vault")
+		vaultPath = "default"
 	}
-
-	if err := ectx.Policy.ValidatePath(vaultPath); err != nil {
+	path, err := e.resolveVaultPath(vaultPath)
+	if err != nil {
 		return err
 	}
 
-	return SetVaultEntry(vaultPath, entry, passphrase)
+	if err := ectx.Policy.ValidatePath(path); err != nil {
+		return err
+	}
+
+	return SetVaultEntry(path, entry, passphrase, overwrite)
 }
 
 // VaultGet reads and decrypts a vault entry from disk.
@@ -45,14 +49,18 @@ func (e *Engine) VaultGet(ectx *EngineContext, vaultPath string, service string,
 		return nil, err
 	}
 	if vaultPath == "" {
-		vaultPath = filepath.Join(e.Config.Paths.VaultsDir, "default.vault")
+		vaultPath = "default"
 	}
-
-	if err := ectx.Policy.ValidatePath(vaultPath); err != nil {
+	path, err := e.resolveVaultPath(vaultPath)
+	if err != nil {
 		return nil, err
 	}
 
-	return GetVaultEntry(vaultPath, service, passphrase)
+	if err := ectx.Policy.ValidatePath(path); err != nil {
+		return nil, err
+	}
+
+	return GetVaultEntry(path, service, passphrase)
 }
 
 func (e *Engine) VaultDelete(ectx *EngineContext, name string) error {
@@ -102,18 +110,22 @@ func (e *Engine) VaultRename(ectx *EngineContext, oldName, newName string) error
 	return os.Rename(oldPath, newPath)
 }
 
-func (e *Engine) VaultList(ectx *EngineContext, vaultPath string) ([]string, error) {
+func (e *Engine) VaultList(ectx *EngineContext, vaultPath string, passphrase []byte) ([]VaultListEntry, error) {
 	ectx = e.context(ectx)
 	if err := e.enforce(ectx, CapVaultRead); err != nil {
 		return nil, err
 	}
 	if vaultPath == "" {
-		vaultPath = filepath.Join(e.Config.Paths.VaultsDir, "default.vault")
+		vaultPath = "default"
 	}
-	if err := ectx.Policy.ValidatePath(vaultPath); err != nil {
+	path, err := e.resolveVaultPath(vaultPath)
+	if err != nil {
 		return nil, err
 	}
-	return ListVaultEntries(vaultPath)
+	if err := ectx.Policy.ValidatePath(path); err != nil {
+		return nil, err
+	}
+	return ListVaultEntries(path, passphrase)
 }
 
 func (e *Engine) VaultSplit(ectx *EngineContext, vaultPath string, threshold, shares int, passphrase string) ([]string, error) {
@@ -122,9 +134,13 @@ func (e *Engine) VaultSplit(ectx *EngineContext, vaultPath string, threshold, sh
 		return nil, err
 	}
 	if vaultPath == "" {
-		vaultPath = filepath.Join(e.Config.Paths.VaultsDir, "default.vault")
+		vaultPath = "default"
 	}
-	return SplitVault(vaultPath, threshold, shares, passphrase)
+	path, err := e.resolveVaultPath(vaultPath)
+	if err != nil {
+		return nil, err
+	}
+	return SplitVault(path, threshold, shares, passphrase)
 }
 
 func (e *Engine) VaultRecover(ectx *EngineContext, mnemonics []string, vaultPath string, output string, passphrase string) (string, error) {
@@ -133,9 +149,13 @@ func (e *Engine) VaultRecover(ectx *EngineContext, mnemonics []string, vaultPath
 		return "", err
 	}
 	if vaultPath == "" {
-		vaultPath = filepath.Join(e.Config.Paths.VaultsDir, "default.vault")
+		vaultPath = "default"
 	}
-	return RecoverVault(mnemonics, vaultPath, output, passphrase)
+	path, err := e.resolveVaultPath(vaultPath)
+	if err != nil {
+		return "", err
+	}
+	return RecoverVault(mnemonics, path, output, passphrase)
 }
 
 func (e *Engine) resolveVaultPath(name string) (string, error) {
@@ -158,7 +178,7 @@ type VaultEntry struct {
 }
 
 // SetVaultEntry is the package-level helper that performs the actual bbolt operation.
-func SetVaultEntry(vaultPath string, entry *VaultEntry, passphrase []byte) error {
+func SetVaultEntry(vaultPath string, entry *VaultEntry, passphrase []byte, overwrite bool) error {
 	db, err := bbolt.Open(vaultPath, 0600, &bbolt.Options{Timeout: 1 * time.Second})
 	if err != nil {
 		return &ErrIO{Path: vaultPath, Reason: err.Error()}
@@ -188,7 +208,16 @@ func SetVaultEntry(vaultPath string, entry *VaultEntry, passphrase []byte) error
 		}
 
 		secrets, _ := tx.CreateBucketIfNotExists([]byte(vaultBucket))
-		return secrets.Put([]byte(entry.Service), payload)
+
+		// Use Hashed key for privacy
+		serviceKey := Sha256Hex([]byte(strings.ToLower(entry.Service)))
+		if !overwrite {
+			if secrets.Get([]byte(serviceKey)) != nil {
+				return &ErrState{Reason: fmt.Sprintf("service '%s' already exists (use overwrite to replace)", entry.Service)}
+			}
+		}
+
+		return secrets.Put([]byte(serviceKey), payload)
 	})
 }
 
@@ -216,7 +245,9 @@ func GetVaultEntry(vaultPath, service string, passphrase []byte) (*VaultEntry, e
 			return &ErrState{Reason: "vault is empty"}
 		}
 
-		payload := secrets.Get([]byte(service))
+		// Use Hashed key
+		serviceKey := Sha256Hex([]byte(strings.ToLower(service)))
+		payload := secrets.Get([]byte(serviceKey))
 		if payload == nil {
 			return &ErrState{Reason: fmt.Sprintf("service '%s' not found", service)}
 		}
@@ -281,26 +312,45 @@ func DeriveVaultKey(passphrase, salt []byte) []byte {
 	return DefaultProfile().DeriveKey(passphrase, salt)
 }
 
-// ListVaultEntries returns all service names in a vault.
-func ListVaultEntries(vaultPath string) ([]string, error) {
+// ListVaultEntries returns all service names and usernames in a vault.
+func ListVaultEntries(vaultPath string, passphrase []byte) ([]VaultListEntry, error) {
 	db, err := bbolt.Open(vaultPath, 0600, &bbolt.Options{Timeout: 1 * time.Second})
 	if err != nil {
 		return nil, &ErrIO{Path: vaultPath, Reason: err.Error()}
 	}
 	defer db.Close()
 
-	var services []string
+	var entries []VaultListEntry
 	err = db.View(func(tx *bbolt.Tx) error {
+		meta := tx.Bucket([]byte(metaBucket))
+		if meta == nil {
+			return &ErrAuthentication{Reason: "vault is uninitialized"}
+		}
+		salt := meta.Get([]byte(saltKey))
+		if salt == nil {
+			return &ErrAuthentication{Reason: "vault salt missing"}
+		}
+
+		key := DeriveVaultKey(passphrase, salt)
+		defer SafeClear(key)
+
 		secrets := tx.Bucket([]byte(vaultBucket))
 		if secrets == nil {
 			return nil
 		}
-		return secrets.ForEach(func(k, _ []byte) error {
-			services = append(services, string(k))
+
+		return secrets.ForEach(func(_, v []byte) error {
+			entry, err := OpenEntry(v, key)
+			if err == nil {
+				entries = append(entries, VaultListEntry{
+					Service:  entry.Service,
+					Username: entry.Username,
+				})
+			}
 			return nil
 		})
 	})
-	return services, err
+	return entries, err
 }
 
 // SplitVault shards the vault master key using Shamir's Secret Sharing.

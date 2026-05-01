@@ -6,7 +6,6 @@ import (
 	"io"
 	"log/slog"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -365,29 +364,9 @@ func completeVaults(cmd *cobra.Command, args []string, toComplete string) ([]str
 }
 
 func completeServices(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-	vaultName, _ := cmd.Flags().GetString("vault")
-	if vaultName == "" {
-		vaultName = "default"
-	}
-
-	conf := crypto.GetGlobalConfig()
-	vaultPath := filepath.Join(conf.Paths.VaultsDir, vaultName+".vault")
-	if _, err := os.Stat(vaultPath); err != nil {
-		return nil, cobra.ShellCompDirectiveNoFileComp
-	}
-
-	services, err := crypto.ListVaultEntries(vaultPath)
-	if err != nil {
-		return nil, cobra.ShellCompDirectiveError
-	}
-
-	var results []string
-	for _, s := range services {
-		if strings.HasPrefix(s, toComplete) {
-			results = append(results, s)
-		}
-	}
-	return results, cobra.ShellCompDirectiveNoFileComp
+	// Service names are now hashed for privacy in V4.1.
+	// Autocomplete is disabled to prevent leaking service presence without the vault passphrase.
+	return nil, cobra.ShellCompDirectiveNoFileComp
 }
 
 func completeProfiles(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
@@ -412,6 +391,9 @@ func completeProfiles(cmd *cobra.Command, args []string, toComplete string) ([]s
 func InitEngine() error {
 	SetupViper()
 	crypto.ResetGlobalConfig()
+	if err := crypto.EnsureMaknoonDirs(); err != nil {
+		return err
+	}
 	var policy crypto.SecurityPolicy
 
 	// Initialize UI Handler if not already present

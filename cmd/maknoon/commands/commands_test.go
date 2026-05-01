@@ -100,7 +100,7 @@ func TestVaultGet(t *testing.T) {
 
 	// Clean up
 	home, _ := os.UserHomeDir()
-	dbPath := filepath.Join(home, crypto.MaknoonDir, crypto.VaultsDir, vaultName+".db")
+	dbPath := filepath.Join(home, crypto.MaknoonDir, crypto.VaultsDir, vaultName+".vault")
 	_ = os.Remove(dbPath)
 	defer os.Remove(dbPath)
 
@@ -111,7 +111,7 @@ func TestVaultGet(t *testing.T) {
 	defer os.Unsetenv("MAKNOON_PASSWORD")
 
 	setCmd := VaultCmd()
-	setCmd.SetArgs([]string{"--vault", vaultName, "--passphrase", passphrase, "set", "github"})
+	setCmd.SetArgs([]string{"--vault", vaultName, "--passphrase", passphrase, "set", "github", "--overwrite"})
 	if err := setCmd.Execute(); err != nil {
 		t.Fatal(err)
 	}
@@ -144,7 +144,7 @@ func TestVaultGet(t *testing.T) {
 		GlobalContext.UI.Stderr = oldStderr
 		output := buf.String()
 
-		if !strings.Contains(output, "service not found") {
+		if !strings.Contains(output, "not found") {
 			t.Errorf("Expected error for missing service in output, got: %s", output)
 		}
 	})
@@ -157,15 +157,14 @@ func TestVaultList(t *testing.T) {
 
 	// Clean up
 	home, _ := os.UserHomeDir()
-	dbPath := filepath.Join(home, crypto.MaknoonDir, crypto.VaultsDir, vaultName+".db")
+	dbPath := filepath.Join(home, crypto.MaknoonDir, crypto.VaultsDir, vaultName+".vault")
 	_ = os.Remove(dbPath)
 	defer os.Remove(dbPath)
-
 	setCmd := VaultCmd()
 	if err := os.Setenv("MAKNOON_PASSWORD", "p1"); err != nil {
 		t.Fatal(err)
 	}
-	setCmd.SetArgs([]string{"--vault", vaultName, "--passphrase", passphrase, "set", "svc1"})
+	setCmd.SetArgs([]string{"--vault", vaultName, "--passphrase", passphrase, "set", "svc1", "--overwrite"})
 	if err := setCmd.Execute(); err != nil {
 		t.Fatal(err)
 	}
@@ -173,10 +172,12 @@ func TestVaultList(t *testing.T) {
 	if err := os.Setenv("MAKNOON_PASSWORD", "p2"); err != nil {
 		t.Fatal(err)
 	}
-	setCmd.SetArgs([]string{"--vault", vaultName, "--passphrase", passphrase, "set", "svc2"})
+	setCmd = VaultCmd()
+	setCmd.SetArgs([]string{"--vault", vaultName, "--passphrase", passphrase, "set", "svc2", "--overwrite"})
 	if err := setCmd.Execute(); err != nil {
 		t.Fatal(err)
 	}
+
 	os.Unsetenv("MAKNOON_PASSWORD")
 
 	listCmd := VaultCmd()
@@ -364,7 +365,7 @@ func TestVaultJSON(t *testing.T) {
 
 	// Clean up
 	home, _ := os.UserHomeDir()
-	dbPath := filepath.Join(home, crypto.MaknoonDir, crypto.VaultsDir, vaultName+".db")
+	dbPath := filepath.Join(home, crypto.MaknoonDir, crypto.VaultsDir, vaultName+".vault")
 	_ = os.Remove(dbPath)
 	defer os.Remove(dbPath)
 
@@ -472,7 +473,7 @@ func TestVaultJSON(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if !strings.Contains(errBuf.String(), `"error": "service not found"`) {
+		if !strings.Contains(errBuf.String(), `"error":`) || !strings.Contains(errBuf.String(), "not found") {
 			t.Errorf("Error JSON formatting failed. Output: %s", errBuf.String())
 		}
 	})

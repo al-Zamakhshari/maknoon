@@ -88,10 +88,10 @@ type IdentityService interface {
 // VaultManager handles secure credential storage.
 type VaultManager interface {
 	VaultGet(ectx *EngineContext, vaultPath string, service string, passphrase []byte, pin string) (*VaultEntry, error)
-	VaultSet(ectx *EngineContext, vaultPath string, entry *VaultEntry, passphrase []byte, pin string) error
+	VaultSet(ectx *EngineContext, vaultPath string, entry *VaultEntry, passphrase []byte, pin string, overwrite bool) error
 	VaultRename(ectx *EngineContext, oldName, newName string) error
 	VaultDelete(ectx *EngineContext, name string) error
-	VaultList(ectx *EngineContext, vaultPath string) ([]string, error)
+	VaultList(ectx *EngineContext, vaultPath string, passphrase []byte) ([]VaultListEntry, error)
 	VaultSplit(ectx *EngineContext, vaultPath string, threshold, shares int, passphrase string) ([]string, error)
 	VaultRecover(ectx *EngineContext, mnemonics []string, vaultPath string, output string, passphrase string) (string, error)
 }
