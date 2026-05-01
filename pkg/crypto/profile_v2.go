@@ -26,7 +26,11 @@ type ProfileV2 struct {
 // ID returns the profile identifier (2).
 func (p *ProfileV2) ID() byte { return 2 }
 
-// SaltSize returns the salt size in bytes (32).
+// Name returns the profile name.
+func (p *ProfileV2) Name() string { return "aes" }
+
+// SaltSize returns the salt size in bytes (16 for AES).
+
 func (p *ProfileV2) SaltSize() int { return 32 }
 
 // NonceSize returns the standard AES-GCM nonce size (12 bytes).

@@ -27,6 +27,9 @@ type Profile interface {
 	// NewAEAD creates a new AEAD instance for symmetric encryption.
 	NewAEAD(key []byte) (cipher.AEAD, error)
 
+	// Name returns the human-readable name of the profile.
+	Name() string
+
 	// KEMName returns the name of the Key Encapsulation Mechanism.
 	KEMName() string
 

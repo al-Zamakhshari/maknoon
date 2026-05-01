@@ -34,6 +34,9 @@ type ProfileV3 struct {
 // ID returns the profile identifier (3).
 func (p *ProfileV3) ID() byte { return 3 }
 
+// Name returns the profile name.
+func (p *ProfileV3) Name() string { return "conservative" }
+
 // SaltSize returns the salt size in bytes (32).
 func (p *ProfileV3) SaltSize() int { return 32 }
 

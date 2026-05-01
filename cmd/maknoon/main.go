@@ -72,6 +72,7 @@ Post-Quantum Cryptography (PQC).`,
 	addCommand(commands.ReceiveCmd(), "core")
 	addCommand(commands.ChatCmd(), "core")
 	addCommand(commands.TunnelCmd(), "core")
+	addCommand(commands.NetCmd(), "core")
 	addCommand(commands.InfoCmd(), "core")
 
 	addCommand(commands.KeygenCmd(), "identity")
@@ -80,12 +81,14 @@ Post-Quantum Cryptography (PQC).`,
 
 	addCommand(commands.SignCmd(), "security")
 	addCommand(commands.VerifyCmd(), "security")
+	addCommand(commands.AuditCmd(), "security")
 
 	addCommand(commands.VaultCmd(), "utils")
 	addCommand(commands.GenCmd(), "utils")
 	addCommand(commands.ConfigCmd(), "utils")
 	addCommand(commands.ProfilesCmd(), "utils")
 	addCommand(commands.MCPServerCmd(), "utils")
+	addCommand(commands.DiagCmd(), "utils")
 
 	// Automation-only commands (Hidden from standard help)
 	schemaCmd := commands.SchemaCmd()

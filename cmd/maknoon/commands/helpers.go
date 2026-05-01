@@ -204,10 +204,16 @@ func getPassphrase(prompt string) ([]byte, bool, error) {
 // handleEngineEvents consumes the telemetry stream and updates the UI (e.g., progress bars).
 func handleEngineEvents(events <-chan crypto.EngineEvent, quiet bool) {
 	var bar *progressbar.ProgressBar
-	for ev := range events {
-		if quiet {
-			continue
+
+	// Never show progress bars in JSON or Agent mode, or if explicitly quiet
+	if quiet || GlobalContext.UI.JSON || viper.GetString("agent_mode") == "1" || !GlobalContext.UI.Interactive {
+		for range events {
+			// Drain events
 		}
+		return
+	}
+
+	for ev := range events {
 		switch e := ev.(type) {
 		case crypto.EventEncryptionStarted:
 			if e.TotalBytes > 0 {
@@ -425,10 +431,41 @@ func InitEngine() error {
 	var engineLogger *slog.Logger = slog.Default()
 
 	if viper.GetBool("trace") {
-		handler := slog.NewTextHandler(GlobalContext.UI.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug})
+		handler := slog.NewTextHandler(GlobalContext.UI.Stderr, &slog.HandlerOptions{
+			Level: slog.LevelDebug,
+			ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
+				// Industrial-grade redaction for sensitive fields
+				key := strings.ToLower(a.Key)
+				if strings.Contains(key, "pass") || strings.Contains(key, "secret") || strings.Contains(key, "key") || strings.Contains(key, "token") {
+					return slog.String(a.Key, "[REDACTED]")
+				}
+				return a
+			},
+		})
 		engineLogger = slog.New(handler)
 		slog.SetDefault(engineLogger)
-		slog.Debug("Maknoon Engine initializing", "version", "v4.0 Alpha", "args", os.Args)
+
+		// Redact sensitive flags from args before logging
+		safeArgs := make([]string, len(os.Args))
+		copy(safeArgs, os.Args)
+		for i, arg := range safeArgs {
+			if i > 0 {
+				prev := strings.ToLower(safeArgs[i-1])
+				if strings.Contains(prev, "pass") || strings.Contains(prev, "secret") || strings.Contains(prev, "key") {
+					safeArgs[i] = "[REDACTED]"
+				}
+			}
+			// Also check for --flag=value format
+			if strings.Contains(arg, "=") {
+				parts := strings.SplitN(arg, "=", 2)
+				key := strings.ToLower(parts[0])
+				if strings.Contains(key, "pass") || strings.Contains(key, "secret") || strings.Contains(key, "key") {
+					safeArgs[i] = parts[0] + "=[REDACTED]"
+				}
+			}
+		}
+
+		slog.Debug("Maknoon Engine initializing", "version", "v4.0 Alpha", "args", safeArgs)
 		slog.Debug("Paths resolved", "home", crypto.GetUserHomeDir(), "keys", conf.Paths.KeysDir, "vaults", conf.Paths.VaultsDir)
 	}
 

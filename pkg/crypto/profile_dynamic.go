@@ -41,6 +41,14 @@ type DynamicProfile struct {
 // ID returns the custom profile identifier.
 func (p *DynamicProfile) ID() byte { return p.CustomID }
 
+// Name returns the profile name.
+func (p *DynamicProfile) Name() string {
+	if p.CustomID >= 128 {
+		return "portable"
+	}
+	return "dynamic"
+}
+
 // SaltSize returns the custom salt size in bytes.
 func (p *DynamicProfile) SaltSize() int { return p.CustomSalt }
 

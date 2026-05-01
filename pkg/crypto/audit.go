@@ -41,14 +41,6 @@ func NewJSONFileLogger(path string) (*JSONFileLogger, error) {
 	return &JSONFileLogger{file: f}, nil
 }
 
-type auditEntry struct {
-	Timestamp string         `json:"timestamp"`
-	Action    string         `json:"action"`
-	Metadata  map[string]any `json:"metadata"`
-	Status    string         `json:"status"`
-	Error     string         `json:"error,omitempty"`
-}
-
 func (l *JSONFileLogger) LogEvent(action string, metadata map[string]any, err error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -60,7 +52,7 @@ func (l *JSONFileLogger) LogEvent(action string, metadata map[string]any, err er
 		errMsg = err.Error()
 	}
 
-	entry := auditEntry{
+	entry := AuditEntry{
 		Timestamp: time.Now().Format(time.RFC3339),
 		Action:    action,
 		Metadata:  metadata,
@@ -427,6 +419,18 @@ func (e *AuditEngine) RemoveProfile(ectx *EngineContext, name string) error {
 	}, err)
 
 	return err
+}
+
+func (e *AuditEngine) Diagnostic() DiagnosticResult {
+	return e.Engine.Diagnostic()
+}
+
+func (e *AuditEngine) NetworkStatus(ectx *EngineContext) (NetStatusResult, error) {
+	return e.Engine.NetworkStatus(ectx)
+}
+
+func (e *AuditEngine) AuditExport(ectx *EngineContext) ([]AuditEntry, error) {
+	return e.Engine.AuditExport(ectx)
 }
 
 func (e *AuditEngine) Inspect(ectx *EngineContext, in io.Reader) (*HeaderInfo, error) {

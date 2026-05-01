@@ -1,10 +1,16 @@
 package crypto
 
 import (
+	"bufio"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
+	"os"
+	"os/user"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -351,4 +357,105 @@ func SafeClear(b []byte) {
 	for i := range b {
 		b[i] = 0
 	}
+}
+
+// AuditExport returns a forensic history of cryptographic operations.
+func (e *Engine) AuditExport(ectx *EngineContext) ([]AuditEntry, error) {
+	logPath := e.Config.Audit.LogFile
+	if logPath == "" {
+		home := GetUserHomeDir()
+		logPath = filepath.Join(home, MaknoonDir, "audit.log")
+	}
+
+	f, err := os.Open(logPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return []AuditEntry{}, nil
+		}
+		return nil, fmt.Errorf("failed to open audit log: %w", err)
+	}
+	defer f.Close()
+
+	var entries []AuditEntry
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		var entry AuditEntry
+		if err := json.Unmarshal(scanner.Bytes(), &entry); err == nil {
+			entries = append(entries, entry)
+		}
+	}
+
+	return entries, scanner.Err()
+}
+
+// NetworkStatus returns a snapshot of the P2P network and tunnel state.
+func (e *Engine) NetworkStatus(ectx *EngineContext) (NetStatusResult, error) {
+	res := NetStatusResult{}
+
+	// 1. Check active tunnel
+	e.tunnelMu.RLock()
+	if e.activeTunnel != nil {
+		res.Tunnel.Active = true
+		res.Tunnel.LocalAddress = e.activeTunnel.LocalAddress
+		res.Tunnel.RemoteEndpoint = e.activeTunnel.RemoteEndpoint
+		res.Tunnel.HandshakeTime = e.activeTunnel.HandshakeTime
+	}
+	e.tunnelMu.RUnlock()
+
+	// 2. Create a temporary host to check P2P environment (if no persistent host)
+	h, err := tunnel.NewLibp2pHost()
+	if err != nil {
+		return res, fmt.Errorf("failed to initialize diagnostic host: %w", err)
+	}
+	defer h.Close()
+
+	res.PeerID = h.ID().String()
+	for _, addr := range h.Addrs() {
+		res.Addresses = append(res.Addresses, addr.String())
+	}
+	for _, p := range h.Mux().Protocols() {
+		res.Protocols = append(res.Protocols, string(p))
+	}
+
+	return res, nil
+}
+
+// Diagnostic gathers a complete manifest of the engine and environment state.
+func (e *Engine) Diagnostic() DiagnosticResult {
+	res := DiagnosticResult{}
+	res.Timestamp = time.Now().Format(time.RFC3339)
+
+	// System Info
+	res.System.OS = runtime.GOOS
+	res.System.Arch = runtime.GOARCH
+	res.System.Go = runtime.Version()
+	res.System.Version = "v4.0.0" // TODO: Wire to a central version constant
+
+	// User Info
+	if u, err := user.Current(); err == nil {
+		res.User.UID = u.Uid
+		res.User.GID = u.Gid
+		res.User.Username = u.Username
+		res.User.Home = u.HomeDir
+	} else {
+		res.User.Home = GetUserHomeDir()
+	}
+
+	// Path Info
+	home := res.User.Home
+	res.Paths.MaknoonDir = filepath.Join(home, MaknoonDir)
+	res.Paths.Config = filepath.Join(home, MaknoonDir, ConfigFileName)
+	res.Paths.Keys = filepath.Join(home, MaknoonDir, KeysDir)
+	res.Paths.Vaults = filepath.Join(home, MaknoonDir, VaultsDir)
+
+	// Engine Info
+	res.Engine.Policy = e.Policy.Name()
+	res.Engine.AgentMode = e.Policy.IsAgent()
+	res.Engine.DefaultProfile = e.Config.Performance.DefaultProfile
+	if profile, err := GetProfile(res.Engine.DefaultProfile, nil); err == nil {
+		res.Engine.ProfileName = profile.Name()
+	}
+	res.Engine.AuditEnabled = e.Config.Audit.Enabled
+
+	return res
 }

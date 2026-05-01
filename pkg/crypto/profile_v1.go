@@ -31,6 +31,9 @@ type ProfileV1 struct {
 // ID returns the profile identifier (1).
 func (p *ProfileV1) ID() byte { return 1 }
 
+// Name returns the profile name.
+func (p *ProfileV1) Name() string { return "nist" }
+
 // SaltSize returns the salt size in bytes (32).
 func (p *ProfileV1) SaltSize() int { return 32 }
 

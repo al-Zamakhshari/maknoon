@@ -129,3 +129,56 @@ type HeaderInfo struct {
 	IsSigned       bool   `json:"is_signed"`
 	IsStealth      bool   `json:"is_stealth"`
 }
+
+// DiagnosticResult provides a comprehensive state manifest of the engine and environment.
+type DiagnosticResult struct {
+	Timestamp string `json:"timestamp"`
+	System    struct {
+		OS      string `json:"os"`
+		Arch    string `json:"arch"`
+		Go      string `json:"go_version"`
+		Version string `json:"version"`
+	} `json:"system"`
+	User struct {
+		UID      string `json:"uid"`
+		GID      string `json:"gid"`
+		Username string `json:"username"`
+		Home     string `json:"home_dir"`
+	} `json:"user"`
+	Paths struct {
+		Config     string `json:"config_file"`
+		MaknoonDir string `json:"maknoon_dir"`
+		Keys       string `json:"keys_dir"`
+		Vaults     string `json:"vaults_dir"`
+	} `json:"paths"`
+	Engine struct {
+		Policy         string `json:"active_policy"`
+		DefaultProfile byte   `json:"default_profile_id"`
+		ProfileName    string `json:"default_profile_name"`
+		AgentMode      bool   `json:"agent_mode_active"`
+		AuditEnabled   bool   `json:"audit_enabled"`
+	} `json:"engine"`
+}
+
+// NetStatusResult provides a snapshot of the P2P network and tunnel state.
+type NetStatusResult struct {
+	PeerID    string   `json:"peer_id"`
+	Addresses []string `json:"addresses"`
+	Peers     int      `json:"peer_count"`
+	Protocols []string `json:"protocols"`
+	Tunnel    struct {
+		Active         bool   `json:"active"`
+		LocalAddress   string `json:"local_address,omitempty"`
+		RemoteEndpoint string `json:"remote_endpoint,omitempty"`
+		HandshakeTime  string `json:"handshake_time,omitempty"`
+	} `json:"tunnel"`
+}
+
+// AuditEntry represents a recorded cryptographic operation.
+type AuditEntry struct {
+	Timestamp string         `json:"timestamp"`
+	Action    string         `json:"action"`
+	Metadata  map[string]any `json:"metadata"`
+	Status    string         `json:"status"`
+	Error     string         `json:"error,omitempty"`
+}

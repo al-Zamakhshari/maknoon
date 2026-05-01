@@ -118,6 +118,9 @@ type StateProvider interface {
 	UpdateConfig(ectx *EngineContext, newConf *Config) error
 	RegisterProfile(ectx *EngineContext, name string, dp *DynamicProfile) error
 	RemoveProfile(ectx *EngineContext, name string) error
+	Diagnostic() DiagnosticResult
+	NetworkStatus(ectx *EngineContext) (NetStatusResult, error)
+	AuditExport(ectx *EngineContext) ([]AuditEntry, error)
 }
 
 // Inspector provides non-destructive analysis of encrypted Maknoon data.
