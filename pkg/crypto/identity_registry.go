@@ -51,13 +51,10 @@ func (m *IdentityManager) IdentityPublish(ctx context.Context, handle string, op
 
 	// 3. Dispatch to registries
 	if opts.Local {
-		cm, err := NewContactManager()
-		if err != nil {
-			return err
+		if m.Contacts == nil {
+			return fmt.Errorf("contact manager not initialized")
 		}
-		defer cm.Close()
-
-		if err := cm.Add(&Contact{
+		if err := m.Contacts.Add(&Contact{
 			Petname:   handle,
 			KEMPubKey: record.KEMPubKey,
 			SIGPubKey: record.SIGPubKey,

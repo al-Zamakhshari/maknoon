@@ -3,6 +3,7 @@ package crypto
 import (
 	"bufio"
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -25,6 +26,7 @@ type Engine struct {
 	Config     *Config
 	Identities *IdentityManager
 	Vaults     VaultStore
+	Contacts   *ContactManager
 	Logger     *slog.Logger
 
 	// Tunnel State
@@ -219,12 +221,7 @@ func (e *Engine) ChatStart(ectx *EngineContext, identityName string, target stri
 	} else {
 		// If target starts with @, resolve it
 		if strings.HasPrefix(target, "@") {
-			cm, err := NewContactManager()
-			if err != nil {
-				return nil, err
-			}
-			defer cm.Close()
-			c, err := cm.Get(target)
+			c, err := e.Contacts.Get(target)
 			if err != nil {
 				return nil, err
 			}
@@ -279,6 +276,13 @@ func (e *Engine) P2PKeepAlive(ectx *EngineContext, identityName string) error {
 	return nil
 }
 
+func (e *Engine) Close() error {
+	if e.Contacts != nil {
+		return e.Contacts.Close()
+	}
+	return nil
+}
+
 func (e *Engine) context(ectx *EngineContext) *EngineContext {
 	if ectx == nil {
 		return &EngineContext{
@@ -325,13 +329,99 @@ func NewEngine(policy SecurityPolicy, idMgr *IdentityManager, conf *Config, vaul
 		logger = slog.Default()
 	}
 
-	return &Engine{
+	e := &Engine{
 		Policy:     policy,
 		Config:     conf,
 		Identities: idMgr,
 		Vaults:     vaultStore,
 		Logger:     logger,
-	}, nil
+	}
+
+	// Initialize Contact Manager
+	contactsPath := filepath.Join(conf.Paths.VaultsDir, "..", "contacts.db")
+	store, err := vaultStore.Open(contactsPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open contacts store: %w", err)
+	}
+	e.Contacts = NewContactManager(store)
+	if idMgr != nil {
+		idMgr.Contacts = e.Contacts
+	}
+
+	return e, nil
+}
+
+func (e *Engine) ContactAdd(ectx *EngineContext, petname, kemPub, sigPub, note string) error {
+	ectx = e.context(ectx)
+	if err := e.enforce(ectx, CapIdentity); err != nil {
+		return err
+	}
+
+	kemBytes, err := hex.DecodeString(kemPub)
+	if err != nil {
+		return fmt.Errorf("invalid KEM public key: %w", err)
+	}
+	sigBytes, err := hex.DecodeString(sigPub)
+	if err != nil {
+		return fmt.Errorf("invalid SIG public key: %w", err)
+	}
+
+	peerID, err := DerivePeerID(sigBytes)
+	if err != nil {
+		return err
+	}
+
+	contact := &Contact{
+		Petname:   petname,
+		KEMPubKey: kemBytes,
+		SIGPubKey: sigBytes,
+		PeerID:    peerID,
+		AddedAt:   time.Now(),
+		Notes:     note,
+	}
+
+	return e.Contacts.Add(contact)
+}
+
+func (e *Engine) ContactList(ectx *EngineContext) ([]*Contact, error) {
+	ectx = e.context(ectx)
+	if err := e.enforce(ectx, CapIdentity); err != nil {
+		return nil, err
+	}
+	return e.Contacts.List()
+}
+
+func (e *Engine) ContactDelete(ectx *EngineContext, petname string) error {
+	ectx = e.context(ectx)
+	if err := e.enforce(ectx, CapIdentity); err != nil {
+		return err
+	}
+	return e.Contacts.Delete(petname)
+}
+
+func (e *Engine) ResolvePublicKey(ectx *EngineContext, input string, tofu bool) ([]byte, error) {
+	ectx = e.context(ectx)
+	// Resolution is usually a read operation, CapIdentity is sufficient
+	if err := e.enforce(ectx, CapIdentity); err != nil {
+		return nil, err
+	}
+	return e.Identities.ResolvePublicKey(input, tofu)
+}
+
+func (e *Engine) LoadPrivateKey(ectx *EngineContext, path string, passphrase []byte, pin string, agent bool) ([]byte, error) {
+	ectx = e.context(ectx)
+	if err := e.enforce(ectx, CapIdentity); err != nil {
+		return nil, err
+	}
+	return e.Identities.LoadPrivateKey(path, passphrase, pin, agent)
+}
+
+func (e *Engine) ResolveKeyPath(ectx *EngineContext, path, envVar string) string {
+	return e.Identities.ResolveKeyPath(path, envVar)
+}
+
+func (e *Engine) ResolveBaseKeyPath(ectx *EngineContext, name string) (string, string, error) {
+	return e.Identities.ResolveBaseKeyPath(name)
 }
 
 func (e *Engine) GeneratePassword(ectx *EngineContext, length int, noSymbols bool) (string, error) {

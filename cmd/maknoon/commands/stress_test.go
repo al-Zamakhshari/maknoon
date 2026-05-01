@@ -67,7 +67,7 @@ func TestIntegrationSecurityScenarios(t *testing.T) {
 		pass := "pass"
 
 		// Clean up previous test runs
-		home, _ := os.UserHomeDir()
+		home := crypto.GetUserHomeDir()
 		dbPath := filepath.Join(home, crypto.MaknoonDir, crypto.VaultsDir, vaultPath+".vault")
 		_ = os.Remove(dbPath)
 		defer os.Remove(dbPath)
@@ -101,18 +101,11 @@ func TestIntegrationSecurityScenarios(t *testing.T) {
 		getCmd := VaultCmd()
 		getCmd.SetArgs([]string{"--vault", vaultPath, "--passphrase", pass, "get", "service1", "--json"})
 
-		oldStdout := GlobalContext.UI.Stdout
-		r, w, _ := os.Pipe()
-		GlobalContext.UI.Stdout = w
 		SetJSONOutput(true)
-
-		_ = getCmd.Execute()
-
-		w.Close()
-		var buf bytes.Buffer
-		io.Copy(&buf, r)
-		GlobalContext.UI.Stdout = oldStdout
-		output := buf.String()
+		output := CaptureOutput(func() {
+			_ = getCmd.Execute()
+		})
+		SetJSONOutput(false)
 
 		if !strings.Contains(output, "secret2") {
 			t.Errorf("Case-insensitive vault collision failed to overwrite. Output: %s", output)

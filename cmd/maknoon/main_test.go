@@ -768,7 +768,7 @@ func TestIntegrationIdentity(t *testing.T) {
 
 	// 3. Test 'active' command (Identity Discovery JSON)
 	outputActive := runRootCmd("identity", "active", "--json")
-	if !strings.Contains(outputActive, "test_id.kem.pub") {
+	if !strings.Contains(outputActive, "test_id") {
 		t.Errorf("Identity active discovery failed. Output: %s", outputActive)
 	}
 

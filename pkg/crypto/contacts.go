@@ -3,14 +3,11 @@ package crypto
 import (
 	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
 	libp2pcrypto "github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/peer"
-	"go.etcd.io/bbolt"
 )
 
 // Contact represents a locally trusted identity (Petname).
@@ -52,39 +49,17 @@ func DerivePeerID(sigPub []byte) (string, error) {
 
 // ContactManager handles the local address book of trusted peers.
 type ContactManager struct {
-	db   *bbolt.DB
-	path string
+	store Store
 }
 
 const contactBucket = "contacts"
 
-func NewContactManager() (*ContactManager, error) {
-	home := GetUserHomeDir()
-	path := filepath.Join(home, MaknoonDir, "contacts.db")
-
-	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
-		return nil, err
-	}
-
-	db, err := bbolt.Open(path, 0600, &bbolt.Options{Timeout: 1 * time.Second})
-	if err != nil {
-		return nil, fmt.Errorf("failed to open contacts database: %w", err)
-	}
-
-	err = db.Update(func(tx *bbolt.Tx) error {
-		_, err := tx.CreateBucketIfNotExists([]byte(contactBucket))
-		return err
-	})
-	if err != nil {
-		db.Close()
-		return nil, err
-	}
-
-	return &ContactManager{db: db, path: path}, nil
+func NewContactManager(s Store) *ContactManager {
+	return &ContactManager{store: s}
 }
 
 func (m *ContactManager) Close() error {
-	return m.db.Close()
+	return m.store.Close()
 }
 
 // Add saves a new contact or updates an existing one.
@@ -93,19 +68,17 @@ func (m *ContactManager) Add(c *Contact) error {
 		return fmt.Errorf("petname must start with @")
 	}
 
-	return m.db.Update(func(tx *bbolt.Tx) error {
-		b := tx.Bucket([]byte(contactBucket))
+	return m.store.Update(func(tx Transaction) error {
 		data, _ := json.Marshal(c)
-		return b.Put([]byte(strings.ToLower(c.Petname)), data)
+		return tx.Put(contactBucket, strings.ToLower(c.Petname), data)
 	})
 }
 
 // Get retrieves a contact by their petname.
 func (m *ContactManager) Get(petname string) (*Contact, error) {
 	var c Contact
-	err := m.db.View(func(tx *bbolt.Tx) error {
-		b := tx.Bucket([]byte(contactBucket))
-		v := b.Get([]byte(strings.ToLower(petname)))
+	err := m.store.View(func(tx Transaction) error {
+		v := tx.Get(contactBucket, strings.ToLower(petname))
 		if v == nil {
 			return fmt.Errorf("contact '%s' not found", petname)
 		}
@@ -117,9 +90,8 @@ func (m *ContactManager) Get(petname string) (*Contact, error) {
 // List returns all saved contacts.
 func (m *ContactManager) List() ([]*Contact, error) {
 	var contacts []*Contact
-	err := m.db.View(func(tx *bbolt.Tx) error {
-		b := tx.Bucket([]byte(contactBucket))
-		return b.ForEach(func(_, v []byte) error {
+	err := m.store.View(func(tx Transaction) error {
+		return tx.ForEach(contactBucket, func(_, v []byte) error {
 			var c Contact
 			if err := json.Unmarshal(v, &c); err == nil {
 				contacts = append(contacts, &c)
@@ -132,8 +104,7 @@ func (m *ContactManager) List() ([]*Contact, error) {
 
 // Delete removes a contact from the address book.
 func (m *ContactManager) Delete(petname string) error {
-	return m.db.Update(func(tx *bbolt.Tx) error {
-		b := tx.Bucket([]byte(contactBucket))
-		return b.Delete([]byte(strings.ToLower(petname)))
+	return m.store.Update(func(tx Transaction) error {
+		return tx.Delete(contactBucket, strings.ToLower(petname))
 	})
 }

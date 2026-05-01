@@ -44,7 +44,8 @@ type Identity struct {
 
 // IdentityManager handles local key storage and resolution.
 type IdentityManager struct {
-	Store KeyStore
+	Store    KeyStore
+	Contacts *ContactManager
 }
 
 // NewIdentityManager creates an IdentityManager with default paths.
@@ -58,8 +59,11 @@ func NewIdentityManager() *IdentityManager {
 }
 
 // NewCustomIdentityManager allows injecting a specific storage backend.
-func NewCustomIdentityManager(store KeyStore) *IdentityManager {
-	return &IdentityManager{Store: store}
+func NewCustomIdentityManager(store KeyStore, contacts *ContactManager) *IdentityManager {
+	return &IdentityManager{
+		Store:    store,
+		Contacts: contacts,
+	}
 }
 
 // ResolveKeyPath checks if a key exists locally, in ~/.maknoon/keys/, or in environment variables.
@@ -318,12 +322,10 @@ func (m *IdentityManager) UnlockPrivateKeyWithFIDOOrPass(password []byte, pin st
 func (m *IdentityManager) ResolvePublicKey(input string, tofu bool) ([]byte, error) {
 	// 1. Handle Petnames (@handle)
 	if strings.HasPrefix(input, "@") {
-		cm, err := NewContactManager()
-		if err != nil {
-			return nil, err
+		if m.Contacts == nil {
+			return nil, fmt.Errorf("contact manager not initialized")
 		}
-		defer cm.Close()
-		c, err := cm.Get(input)
+		c, err := m.Contacts.Get(input)
 		if err == nil {
 			return c.KEMPubKey, nil
 		}
@@ -332,7 +334,7 @@ func (m *IdentityManager) ResolvePublicKey(input string, tofu bool) ([]byte, err
 		record, DiscoveryErr := reg.Resolve(context.Background(), input)
 		if DiscoveryErr == nil {
 			if tofu {
-				_ = cm.Add(&Contact{
+				_ = m.Contacts.Add(&Contact{
 					Petname:   input,
 					KEMPubKey: record.KEMPubKey,
 					SIGPubKey: record.SIGPubKey,
@@ -342,7 +344,7 @@ func (m *IdentityManager) ResolvePublicKey(input string, tofu bool) ([]byte, err
 			}
 			return record.KEMPubKey, nil
 		}
-		return nil, fmt.Errorf("identity discovered failed: %v", DiscoveryErr)
+		return nil, fmt.Errorf("petname resolution failed: %w (discovery error: %v)", err, DiscoveryErr)
 	}
 
 	// 3. Handle Local Paths
@@ -479,42 +481,6 @@ func (e *Engine) IdentityPublish(ectx *EngineContext, handle string, opts Identi
 		return err
 	}
 	return e.Identities.IdentityPublish(ectx.Context, handle, opts)
-}
-
-func (e *Engine) ContactAdd(ectx *EngineContext, petname, kemPub, sigPub, note string) error {
-	ectx = e.context(ectx)
-	if err := e.enforce(ectx, CapIdentity); err != nil {
-		return err
-	}
-	cm, err := NewContactManager()
-	if err != nil {
-		return err
-	}
-	defer cm.Close()
-
-	kp, _ := hex.DecodeString(kemPub)
-	sp, _ := hex.DecodeString(sigPub)
-
-	return cm.Add(&Contact{
-		Petname:   petname,
-		KEMPubKey: kp,
-		SIGPubKey: sp,
-		Notes:     note,
-		AddedAt:   time.Now(),
-	})
-}
-
-func (e *Engine) ContactList(ectx *EngineContext) ([]*Contact, error) {
-	ectx = e.context(ectx)
-	if err := e.enforce(ectx, CapIdentity); err != nil {
-		return nil, err
-	}
-	cm, err := NewContactManager()
-	if err != nil {
-		return nil, err
-	}
-	defer cm.Close()
-	return cm.List()
 }
 
 func (id *Identity) Wipe() {

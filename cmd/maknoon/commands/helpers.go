@@ -44,6 +44,9 @@ type JSONPresenter struct {
 }
 
 func (p *JSONPresenter) RenderSuccess(result any) {
+	if p.Writer == nil {
+		return
+	}
 	enc := json.NewEncoder(p.Writer)
 	enc.SetIndent("", "  ")
 	_ = enc.Encode(result)
@@ -86,7 +89,14 @@ func (p *CLIPresenter) RenderMessage(msg string) {
 // GetPresenter returns the appropriate presenter based on current mode.
 func (h *UIHandler) GetPresenter() Presenter {
 	if h.JSON {
-		return &JSONPresenter{Writer: h.Stdout}
+		w := GlobalContext.JSONWriter
+		if w == nil {
+			w = JSONWriter
+		}
+		if w == nil {
+			w = h.Stdout
+		}
+		return &JSONPresenter{Writer: w}
 	}
 	return &CLIPresenter{Stdout: h.Stdout, Stderr: h.Stderr}
 }
@@ -389,6 +399,10 @@ func completeProfiles(cmd *cobra.Command, args []string, toComplete string) ([]s
 
 // InitEngine initializes the GlobalContext's Engine with the appropriate policy and audit logging.
 func InitEngine() error {
+	if GlobalContext.Engine != nil {
+		_ = GlobalContext.Engine.Close()
+	}
+
 	SetupViper()
 	crypto.ResetGlobalConfig()
 	if err := crypto.EnsureMaknoonDirs(); err != nil {

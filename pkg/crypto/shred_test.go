@@ -7,7 +7,17 @@ import (
 )
 
 func TestSecureDelete(t *testing.T) {
-	e, _ := NewEngine(nil, nil, nil, nil, nil)
+	tmpDir := t.TempDir()
+	origHome := os.Getenv("HOME")
+	os.Setenv("HOME", tmpDir)
+	defer os.Setenv("HOME", origHome)
+
+	ResetGlobalConfig()
+	e, err := NewEngine(nil, nil, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("Failed to create engine: %v", err)
+	}
+	defer e.Close()
 
 	// 1. Test single file
 	tmpFile, err := os.CreateTemp("", "maknoon-shred-test")
@@ -30,18 +40,18 @@ func TestSecureDelete(t *testing.T) {
 	}
 
 	// 2. Test directory
-	tmpDir, err := os.MkdirTemp("", "maknoon-shred-dir-test")
+	tmpDirTest, err := os.MkdirTemp("", "maknoon-shred-dir-test")
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// Add some files and subdirs
-	file1 := filepath.Join(tmpDir, "file1.txt")
+	file1 := filepath.Join(tmpDirTest, "file1.txt")
 	if err := os.WriteFile(file1, []byte("data1"), 0600); err != nil {
 		t.Fatal(err)
 	}
 
-	subDir := filepath.Join(tmpDir, "subdir")
+	subDir := filepath.Join(tmpDirTest, "subdir")
 	if err := os.Mkdir(subDir, 0700); err != nil {
 		t.Fatal(err)
 	}
@@ -50,11 +60,11 @@ func TestSecureDelete(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := e.SecureDelete(tmpDir); err != nil {
+	if err := e.SecureDelete(tmpDirTest); err != nil {
 		t.Fatalf("SecureDelete(dir) failed: %v", err)
 	}
 
-	if _, err := os.Stat(tmpDir); !os.IsNotExist(err) {
-		t.Errorf("Directory still exists after SecureDelete: %s", tmpDir)
+	if _, err := os.Stat(tmpDirTest); !os.IsNotExist(err) {
+		t.Errorf("Directory still exists after SecureDelete: %s", tmpDirTest)
 	}
 }

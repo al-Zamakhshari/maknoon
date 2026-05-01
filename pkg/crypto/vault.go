@@ -10,9 +10,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
-
-	"go.etcd.io/bbolt"
 )
 
 const (
@@ -39,7 +36,43 @@ func (e *Engine) VaultSet(ectx *EngineContext, vaultPath string, entry *VaultEnt
 		return err
 	}
 
-	return SetVaultEntry(path, entry, passphrase, overwrite)
+	store, err := e.Vaults.Open(path)
+	if err != nil {
+		return err
+	}
+	defer store.Close()
+
+	return store.Update(func(tx Transaction) error {
+		// Get or create salt
+		salt := tx.Get(metaBucket, saltKey)
+		if salt == nil {
+			salt = make([]byte, 32)
+			if _, err := io.ReadFull(rand.Reader, salt); err != nil {
+				return err
+			}
+			if err := tx.Put(metaBucket, saltKey, salt); err != nil {
+				return err
+			}
+		}
+
+		key := DeriveVaultKey(passphrase, salt)
+		defer SafeClear(key)
+
+		payload, err := SealEntry(entry, key)
+		if err != nil {
+			return err
+		}
+
+		// Use Hashed key for privacy
+		serviceKey := Sha256Hex([]byte(strings.ToLower(entry.Service)))
+		if !overwrite {
+			if tx.Get(vaultBucket, serviceKey) != nil {
+				return &ErrState{Reason: fmt.Sprintf("service '%s' already exists (use overwrite to replace)", entry.Service)}
+			}
+		}
+
+		return tx.Put(vaultBucket, serviceKey, payload)
+	})
 }
 
 // VaultGet reads and decrypts a vault entry from disk.
@@ -60,7 +93,35 @@ func (e *Engine) VaultGet(ectx *EngineContext, vaultPath string, service string,
 		return nil, err
 	}
 
-	return GetVaultEntry(path, service, passphrase)
+	store, err := e.Vaults.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer store.Close()
+
+	var entry *VaultEntry
+	err = store.View(func(tx Transaction) error {
+		salt := tx.Get(metaBucket, saltKey)
+		if salt == nil {
+			return &ErrAuthentication{Reason: "vault salt missing"}
+		}
+
+		// Use Hashed key
+		serviceKey := Sha256Hex([]byte(strings.ToLower(service)))
+		payload := tx.Get(vaultBucket, serviceKey)
+		if payload == nil {
+			return &ErrState{Reason: fmt.Sprintf("service '%s' not found", service)}
+		}
+
+		key := DeriveVaultKey(passphrase, salt)
+		defer SafeClear(key)
+
+		var err error
+		entry, err = OpenEntry(payload, key)
+		return err
+	})
+
+	return entry, err
 }
 
 func (e *Engine) VaultDelete(ectx *EngineContext, name string) error {
@@ -125,7 +186,35 @@ func (e *Engine) VaultList(ectx *EngineContext, vaultPath string, passphrase []b
 	if err := ectx.Policy.ValidatePath(path); err != nil {
 		return nil, err
 	}
-	return ListVaultEntries(path, passphrase)
+
+	store, err := e.Vaults.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer store.Close()
+
+	var entries []VaultListEntry
+	err = store.View(func(tx Transaction) error {
+		salt := tx.Get(metaBucket, saltKey)
+		if salt == nil {
+			return &ErrAuthentication{Reason: "vault salt missing"}
+		}
+
+		key := DeriveVaultKey(passphrase, salt)
+		defer SafeClear(key)
+
+		return tx.ForEach(vaultBucket, func(_, v []byte) error {
+			entry, err := OpenEntry(v, key)
+			if err == nil {
+				entries = append(entries, VaultListEntry{
+					Service:  entry.Service,
+					Username: entry.Username,
+				})
+			}
+			return nil
+		})
+	})
+	return entries, err
 }
 
 func (e *Engine) VaultSplit(ectx *EngineContext, vaultPath string, threshold, shares int, passphrase string) ([]string, error) {
@@ -177,92 +266,6 @@ type VaultEntry struct {
 	Note     string      `json:"note,omitempty"` // Legacy compatibility
 }
 
-// SetVaultEntry is the package-level helper that performs the actual bbolt operation.
-func SetVaultEntry(vaultPath string, entry *VaultEntry, passphrase []byte, overwrite bool) error {
-	db, err := bbolt.Open(vaultPath, 0600, &bbolt.Options{Timeout: 1 * time.Second})
-	if err != nil {
-		return &ErrIO{Path: vaultPath, Reason: err.Error()}
-	}
-	defer db.Close()
-
-	return db.Update(func(tx *bbolt.Tx) error {
-		// Get or create salt
-		meta, _ := tx.CreateBucketIfNotExists([]byte(metaBucket))
-		salt := meta.Get([]byte(saltKey))
-		if salt == nil {
-			salt = make([]byte, 16)
-			if _, err := io.ReadFull(rand.Reader, salt); err != nil {
-				return err
-			}
-			if err := meta.Put([]byte(saltKey), salt); err != nil {
-				return err
-			}
-		}
-
-		key := DeriveVaultKey(passphrase, salt)
-		defer SafeClear(key)
-
-		payload, err := SealEntry(entry, key)
-		if err != nil {
-			return err
-		}
-
-		secrets, _ := tx.CreateBucketIfNotExists([]byte(vaultBucket))
-
-		// Use Hashed key for privacy
-		serviceKey := Sha256Hex([]byte(strings.ToLower(entry.Service)))
-		if !overwrite {
-			if secrets.Get([]byte(serviceKey)) != nil {
-				return &ErrState{Reason: fmt.Sprintf("service '%s' already exists (use overwrite to replace)", entry.Service)}
-			}
-		}
-
-		return secrets.Put([]byte(serviceKey), payload)
-	})
-}
-
-// GetVaultEntry is the package-level helper that performs the actual bbolt operation.
-func GetVaultEntry(vaultPath, service string, passphrase []byte) (*VaultEntry, error) {
-	db, err := bbolt.Open(vaultPath, 0600, &bbolt.Options{Timeout: 1 * time.Second})
-	if err != nil {
-		return nil, &ErrIO{Path: vaultPath, Reason: err.Error()}
-	}
-	defer db.Close()
-
-	var entry *VaultEntry
-	err = db.View(func(tx *bbolt.Tx) error {
-		meta := tx.Bucket([]byte(metaBucket))
-		if meta == nil {
-			return &ErrAuthentication{Reason: "vault is uninitialized"}
-		}
-		salt := meta.Get([]byte(saltKey))
-		if salt == nil {
-			return &ErrAuthentication{Reason: "vault salt missing"}
-		}
-
-		secrets := tx.Bucket([]byte(vaultBucket))
-		if secrets == nil {
-			return &ErrState{Reason: "vault is empty"}
-		}
-
-		// Use Hashed key
-		serviceKey := Sha256Hex([]byte(strings.ToLower(service)))
-		payload := secrets.Get([]byte(serviceKey))
-		if payload == nil {
-			return &ErrState{Reason: fmt.Sprintf("service '%s' not found", service)}
-		}
-
-		key := DeriveVaultKey(passphrase, salt)
-		defer SafeClear(key)
-
-		var err error
-		entry, err = OpenEntry(payload, key)
-		return err
-	})
-
-	return entry, err
-}
-
 // SealEntry binary encodes and encrypts a vault entry.
 func SealEntry(entry *VaultEntry, key []byte) ([]byte, error) {
 	b, _ := json.Marshal(entry)
@@ -310,47 +313,6 @@ func OpenEntry(payload, key []byte) (*VaultEntry, error) {
 // DeriveVaultKey uses the default profile's KDF to derive a vault master key.
 func DeriveVaultKey(passphrase, salt []byte) []byte {
 	return DefaultProfile().DeriveKey(passphrase, salt)
-}
-
-// ListVaultEntries returns all service names and usernames in a vault.
-func ListVaultEntries(vaultPath string, passphrase []byte) ([]VaultListEntry, error) {
-	db, err := bbolt.Open(vaultPath, 0600, &bbolt.Options{Timeout: 1 * time.Second})
-	if err != nil {
-		return nil, &ErrIO{Path: vaultPath, Reason: err.Error()}
-	}
-	defer db.Close()
-
-	var entries []VaultListEntry
-	err = db.View(func(tx *bbolt.Tx) error {
-		meta := tx.Bucket([]byte(metaBucket))
-		if meta == nil {
-			return &ErrAuthentication{Reason: "vault is uninitialized"}
-		}
-		salt := meta.Get([]byte(saltKey))
-		if salt == nil {
-			return &ErrAuthentication{Reason: "vault salt missing"}
-		}
-
-		key := DeriveVaultKey(passphrase, salt)
-		defer SafeClear(key)
-
-		secrets := tx.Bucket([]byte(vaultBucket))
-		if secrets == nil {
-			return nil
-		}
-
-		return secrets.ForEach(func(_, v []byte) error {
-			entry, err := OpenEntry(v, key)
-			if err == nil {
-				entries = append(entries, VaultListEntry{
-					Service:  entry.Service,
-					Username: entry.Username,
-				})
-			}
-			return nil
-		})
-	})
-	return entries, err
 }
 
 // SplitVault shards the vault master key using Shamir's Secret Sharing.

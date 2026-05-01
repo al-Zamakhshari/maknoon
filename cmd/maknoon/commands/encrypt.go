@@ -106,8 +106,7 @@ func EncryptCmd() *cobra.Command {
 			}
 
 			if signKeyPath != "" || viper.GetString("private_key") != "" {
-				m := crypto.NewIdentityManager()
-				resolvedSignPath := m.ResolveKeyPath(signKeyPath, "MAKNOON_PRIVATE_KEY")
+				resolvedSignPath := GlobalContext.Engine.ResolveKeyPath(nil, signKeyPath, "MAKNOON_PRIVATE_KEY")
 				if resolvedSignPath != "" {
 					var pin string
 					if _, err := os.Stat(strings.TrimSuffix(resolvedSignPath, ".key") + ".fido2"); err == nil {
@@ -117,7 +116,7 @@ func EncryptCmd() *cobra.Command {
 							return err2
 						}
 					}
-					sk, err := m.LoadPrivateKey(resolvedSignPath, []byte(passphrase), pin, false)
+					sk, err := GlobalContext.Engine.LoadPrivateKey(nil, resolvedSignPath, []byte(passphrase), pin, false)
 					if err == nil {
 						opts.SigningKey = sk
 					}
@@ -242,7 +241,6 @@ func resolveEncryptOutput(outPath, inPath string) (io.Writer, string, error) {
 }
 
 func resolveEncryptionKeysMulti(opts *crypto.Options, pubKeyPaths []string, passphrase, inputPath string, tofu bool) error {
-	m := crypto.NewIdentityManager()
 	if len(pubKeyPaths) == 0 {
 		if env := viper.GetString("public_key"); env != "" {
 			pubKeyPaths = append(pubKeyPaths, env)
@@ -250,7 +248,7 @@ func resolveEncryptionKeysMulti(opts *crypto.Options, pubKeyPaths []string, pass
 	}
 
 	for _, path := range pubKeyPaths {
-		pk, err := m.ResolvePublicKey(path, tofu)
+		pk, err := GlobalContext.Engine.ResolvePublicKey(nil, path, tofu)
 		if err != nil {
 			return err
 		}

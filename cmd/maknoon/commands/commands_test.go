@@ -4,7 +4,6 @@ package commands
 import (
 	"bytes"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -14,6 +13,16 @@ import (
 )
 
 func TestMain(m *testing.M) {
+	tmpDir, err := os.MkdirTemp("", "maknoon-cmd-test")
+	if err != nil {
+		fmt.Printf("Failed to create temp dir: %v\n", err)
+		os.Exit(1)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	origHome := os.Getenv("HOME")
+	os.Setenv("HOME", tmpDir)
+
 	_ = InitEngine()
 	// Initialize a test UI that allows capturing sensitive output into buffers
 	GlobalContext.UI = &UIHandler{
@@ -22,7 +31,15 @@ func TestMain(m *testing.M) {
 		Interactive: true, // Allow tests to see "sensitive" info
 		JSON:        false,
 	}
-	os.Exit(m.Run())
+
+	code := m.Run()
+
+	if GlobalContext.Engine != nil {
+		_ = GlobalContext.Engine.Close()
+	}
+
+	os.Setenv("HOME", origHome)
+	os.Exit(code)
 }
 
 func TestGenCmd(t *testing.T) {
@@ -99,7 +116,7 @@ func TestVaultGet(t *testing.T) {
 	passphrase := "testpass"
 
 	// Clean up
-	home, _ := os.UserHomeDir()
+	home := crypto.GetUserHomeDir()
 	dbPath := filepath.Join(home, crypto.MaknoonDir, crypto.VaultsDir, vaultName+".vault")
 	_ = os.Remove(dbPath)
 	defer os.Remove(dbPath)
@@ -132,17 +149,9 @@ func TestVaultGet(t *testing.T) {
 		getCmd := VaultCmd()
 		getCmd.SetArgs([]string{"--vault", vaultName, "--passphrase", passphrase, "get", "missing"})
 
-		oldStderr := GlobalContext.UI.Stderr
-		r, w, _ := os.Pipe()
-		GlobalContext.UI.Stderr = w
-
-		_ = getCmd.Execute()
-
-		w.Close()
-		var buf bytes.Buffer
-		io.Copy(&buf, r)
-		GlobalContext.UI.Stderr = oldStderr
-		output := buf.String()
+		output := CaptureOutput(func() {
+			_ = getCmd.Execute()
+		})
 
 		if !strings.Contains(output, "not found") {
 			t.Errorf("Expected error for missing service in output, got: %s", output)
@@ -156,7 +165,7 @@ func TestVaultList(t *testing.T) {
 	passphrase := "testpass"
 
 	// Clean up
-	home, _ := os.UserHomeDir()
+	home := crypto.GetUserHomeDir()
 	dbPath := filepath.Join(home, crypto.MaknoonDir, crypto.VaultsDir, vaultName+".vault")
 	_ = os.Remove(dbPath)
 	defer os.Remove(dbPath)
@@ -201,17 +210,9 @@ func TestDecryptFailures(t *testing.T) {
 		dec := DecryptCmd()
 		dec.SetArgs([]string{filepath.Join(tmpDir, "non-existent.makn")})
 
-		oldStderr := GlobalContext.UI.Stderr
-		r, w, _ := os.Pipe()
-		GlobalContext.UI.Stderr = w
-
-		_ = dec.Execute()
-
-		w.Close()
-		var buf bytes.Buffer
-		io.Copy(&buf, r)
-		GlobalContext.UI.Stderr = oldStderr
-		output := buf.String()
+		output := CaptureOutput(func() {
+			_ = dec.Execute()
+		})
 
 		if !strings.Contains(output, "no such file or directory") {
 			t.Errorf("Expected error for non-existent file, got: %s", output)
@@ -232,17 +233,9 @@ func TestDecryptFailures(t *testing.T) {
 		dec := DecryptCmd()
 		dec.SetArgs([]string{inputFile + ".makn", "-s", "wrong-pass", "-o", inputFile, "--quiet"})
 
-		oldStderr := GlobalContext.UI.Stderr
-		r, w, _ := os.Pipe()
-		GlobalContext.UI.Stderr = w
-
-		_ = dec.Execute()
-
-		w.Close()
-		var buf bytes.Buffer
-		io.Copy(&buf, r)
-		GlobalContext.UI.Stderr = oldStderr
-		output := buf.String()
+		output := CaptureOutput(func() {
+			_ = dec.Execute()
+		})
 
 		if !strings.Contains(output, "authentication failed") && !strings.Contains(output, "output path already exists") {
 			t.Errorf("Expected decryption failure for wrong passphrase, got: %s", output)
@@ -364,7 +357,7 @@ func TestVaultJSON(t *testing.T) {
 	passphrase := "testpass"
 
 	// Clean up
-	home, _ := os.UserHomeDir()
+	home := crypto.GetUserHomeDir()
 	dbPath := filepath.Join(home, crypto.MaknoonDir, crypto.VaultsDir, vaultName+".vault")
 	_ = os.Remove(dbPath)
 	defer os.Remove(dbPath)
@@ -392,21 +385,10 @@ func TestVaultJSON(t *testing.T) {
 		setCmd := VaultCmd()
 		setCmd.SetArgs([]string{"--vault", vaultName, "--passphrase", passphrase, "set", "service_env"})
 
-		oldStdout := os.Stdout
-		r, w, _ := os.Pipe()
-		os.Stdout = w
-		GlobalContext.UI.Stdout = w
+		output := CaptureOutput(func() {
+			_ = setCmd.Execute()
+		})
 
-		_ = setCmd.Execute()
-
-		w.Close()
-		var buf bytes.Buffer
-		io.Copy(&buf, r)
-		os.Stdout = oldStdout
-		GlobalContext.UI.Stdout = os.Stdout
-		output := buf.String()
-
-		fmt.Printf("DEBUG ENV OUTPUT: %s\n", output)
 		if !strings.Contains(output, `"status": "success"`) || !strings.Contains(output, `"service": "service_env"`) {
 			t.Errorf("Env var trigger failed. Output: %s", output)
 		}
@@ -418,25 +400,16 @@ func TestVaultJSON(t *testing.T) {
 		// Manually sync since main.go isn't running
 		SetJSONOutput(true)
 		getCmd := VaultCmd()
-		getCmd.SetArgs([]string{"--vault", vaultName, "--passphrase", passphrase, "--json", "get", "service_env"})
+		getCmd.SetArgs([]string{"--vault", vaultName, "--passphrase", passphrase, "get", "service_env", "--json"})
 
-		oldStdout := os.Stdout
-		r, w, _ := os.Pipe()
-		os.Stdout = w
-		GlobalContext.UI.Stdout = w
+		output := CaptureOutput(func() {
+			_ = getCmd.Execute()
+		})
 
-		_ = getCmd.Execute()
-
-		w.Close()
-		var buf bytes.Buffer
-		io.Copy(&buf, r)
-		os.Stdout = oldStdout
-		GlobalContext.UI.Stdout = os.Stdout
-		output := buf.String()
-
-		if !strings.Contains(output, `"service": "service_env"`) {
+		if !strings.Contains(output, `"password": "pass1"`) {
 			t.Errorf("Flag trigger failed. Output: %s", output)
 		}
+
 	})
 
 	// 3. Test Error Output in JSON mode
@@ -450,31 +423,12 @@ func TestVaultJSON(t *testing.T) {
 		getCmdErr := VaultCmd()
 		getCmdErr.SetArgs([]string{"--vault", vaultName, "--passphrase", passphrase, "get", "nonexistent"})
 
-		oldStdout := os.Stdout
-		oldStderr := os.Stderr
-		r, w, _ := os.Pipe()
-		os.Stdout = w
-		os.Stderr = w
+		output := CaptureOutput(func() {
+			_ = getCmdErr.Execute() // Expected to fail
+		})
 
-		// Ensure GlobalContext respects our redirection
-		GlobalContext.UI.Stdout = w
-
-		_ = getCmdErr.Execute() // Expected to fail
-
-		if err := w.Close(); err != nil {
-			t.Fatal(err)
-		}
-		os.Stdout = oldStdout
-		os.Stderr = oldStderr
-		GlobalContext.UI.Stdout = os.Stdout
-
-		var errBuf bytes.Buffer
-		if _, err := io.Copy(&errBuf, r); err != nil {
-			t.Fatal(err)
-		}
-
-		if !strings.Contains(errBuf.String(), `"error":`) || !strings.Contains(errBuf.String(), "not found") {
-			t.Errorf("Error JSON formatting failed. Output: %s", errBuf.String())
+		if !strings.Contains(output, `"error":`) || !strings.Contains(output, "not found") {
+			t.Errorf("Error JSON formatting failed. Output: %s", output)
 		}
 	})
 }

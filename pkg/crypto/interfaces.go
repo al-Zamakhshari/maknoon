@@ -83,6 +83,13 @@ type IdentityService interface {
 	IdentityPublish(ectx *EngineContext, handle string, opts IdentityPublishOptions) error
 	ContactAdd(ectx *EngineContext, petname, kemPub, sigPub, note string) error
 	ContactList(ectx *EngineContext) ([]*Contact, error)
+	ContactDelete(ectx *EngineContext, petname string) error
+
+	// Key Resolution and Loading
+	ResolvePublicKey(ectx *EngineContext, input string, tofu bool) ([]byte, error)
+	LoadPrivateKey(ectx *EngineContext, path string, passphrase []byte, pin string, agent bool) ([]byte, error)
+	ResolveKeyPath(ectx *EngineContext, path, envVar string) string
+	ResolveBaseKeyPath(ectx *EngineContext, name string) (string, string, error)
 }
 
 // VaultManager handles secure credential storage.
@@ -151,4 +158,6 @@ type MaknoonEngine interface {
 	Inspector
 	TunnelService
 	ChatService
+
+	Close() error
 }

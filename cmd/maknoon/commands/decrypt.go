@@ -2,11 +2,11 @@ package commands
 
 import (
 	"bytes"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/al-Zamakhshari/maknoon/pkg/crypto"
 	"github.com/spf13/cobra"
@@ -185,9 +185,8 @@ func DecryptCmd() *cobra.Command {
 				isTrusted := false
 				var existingContact *crypto.Contact
 
-				cm, err := crypto.NewContactManager()
+				contacts, err := GlobalContext.Engine.ContactList(nil)
 				if err == nil {
-					contacts, _ := cm.List()
 					for _, c := range contacts {
 						if bytes.Equal(c.KEMPubKey, senderKey) || bytes.Equal(c.SIGPubKey, senderKey) {
 							isTrusted = true
@@ -197,17 +196,20 @@ func DecryptCmd() *cobra.Command {
 					}
 
 					if !isTrusted && tofu {
-						newContact := &crypto.Contact{
-							Petname:   "@" + gid[:12],
-							SIGPubKey: senderKey,
-							AddedAt:   time.Now(),
-							Notes:     "Auto-learned via TOFU",
+						petname := "@" + gid[:12]
+						err := GlobalContext.Engine.ContactAdd(nil, petname, "", hex.EncodeToString(senderKey), "Auto-learned via TOFU")
+						if err == nil {
+							isTrusted = true
+							// Reload contacts to get the one we just added for existingContact
+							newContacts, _ := GlobalContext.Engine.ContactList(nil)
+							for _, c := range newContacts {
+								if c.Petname == petname {
+									existingContact = c
+									break
+								}
+							}
 						}
-						_ = cm.Add(newContact)
-						isTrusted = true
-						existingContact = newContact
 					}
-					cm.Close()
 				}
 
 				if !GlobalContext.UI.JSON {
@@ -316,8 +318,7 @@ func resolveDecryptionKey(magic, manualPass, keyPath string, useFido2 bool, isSt
 	}
 
 	if magic == crypto.MagicHeaderAsym {
-		m := crypto.NewIdentityManager()
-		resolvedPath := m.ResolveKeyPath(keyPath, "MAKNOON_PRIVATE_KEY")
+		resolvedPath := GlobalContext.Engine.ResolveKeyPath(nil, keyPath, "MAKNOON_PRIVATE_KEY")
 		if resolvedPath == "" {
 			return nil, nil, nil, fmt.Errorf("private key required via -k or MAKNOON_PRIVATE_KEY")
 		}
@@ -332,7 +333,7 @@ func resolveDecryptionKey(magic, manualPass, keyPath string, useFido2 bool, isSt
 			}
 		}
 
-		priv, err := m.LoadPrivateKey(resolvedPath, password, pin, isStdin)
+		priv, err := GlobalContext.Engine.LoadPrivateKey(nil, resolvedPath, password, pin, isStdin)
 		if err != nil {
 			return nil, nil, nil, err
 		}

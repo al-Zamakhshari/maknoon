@@ -5,28 +5,20 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
-
-	"go.etcd.io/bbolt"
 )
 
 func TestContactManager(t *testing.T) {
 	tmpDir := t.TempDir()
-	dbPath := filepath.Join(tmpDir, "contacts.db")
 
-	// 1. Initialize
-	db, err := bbolt.Open(dbPath, 0600, nil)
+	vaultStore := &FileSystemVaultStore{}
+	contactsPath := filepath.Join(tmpDir, "contacts.db")
+
+	store, err := vaultStore.Open(contactsPath)
 	if err != nil {
-		t.Fatalf("failed to open db: %v", err)
-	}
-	err = db.Update(func(tx *bbolt.Tx) error {
-		_, err := tx.CreateBucketIfNotExists([]byte(contactBucket))
-		return err
-	})
-	if err != nil {
-		t.Fatalf("failed to create bucket: %v", err)
+		t.Fatalf("failed to open store: %v", err)
 	}
 
-	m := &ContactManager{db: db, path: dbPath}
+	m := NewContactManager(store)
 	defer m.Close()
 
 	// 2. Add Contact
@@ -75,9 +67,11 @@ func TestContactManager(t *testing.T) {
 
 func TestContactInvalidPetname(t *testing.T) {
 	tmpDir := t.TempDir()
-	dbPath := filepath.Join(tmpDir, "contacts_err.db")
-	db, _ := bbolt.Open(dbPath, 0600, nil)
-	m := &ContactManager{db: db, path: dbPath}
+	vaultStore := &FileSystemVaultStore{}
+	contactsPath := filepath.Join(tmpDir, "contacts_err.db")
+
+	store, _ := vaultStore.Open(contactsPath)
+	m := NewContactManager(store)
 	defer m.Close()
 
 	err := m.Add(&Contact{Petname: "no-at-sign"})

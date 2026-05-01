@@ -21,7 +21,18 @@ func (m *MockAuditLogger) LogEvent(action string, metadata map[string]any, err e
 func (m *MockAuditLogger) Close() error { return nil }
 
 func TestAuditEngineDecorator(t *testing.T) {
-	core, _ := NewEngine(&HumanPolicy{}, nil, nil, nil, nil)
+	tmpDir := t.TempDir()
+	origHome := os.Getenv("HOME")
+	os.Setenv("HOME", tmpDir)
+	defer os.Setenv("HOME", origHome)
+
+	conf := DefaultConfig()
+	core, err := NewEngine(&HumanPolicy{}, nil, conf, nil, nil)
+	if err != nil {
+		t.Fatalf("Failed to create engine: %v", err)
+	}
+	defer core.Close()
+
 	mockLogger := &MockAuditLogger{}
 	ae := &AuditEngine{
 		Engine: core,

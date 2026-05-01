@@ -133,12 +133,17 @@ func TestP2PCustomIdentity(t *testing.T) {
 	os.Setenv("HOME", tmpDir)
 	defer os.Setenv("HOME", oldHome)
 
-	engine, _ := NewEngine(nil, nil, nil, nil, nil)
+	ResetGlobalConfig()
+	engine, err := NewEngine(nil, nil, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("Failed to create engine: %v", err)
+	}
+	defer engine.Close()
 	ctx := &EngineContext{Context: context.Background()}
 
 	// 2. Generate a custom identity
 	idName := "custom-peer"
-	_, err := engine.Identities.CreateIdentity(idName, nil, "", false, "nist")
+	_, err = engine.Identities.CreateIdentity(idName, nil, "", false, "nist")
 	if err != nil {
 		t.Fatalf("Failed to generate identity: %v", err)
 	}

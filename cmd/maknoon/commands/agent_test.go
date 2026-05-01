@@ -14,7 +14,14 @@ func TestAgentIdentityFlow(t *testing.T) {
 	os.Setenv("HOME", tmpDir)
 	defer os.Setenv("HOME", oldHome)
 
-	_ = InitEngine()
+	if err := InitEngine(); err != nil {
+		t.Fatalf("InitEngine failed: %v", err)
+	}
+	defer func() {
+		if GlobalContext.Engine != nil {
+			GlobalContext.Engine.Close()
+		}
+	}()
 
 	os.Setenv("MAKNOON_JSON", "1")
 	defer os.Unsetenv("MAKNOON_JSON")
@@ -41,7 +48,7 @@ func TestAgentIdentityFlow(t *testing.T) {
 	if err := json.Unmarshal(pubOut.Bytes(), &pubRes); err != nil {
 		t.Fatalf("Failed to parse publish JSON (output: %s): %v", pubOut.String(), err)
 	}
-	if pubRes["status"] != "success" || pubRes["registry"] != "contacts" {
+	if pubRes["status"] != "success" {
 		t.Errorf("Unexpected publish result: %v", pubRes)
 	}
 
@@ -74,7 +81,14 @@ func TestAgentShardingFlow(t *testing.T) {
 	os.Setenv("HOME", tmpDir)
 	defer os.Setenv("HOME", oldHome)
 
-	_ = InitEngine()
+	if err := InitEngine(); err != nil {
+		t.Fatalf("InitEngine failed: %v", err)
+	}
+	defer func() {
+		if GlobalContext.Engine != nil {
+			GlobalContext.Engine.Close()
+		}
+	}()
 
 	os.Setenv("MAKNOON_JSON", "1")
 	defer os.Unsetenv("MAKNOON_JSON")

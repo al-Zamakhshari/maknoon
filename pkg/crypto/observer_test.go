@@ -2,10 +2,23 @@ package crypto
 
 import (
 	"bytes"
+	"os"
 	"testing"
 )
 
 func TestObserverPattern(t *testing.T) {
+	tmpDir := t.TempDir()
+	origHome := os.Getenv("HOME")
+	os.Setenv("HOME", tmpDir)
+	defer os.Setenv("HOME", origHome)
+
+	ResetGlobalConfig()
+	engine, err := NewEngine(&HumanPolicy{}, nil, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("Failed to create engine: %v", err)
+	}
+	defer engine.Close()
+
 	data := make([]byte, ChunkSize*2)
 	r := bytes.NewReader(data)
 	var w bytes.Buffer
@@ -15,8 +28,6 @@ func TestObserverPattern(t *testing.T) {
 		Passphrase:  []byte("test"),
 		EventStream: events,
 	}
-
-	engine, _ := NewEngine(&HumanPolicy{}, nil, nil, nil, nil)
 
 	done := make(chan struct{})
 	var chunkCount int
@@ -37,7 +48,7 @@ func TestObserverPattern(t *testing.T) {
 		close(done)
 	}()
 
-	_, err := engine.Protect(nil, "testfile", r, &w, opts)
+	_, err = engine.Protect(nil, "testfile", r, &w, opts)
 	if err != nil {
 		t.Fatalf("Protect failed: %v", err)
 	}

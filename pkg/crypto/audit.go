@@ -361,6 +361,44 @@ func (e *AuditEngine) ContactList(ectx *EngineContext) ([]*Contact, error) {
 	return e.Engine.ContactList(ectx)
 }
 
+func (e *AuditEngine) ContactDelete(ectx *EngineContext, petname string) error {
+	start := time.Now()
+	err := e.Engine.ContactDelete(ectx, petname)
+	duration := time.Since(start)
+
+	e.Logger.LogEvent("contact_delete", map[string]any{
+		"petname":     petname,
+		"duration_ms": duration.Milliseconds(),
+	}, err)
+
+	return err
+}
+
+func (e *AuditEngine) ResolvePublicKey(ectx *EngineContext, input string, tofu bool) ([]byte, error) {
+	return e.Engine.ResolvePublicKey(ectx, input, tofu)
+}
+
+func (e *AuditEngine) LoadPrivateKey(ectx *EngineContext, path string, passphrase []byte, pin string, agent bool) ([]byte, error) {
+	start := time.Now()
+	key, err := e.Engine.LoadPrivateKey(ectx, path, passphrase, pin, agent)
+	duration := time.Since(start)
+
+	e.Logger.LogEvent("load_private_key", map[string]any{
+		"path":        e.sanitizePath(path),
+		"duration_ms": duration.Milliseconds(),
+	}, err)
+
+	return key, err
+}
+
+func (e *AuditEngine) ResolveKeyPath(ectx *EngineContext, path, envVar string) string {
+	return e.Engine.ResolveKeyPath(ectx, path, envVar)
+}
+
+func (e *AuditEngine) ResolveBaseKeyPath(ectx *EngineContext, name string) (string, string, error) {
+	return e.Engine.ResolveBaseKeyPath(ectx, name)
+}
+
 func (e *AuditEngine) GeneratePassword(ectx *EngineContext, length int, noSymbols bool) (string, error) {
 	return e.Engine.GeneratePassword(ectx, length, noSymbols)
 }
@@ -487,4 +525,18 @@ func (e *AuditEngine) ChatStart(ectx *EngineContext, identityName string, target
 	}, err)
 
 	return sess, err
+}
+
+func (e *AuditEngine) Close() error {
+	var errs []string
+	if err := e.Engine.Close(); err != nil {
+		errs = append(errs, err.Error())
+	}
+	if err := e.Logger.Close(); err != nil {
+		errs = append(errs, err.Error())
+	}
+	if len(errs) > 0 {
+		return fmt.Errorf("errors closing audit engine: %s", strings.Join(errs, "; "))
+	}
+	return nil
 }

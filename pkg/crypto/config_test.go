@@ -78,7 +78,13 @@ func TestEngineUpdateConfigPolicy(t *testing.T) {
 	defer os.Setenv("HOME", origHome)
 
 	// 1. Human Policy (Allowed)
-	engine, _ := NewEngine(&HumanPolicy{}, nil, nil, nil, nil)
+	conf := DefaultConfig()
+	engine, err := NewEngine(&HumanPolicy{}, nil, conf, nil, nil)
+	if err != nil {
+		t.Fatalf("Failed to create engine: %v", err)
+	}
+	defer engine.Close()
+
 	newConf := DefaultConfig()
 	newConf.DefaultIdentity = "human-updated"
 
@@ -87,7 +93,16 @@ func TestEngineUpdateConfigPolicy(t *testing.T) {
 	}
 
 	// 2. Agent Policy (Allowed for Industrial Agility)
-	agentEngine, _ := NewEngine(&AgentPolicy{}, nil, nil, nil, nil)
+	// We must close the first engine because bbolt locks the file
+	engine.Close()
+
+	conf2 := DefaultConfig()
+	agentEngine, err := NewEngine(&AgentPolicy{}, nil, conf2, nil, nil)
+	if err != nil {
+		t.Fatalf("Failed to create agent engine: %v", err)
+	}
+	defer agentEngine.Close()
+
 	if err := agentEngine.UpdateConfig(nil, newConf); err != nil {
 		t.Errorf("Agent policy should allow config update for agility missions, got: %v", err)
 	}
