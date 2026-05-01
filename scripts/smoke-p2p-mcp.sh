@@ -109,19 +109,23 @@ R_PATH=$(echo $R_DATA | cut -d'|' -f2)
 # 1. Identity Discovery
 echo -e "\n📡 Discovering Receiver Identity..."
 R_RES=$(mcp_call_node 8081 "$R_PATH" "chat_start" "{\"target\": \"\"}")
-R_ID=$(echo "$R_RES" | sed -n 's/.*"peer_id\\":\\"\([^\\"]*\)\\".*/\1/p' | head -n 1)
-if [ -z "$R_ID" ]; then
-    R_ID=$(echo "$R_RES" | sed -n 's/.*"peer_id":"\([^"]*\)".*/\1/p' | head -n 1)
-fi
-R_ADDR=$(echo "$R_RES" | grep -oE "/ip4/172.25.0.11/tcp/[0-9]+/p2p/12D3KooW[a-zA-Z0-9]+" | head -n 1)
+R_ID=$(echo "$R_RES" | jq -r '.result.content[0].text | fromjson | .peer_id')
+R_ADDR=$(echo "$R_RES" | jq -r '.result.content[0].text | fromjson | .addrs[]?' | grep "172.25.0.11" | head -n 1 || true)
 
 echo "🆔 Receiver ID: $R_ID"
-if [ -z "$R_ID" ]; then echo "❌ Identity discovery failed."; exit 1; fi
+if [ -z "$R_ID" ] || [ "$R_ID" == "null" ]; then echo "❌ Identity discovery failed."; exit 1; fi
 
 # 2. Chat Handshake
 echo -e "\n💬 Scenario: Identity-bound Chat Handshake"
 S_RES=$(mcp_call_node 8080 "$S_PATH" "chat_start" "{\"target\": \"\"}")
-S_ADDR=$(echo "$S_RES" | grep -oE "/ip4/172.25.0.10/tcp/[0-9]+/p2p/12D3KooW[a-zA-Z0-9]+" | head -n 1)
+S_ADDR=$(echo "$S_RES" | jq -r '.result.content[0].text | fromjson | .addrs[]?' | grep "172.25.0.10" | head -n 1 || true)
+
+if [ -z "$S_ADDR" ] || [ "$S_ADDR" == "null" ]; then
+    echo "⚠️  Warning: Sender Multiaddr not found in first try, retrying..."
+    sleep 5
+    S_RES=$(mcp_call_node 8080 "$S_PATH" "chat_start" "{\"target\": \"\"}")
+    S_ADDR=$(echo "$S_RES" | jq -r '.result.content[0].text | fromjson | .addrs[]?' | grep "172.25.0.10" | head -n 1 || true)
+fi
 
 echo "🤝 Receiver: Joining Sender via direct Multiaddr: $S_ADDR"
 JOIN_RES=$(mcp_call_node 8081 "$R_PATH" "chat_start" "{\"target\": \"$S_ADDR\"}")

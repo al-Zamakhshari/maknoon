@@ -1,0 +1,12 @@
+AUDIT: 21:01:37 | Action: chat_start | Status: SUCCESS | Meta: map[duration_ms:86 identity:agent-target target:]
+{
+  "event": "status",
+  "multiaddrs": [
+    "/ip4/127.0.0.1/tcp/61961/p2p/12D3KooWQqEAn4dqFsy2BPi4p5VyGFrDTz2QR93Hr97ZJJhBJGpH",
+    "/ip4/127.0.0.1/udp/63469/quic-v1/p2p/12D3KooWQqEAn4dqFsy2BPi4p5VyGFrDTz2QR93Hr97ZJJhBJGpH",
+    "/ip4/192.168.1.64/tcp/61961/p2p/12D3KooWQqEAn4dqFsy2BPi4p5VyGFrDTz2QR93Hr97ZJJhBJGpH",
+    "/ip4/192.168.1.64/udp/63469/quic-v1/p2p/12D3KooWQqEAn4dqFsy2BPi4p5VyGFrDTz2QR93Hr97ZJJhBJGpH"
+  ],
+  "peer_id": "12D3KooWQqEAn4dqFsy2BPi4p5VyGFrDTz2QR93Hr97ZJJhBJGpH",
+  "state": "established"
+}

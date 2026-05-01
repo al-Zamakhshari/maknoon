@@ -54,6 +54,9 @@ func configListCmd() *cobra.Command {
 				fmt.Println("  Nostr:")
 				fmt.Printf("    Relays:           %s\n", strings.Join(conf.Nostr.Relays, ", "))
 				fmt.Printf("    Publish Metadata: %v\n", conf.Nostr.PublishMetadata)
+				fmt.Println("  Audit:")
+				fmt.Printf("    Enabled:          %v\n", conf.Audit.Enabled)
+				fmt.Printf("    Log File:         %s\n", conf.Audit.LogFile)
 				fmt.Println("  Paths:")
 				fmt.Printf("    Keys:             %s\n", conf.Paths.KeysDir)
 				fmt.Printf("    Vaults:           %s\n", conf.Paths.VaultsDir)
@@ -80,6 +83,8 @@ Keys:
   agent.allowed_urls - Comma-separated list of permitted servers
   nostr.relays       - Comma-separated list of Nostr relays
   nostr.metadata     - Toggle publishing Maknoon info in about field (true/false)
+  audit.enabled      - Toggle forensic auditing (true/false)
+  audit.logfile      - Path to structured JSON audit log
   paths.keys         - Custom keys directory
   paths.vaults       - Custom vaults directory`,
 		Args: cobra.ExactArgs(2),
@@ -125,6 +130,10 @@ Keys:
 				}
 			case "nostr.metadata":
 				conf.Nostr.PublishMetadata = (val == "true")
+			case "audit.enabled":
+				conf.Audit.Enabled = (val == "true")
+			case "audit.logfile":
+				conf.Audit.LogFile = val
 			case "paths.keys":
 				conf.Paths.KeysDir = val
 			case "paths.vaults":

@@ -50,9 +50,10 @@ func runAgentChat(args []string) error {
 	}
 
 	p.RenderSuccess(map[string]interface{}{
-		"event":   "status",
-		"state":   "established",
-		"peer_id": sess.Host.ID().String(),
+		"event":      "status",
+		"state":      "established",
+		"peer_id":    sess.Host.ID().String(),
+		"multiaddrs": sess.Multiaddrs(),
 	})
 
 	// Input loop

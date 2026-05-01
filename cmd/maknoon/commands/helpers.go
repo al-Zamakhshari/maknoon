@@ -504,8 +504,8 @@ func InitEngine() error {
 
 	// Setup Audit Logging
 	var auditLogger crypto.AuditLogger = &crypto.ConsoleAuditLogger{Writer: GlobalContext.UI.Stderr}
-	if !viper.GetBool("verbose") && core.Config.Audit.Enabled && !isAgent {
-		// Fallback to file only if not verbose and enabled
+	if !viper.GetBool("verbose") && core.Config.Audit.Enabled {
+		// Use file logger if enabled and not in verbose console mode
 		l, err := crypto.NewJSONFileLogger(core.Config.Audit.LogFile)
 		if err == nil {
 			auditLogger = l
