@@ -182,7 +182,8 @@ func registerCryptoTools(s *server.MCPServer, engine crypto.MaknoonEngine) {
 			}
 			defer in.Close()
 
-			info, err := engine.Inspect(nil, in)
+			stealth, _ := args["stealth"].(bool)
+			info, err := engine.Inspect(nil, in, stealth)
 			if err != nil {
 				return crypto.FormatMCPError(err, "inspect_file")
 			}

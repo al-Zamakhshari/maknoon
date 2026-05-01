@@ -18,20 +18,15 @@ func VerifyCmd() *cobra.Command {
 		Short: "Verify a file's integrity and signature",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
+			p := GlobalContext.UI.GetPresenter()
 			filePath := args[0]
 			if err := validatePath(filePath); err != nil {
-				if JSONOutput {
-					printErrorJSON(err)
-					return nil
-				}
+				p.RenderError(err)
 				return err
 			}
 			data, err := os.ReadFile(filePath)
 			if err != nil {
-				if JSONOutput {
-					printErrorJSON(err)
-					return err
-				}
+				p.RenderError(err)
 				return err
 			}
 
@@ -41,37 +36,31 @@ func VerifyCmd() *cobra.Command {
 			sigBytes, err := os.ReadFile(signaturePath)
 			if err != nil {
 				err := fmt.Errorf("signature file not found: %w", err)
-				if JSONOutput {
-					printErrorJSON(err)
-					return nil
-				}
+				p.RenderError(err)
 				return err
 			}
 
-			im := crypto.NewIdentityManager()
-			pubKeyBytes, err := im.ResolvePublicKey(pubKeyPath, false)
+			pubKeyBytes, err := GlobalContext.Engine.ResolvePublicKey(nil, pubKeyPath, false)
 			if err != nil {
-				if JSONOutput {
-					printErrorJSON(err)
-					return nil
-				}
+				p.RenderError(err)
 				return err
 			}
 
-			valid := crypto.VerifySignature(data, sigBytes, pubKeyBytes)
+			valid, err := GlobalContext.Engine.Verify(nil, data, sigBytes, pubKeyBytes)
+			if err != nil {
+				p.RenderError(err)
+				return err
+			}
+
 			if valid {
-				if JSONOutput {
-					printJSON(crypto.CommonResult{Status: "success", Message: "Signature Verified"})
+				if GlobalContext.UI.JSON {
+					p.RenderSuccess(crypto.VerifyResult{Status: "success", Verified: true})
 				} else {
-					fmt.Println("✅ Signature Verified! The data is authentic and has not been tampered with.")
+					p.RenderMessage("✅ Signature Verified! The data is authentic and has not been tampered with.")
 				}
 			} else {
-
 				err := fmt.Errorf("❌ Signature Verification FAILED! The data might be corrupted or from an untrusted source")
-				if JSONOutput {
-					printErrorJSON(err)
-					return err
-				}
+				p.RenderError(err)
 				return err
 			}
 

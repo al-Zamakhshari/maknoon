@@ -347,9 +347,17 @@ func (m *IdentityManager) ResolvePublicKey(input string, tofu bool) ([]byte, err
 		return nil, fmt.Errorf("petname resolution failed: %w (discovery error: %v)", err, DiscoveryErr)
 	}
 
-	// 3. Handle Local Paths
-	if _, err := os.Stat(input); err == nil {
-		return os.ReadFile(input)
+	// 3. Handle Local Paths or Managed Keys
+	resolvedPath := input
+	if _, err := os.Stat(input); err != nil {
+		// Not a direct local path, check the managed store
+		if managed, err := m.Store.ResolvePath(input); err == nil {
+			resolvedPath = managed
+		}
+	}
+
+	if _, err := os.Stat(resolvedPath); err == nil {
+		return os.ReadFile(resolvedPath)
 	}
 
 	// 4. Handle Raw Hex

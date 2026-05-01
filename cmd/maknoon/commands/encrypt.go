@@ -5,7 +5,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/al-Zamakhshari/maknoon/pkg/crypto"
 	"github.com/spf13/cobra"
@@ -106,20 +105,9 @@ func EncryptCmd() *cobra.Command {
 			}
 
 			if signKeyPath != "" || viper.GetString("private_key") != "" {
-				resolvedSignPath := GlobalContext.Engine.ResolveKeyPath(nil, signKeyPath, "MAKNOON_PRIVATE_KEY")
-				if resolvedSignPath != "" {
-					var pin string
-					if _, err := os.Stat(strings.TrimSuffix(resolvedSignPath, ".key") + ".fido2"); err == nil {
-						var err2 error
-						pin, err2 = getPIN()
-						if err2 != nil {
-							return err2
-						}
-					}
-					sk, err := GlobalContext.Engine.LoadPrivateKey(nil, resolvedSignPath, []byte(passphrase), pin, false)
-					if err == nil {
-						opts.SigningKey = sk
-					}
+				sk, err := LoadPrivateKey(signKeyPath, "MAKNOON_PRIVATE_KEY", []byte(passphrase))
+				if err == nil {
+					opts.SigningKey = sk
 				}
 			}
 

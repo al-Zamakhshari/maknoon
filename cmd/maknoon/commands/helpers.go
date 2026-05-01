@@ -397,6 +397,25 @@ func completeProfiles(cmd *cobra.Command, args []string, toComplete string) ([]s
 	return results, cobra.ShellCompDirectiveNoFileComp
 }
 
+// LoadPrivateKey resolves and loads a private key with full FIDO2 support.
+func LoadPrivateKey(path, envVar string, passphrase []byte) ([]byte, error) {
+	resolvedPath := GlobalContext.Engine.ResolveKeyPath(nil, path, envVar)
+	if resolvedPath == "" {
+		return nil, fmt.Errorf("private key required (use flag or %s)", envVar)
+	}
+
+	var pin string
+	if _, err := os.Stat(strings.TrimSuffix(resolvedPath, ".key") + ".fido2"); err == nil {
+		var err2 error
+		pin, err2 = getPIN()
+		if err2 != nil {
+			return nil, err2
+		}
+	}
+
+	return GlobalContext.Engine.LoadPrivateKey(nil, resolvedPath, passphrase, pin, false)
+}
+
 // ResetGlobalContext clears all global state. Used primarily for tests.
 func ResetGlobalContext() {
 	crypto.ResetGlobalConfig()

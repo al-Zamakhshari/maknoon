@@ -82,11 +82,11 @@ func (e *Engine) RemoveProfile(ectx *EngineContext, name string) error {
 	return e.Config.Save()
 }
 
-func (e *Engine) Inspect(_ *EngineContext, in io.Reader) (*HeaderInfo, error) {
+func (e *Engine) Inspect(_ *EngineContext, in io.Reader, stealth bool) (*HeaderInfo, error) {
 	// We need to peek/read the header. ReadHeader does this.
 	// However, ReadHeader might consume too much if it's not a seekable reader.
 	// Since engine.Inspect is called with a reader, we assume it's the start of the stream.
-	magic, profileID, flags, recipients, err := ReadHeader(in, false)
+	magic, profileID, flags, recipients, err := ReadHeader(in, stealth)
 	if err != nil {
 		return nil, err
 	}
@@ -96,10 +96,10 @@ func (e *Engine) Inspect(_ *EngineContext, in io.Reader) (*HeaderInfo, error) {
 		ProfileID:      profileID,
 		Flags:          flags,
 		RecipientCount: recipients,
-		IsCompressed:   flags&FlagCompress != 0,
+		Compressed:     flags&FlagCompress != 0,
 		IsArchive:      flags&FlagArchive != 0,
 		IsSigned:       flags&FlagSigned != 0,
-		IsStealth:      flags&FlagStealth != 0,
+		IsStealth:      stealth || flags&FlagStealth != 0,
 	}
 
 	if magic == MagicHeader {

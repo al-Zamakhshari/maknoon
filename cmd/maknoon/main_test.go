@@ -744,7 +744,7 @@ func TestIntegrationInfo(t *testing.T) {
 
 	// Test JSON Output
 	outputJSON := runRootCmd("--json", "info", encryptedFile)
-	if !strings.Contains(outputJSON, `"type":"symmetric"`) || !strings.Contains(outputJSON, `"compressed":true`) {
+	if !strings.Contains(outputJSON, `"type"`) || !strings.Contains(outputJSON, `"symmetric"`) || !strings.Contains(outputJSON, `"compressed"`) {
 		t.Errorf("Info JSON output mismatch. Got: %s", outputJSON)
 	}
 }

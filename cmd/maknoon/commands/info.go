@@ -1,8 +1,8 @@
 package commands
 
 import (
+	"context"
 	"fmt"
-	"io"
 	"os"
 
 	"github.com/al-Zamakhshari/maknoon/pkg/crypto"
@@ -17,78 +17,62 @@ func InfoCmd() *cobra.Command {
 		Short: "Inspect a Maknoon encrypted file's metadata",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
+			p := GlobalContext.UI.GetPresenter()
 			filePath := args[0]
 			if err := validatePath(filePath); err != nil {
-				if JSONOutput {
-					printErrorJSON(err)
-					return nil
-				}
+				p.RenderError(err)
 				return err
 			}
 			f, err := os.Open(filePath)
 			if err != nil {
+				p.RenderError(err)
 				return err
 			}
 			defer f.Close()
 
-			var magic string
-			var profileID byte
-			var flags byte
-
-			if stealth {
-				header := make([]byte, 2)
-				if _, err := io.ReadFull(f, header); err != nil {
-					return fmt.Errorf("invalid file: stealth header too short")
-				}
-				profileID = header[0]
-				flags = header[1]
-				magic = "STEALTH"
-			} else {
-				header := make([]byte, 6)
-				if _, err := io.ReadFull(f, header); err != nil {
-					return fmt.Errorf("invalid file: header too short")
-				}
-				magic = string(header[:4])
-				profileID = header[4]
-				flags = header[5]
+			ectx := &crypto.EngineContext{
+				Context: context.Background(),
+				Policy:  &crypto.HumanPolicy{}, // Or appropriate policy
 			}
 
-			if JSONOutput {
-				return printInfoJSON(magic, profileID, flags, filePath, f)
+			info, err := GlobalContext.Engine.Inspect(ectx, f, stealth)
+			if err != nil {
+				p.RenderError(err)
+				return err
+			}
+
+			if GlobalContext.UI.JSON {
+				p.RenderSuccess(info)
+				return nil
 			}
 
 			fmt.Printf("File: %s\n", filePath)
 			fmt.Printf("----------------------------------------\n")
 
-			switch magic {
-			case crypto.MagicHeader:
+			switch info.Type {
+			case "symmetric":
 				fmt.Println("Type:           Symmetric (Passphrase Protected)")
-			case crypto.MagicHeaderAsym:
+			case "asymmetric":
 				fmt.Println("Type:           Asymmetric (Public Key Protected)")
-			case "STEALTH":
+			case "stealth":
 				fmt.Println("Type:           Stealth (Fingerprint Resistant)")
 			default:
-				return fmt.Errorf("not a valid Maknoon file (invalid magic: %s)", magic)
+				fmt.Printf("Type:           %s\n", info.Type)
 			}
 
-			fmt.Printf("Profile ID:     %d\n", profileID)
+			fmt.Printf("Profile ID:     %d\n", info.ProfileID)
+			fmt.Printf("Compression:    %v\n", info.Compressed)
+			fmt.Printf("Archive:        %v\n", info.IsArchive)
+			fmt.Printf("Signed:         %v\n", info.IsSigned)
 
-			isCompressed := flags&crypto.FlagCompress != 0
-			isArchive := flags&crypto.FlagArchive != 0
-			isSigned := flags&crypto.FlagSigned != 0
-
-			fmt.Printf("Compression:    %v\n", isCompressed)
-			fmt.Printf("Archive:        %v\n", isArchive)
-			fmt.Printf("Signed:         %v\n", isSigned)
-
-			profile, err := crypto.GetProfile(profileID, f)
-			if err == nil {
-				fmt.Printf("KEM Algorithm:  %s\n", profile.KEMName())
-				fmt.Printf("SIG Algorithm:  %s\n", profile.SIGName())
-
-				if v1, ok := profile.(*crypto.ProfileV1); ok {
-					fmt.Printf("KDF Algorithm:  Argon2id (t=%d, m=%d, p=%d)\n", v1.ArgonTime, v1.ArgonMem, v1.ArgonThrd)
-				}
+			if info.KEMAlgorithm != "" {
+				fmt.Printf("KEM Algorithm:  %s\n", info.KEMAlgorithm)
+			}
+			if info.SIGAlgorithm != "" {
+				fmt.Printf("SIG Algorithm:  %s\n", info.SIGAlgorithm)
+			}
+			if info.KDFDetails != "" {
+				fmt.Printf("KDF Algorithm:  %s\n", info.KDFDetails)
 			}
 
 			return nil
@@ -97,49 +81,4 @@ func InfoCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&stealth, "stealth", false, "Enable fingerprint resistance (headerless)")
 	cmd.Flags().BoolVar(&JSONOutput, "json", false, "Output results in JSON format")
 	return cmd
-}
-
-func printInfoJSON(magic string, profileID byte, flags byte, path string, f io.Reader) error {
-	type info struct {
-		Path         string `json:"path"`
-		Type         string `json:"type"`
-		ProfileID    byte   `json:"profile_id"`
-		Compressed   bool   `json:"compressed"`
-		IsArchive    bool   `json:"is_archive"`
-		IsSigned     bool   `json:"is_signed"`
-		IsStealth    bool   `json:"is_stealth"`
-		KEMAlgorithm string `json:"kem_algorithm,omitempty"`
-		SIGAlgorithm string `json:"sig_algorithm,omitempty"`
-		KDFDetails   string `json:"kdf_details,omitempty"`
-	}
-
-	res := info{
-		Path:       path,
-		ProfileID:  profileID,
-		Compressed: flags&crypto.FlagCompress != 0,
-		IsArchive:  flags&crypto.FlagArchive != 0,
-		IsSigned:   flags&crypto.FlagSigned != 0,
-		IsStealth:  magic == "STEALTH" || (flags&crypto.FlagStealth != 0),
-	}
-
-	if magic == crypto.MagicHeader {
-		res.Type = "symmetric"
-	} else if magic == crypto.MagicHeaderAsym {
-		res.Type = "asymmetric"
-	} else if magic == "STEALTH" {
-		res.Type = "stealth"
-	}
-
-	profile, err := crypto.GetProfile(profileID, f)
-	if err == nil {
-		res.KEMAlgorithm = profile.KEMName()
-		res.SIGAlgorithm = profile.SIGName()
-
-		if v1, ok := profile.(*crypto.ProfileV1); ok {
-			res.KDFDetails = fmt.Sprintf("Argon2id (t=%d, m=%d, p=%d)", v1.ArgonTime, v1.ArgonMem, v1.ArgonThrd)
-		}
-	}
-
-	printJSON(res)
-	return nil
 }

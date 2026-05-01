@@ -133,7 +133,7 @@ type StateProvider interface {
 
 // Inspector provides non-destructive analysis of encrypted Maknoon data.
 type Inspector interface {
-	Inspect(ectx *EngineContext, in io.Reader) (*HeaderInfo, error)
+	Inspect(ectx *EngineContext, in io.Reader, stealth bool) (*HeaderInfo, error)
 }
 
 // TunnelService provides managed access to post-quantum L4 tunnels.

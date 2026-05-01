@@ -502,8 +502,8 @@ func (e *AuditEngine) AuditExport(ectx *EngineContext) ([]AuditEntry, error) {
 	return e.Engine.AuditExport(ectx)
 }
 
-func (e *AuditEngine) Inspect(ectx *EngineContext, in io.Reader) (*HeaderInfo, error) {
-	return e.Engine.Inspect(ectx, in)
+func (e *AuditEngine) Inspect(ectx *EngineContext, in io.Reader, stealth bool) (*HeaderInfo, error) {
+	return e.Engine.Inspect(ectx, in, stealth)
 }
 
 func (e *AuditEngine) TunnelStart(ectx *EngineContext, opts tunnel.TunnelOptions) (tunnel.TunnelStatus, error) {

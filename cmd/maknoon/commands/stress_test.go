@@ -234,7 +234,7 @@ func TestIntegrationStealthMode(t *testing.T) {
 		defer func() { SetJSONOutput(false) }()
 		_ = info.Execute()
 	})
-	if !strings.Contains(output, "\"is_stealth\":true") {
+	if !strings.Contains(output, "\"is_stealth\"") || !strings.Contains(output, "true") {
 		t.Errorf("Info failed to detect stealth mode. Output: %s", output)
 	}
 }

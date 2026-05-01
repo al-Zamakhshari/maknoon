@@ -207,7 +207,7 @@ type HeaderInfo struct {
 	ProfileID      byte   `json:"profile_id"`
 	Flags          byte   `json:"flags"`
 	RecipientCount byte   `json:"recipient_count"`
-	IsCompressed   bool   `json:"is_compressed"`
+	Compressed     bool   `json:"compressed"`
 	IsArchive      bool   `json:"is_archive"`
 	IsSigned       bool   `json:"is_signed"`
 	IsStealth      bool   `json:"is_stealth"`
