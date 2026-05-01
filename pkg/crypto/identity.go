@@ -381,24 +381,28 @@ func (m *IdentityManager) ListActiveIdentities() ([]string, error) {
 	return identities, nil
 }
 
-func (m *IdentityManager) GetIdentityInfo(name string) (string, error) {
+func (m *IdentityManager) GetIdentityInfo(name string) (*IdentityInfoResult, error) {
 	basePath, _, err := m.ResolveBaseKeyPath(name)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
-	info := fmt.Sprintf("Identity: %s\n", name)
+	res := &IdentityInfoResult{Name: name}
+
 	if b, err := os.ReadFile(basePath + ".kem.pub"); err == nil {
-		info += fmt.Sprintf("  - KEM Public Key: %x\n", b)
+		res.KEMPub = hex.EncodeToString(b)
 	}
 	if b, err := os.ReadFile(basePath + ".sig.pub"); err == nil {
-		info += fmt.Sprintf("  - SIG Public Key: %x\n", b)
+		res.SIGPub = hex.EncodeToString(b)
+		if pid, err := DerivePeerID(b); err == nil {
+			res.PeerID = pid
+		}
 	}
 	if b, err := os.ReadFile(basePath + ".nostr.pub"); err == nil {
-		info += fmt.Sprintf("  - Nostr Public Key: %x\n", b)
+		res.NostrPub = hex.EncodeToString(b)
 	}
 
-	return info, nil
+	return res, nil
 }
 
 func (m *IdentityManager) RenameIdentity(oldName, newName string) error {
@@ -443,10 +447,10 @@ func (e *Engine) IdentityActive(ectx *EngineContext) ([]string, error) {
 	return e.Identities.ListActiveIdentities()
 }
 
-func (e *Engine) IdentityInfo(ectx *EngineContext, name string) (string, error) {
+func (e *Engine) IdentityInfo(ectx *EngineContext, name string) (*IdentityInfoResult, error) {
 	ectx = e.context(ectx)
 	if err := e.enforce(ectx, CapIdentity); err != nil {
-		return "", err
+		return nil, err
 	}
 	return e.Identities.GetIdentityInfo(name)
 }
@@ -484,6 +488,14 @@ func (e *Engine) IdentityPublish(ectx *EngineContext, handle string, opts Identi
 		return err
 	}
 	return e.Identities.IdentityPublish(ectx.Context, handle, opts)
+}
+
+func (e *Engine) CreateIdentity(ectx *EngineContext, output string, passphrase []byte, pin string, agent bool, profile string) (*IdentityResult, error) {
+	ectx = e.context(ectx)
+	if err := e.enforce(ectx, CapIdentity); err != nil {
+		return nil, err
+	}
+	return e.Identities.CreateIdentity(output, passphrase, pin, agent, profile)
 }
 
 func (id *Identity) Wipe() {

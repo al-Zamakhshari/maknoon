@@ -285,8 +285,17 @@ func (e *AuditEngine) IdentityActive(ectx *EngineContext) ([]string, error) {
 	return e.Engine.IdentityActive(ectx)
 }
 
-func (e *AuditEngine) IdentityInfo(ectx *EngineContext, name string) (string, error) {
-	return e.Engine.IdentityInfo(ectx, name)
+func (e *AuditEngine) IdentityInfo(ectx *EngineContext, name string) (*IdentityInfoResult, error) {
+	start := time.Now()
+	res, err := e.Engine.IdentityInfo(ectx, name)
+	duration := time.Since(start)
+
+	e.Logger.LogEvent("identity_info", map[string]any{
+		"name":        name,
+		"duration_ms": duration.Milliseconds(),
+	}, err)
+
+	return res, err
 }
 
 func (e *AuditEngine) IdentityRename(ectx *EngineContext, oldName, newName string) error {
@@ -329,6 +338,20 @@ func (e *AuditEngine) IdentityPublish(ectx *EngineContext, handle string, opts I
 	}, err)
 
 	return err
+}
+
+func (e *AuditEngine) CreateIdentity(ectx *EngineContext, output string, passphrase []byte, pin string, agent bool, profile string) (*IdentityResult, error) {
+	start := time.Now()
+	res, err := e.Engine.CreateIdentity(ectx, output, passphrase, pin, agent, profile)
+	duration := time.Since(start)
+
+	e.Logger.LogEvent("identity_create", map[string]any{
+		"output":      output,
+		"profile":     profile,
+		"duration_ms": duration.Milliseconds(),
+	}, err)
+
+	return res, err
 }
 
 func (e *AuditEngine) IdentityCombine(ectx *EngineContext, mnemonics []string, output, passphrase string, noPassword bool) (string, error) {
@@ -525,6 +548,33 @@ func (e *AuditEngine) ChatStart(ectx *EngineContext, identityName string, target
 	}, err)
 
 	return sess, err
+}
+
+func (e *AuditEngine) Sign(ectx *EngineContext, data []byte, privKey []byte) ([]byte, error) {
+	start := time.Now()
+	sig, err := e.Engine.Sign(ectx, data, privKey)
+	duration := time.Since(start)
+
+	e.Logger.LogEvent("sign", map[string]any{
+		"data_size":   len(data),
+		"duration_ms": duration.Milliseconds(),
+	}, err)
+
+	return sig, err
+}
+
+func (e *AuditEngine) Verify(ectx *EngineContext, data []byte, sig []byte, pubKey []byte) (bool, error) {
+	start := time.Now()
+	res, err := e.Engine.Verify(ectx, data, sig, pubKey)
+	duration := time.Since(start)
+
+	e.Logger.LogEvent("verify", map[string]any{
+		"data_size":   len(data),
+		"duration_ms": duration.Milliseconds(),
+		"verified":    res,
+	}, err)
+
+	return res, err
 }
 
 func (e *AuditEngine) Close() error {

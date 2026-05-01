@@ -83,21 +83,47 @@ func (e *Engine) RemoveProfile(ectx *EngineContext, name string) error {
 }
 
 func (e *Engine) Inspect(_ *EngineContext, in io.Reader) (*HeaderInfo, error) {
-	magic, profile, flags, recipients, err := ReadHeader(in, false)
+	// We need to peek/read the header. ReadHeader does this.
+	// However, ReadHeader might consume too much if it's not a seekable reader.
+	// Since engine.Inspect is called with a reader, we assume it's the start of the stream.
+	magic, profileID, flags, recipients, err := ReadHeader(in, false)
 	if err != nil {
 		return nil, err
 	}
 
-	return &HeaderInfo{
+	info := &HeaderInfo{
 		Magic:          magic,
-		ProfileID:      profile,
+		ProfileID:      profileID,
 		Flags:          flags,
 		RecipientCount: recipients,
 		IsCompressed:   flags&FlagCompress != 0,
 		IsArchive:      flags&FlagArchive != 0,
 		IsSigned:       flags&FlagSigned != 0,
 		IsStealth:      flags&FlagStealth != 0,
-	}, nil
+	}
+
+	if magic == MagicHeader {
+		info.Type = "symmetric"
+	} else if magic == MagicHeaderAsym {
+		info.Type = "asymmetric"
+	}
+
+	if info.IsStealth {
+		info.Type = "stealth"
+	}
+
+	// Try to get profile details
+	profile, err := GetProfile(profileID, nil)
+	if err == nil {
+		info.KEMAlgorithm = profile.KEMName()
+		info.SIGAlgorithm = profile.SIGName()
+
+		if v1, ok := profile.(*ProfileV1); ok {
+			info.KDFDetails = fmt.Sprintf("Argon2id (t=%d, m=%d, p=%d)", v1.ArgonTime, v1.ArgonMem, v1.ArgonThrd)
+		}
+	}
+
+	return info, nil
 }
 
 func (e *Engine) TunnelStart(ectx *EngineContext, opts tunnel.TunnelOptions) (tunnel.TunnelStatus, error) {
@@ -465,6 +491,22 @@ func (e *Engine) GeneratePassphrase(ectx *EngineContext, words int, separator st
 	return GeneratePassphrase(words, separator)
 }
 
+func (e *Engine) Sign(ectx *EngineContext, data []byte, privKey []byte) ([]byte, error) {
+	ectx = e.context(ectx)
+	if err := e.enforce(ectx, CapCrypto); err != nil {
+		return nil, err
+	}
+	return SignData(data, privKey)
+}
+
+func (e *Engine) Verify(ectx *EngineContext, data []byte, sig []byte, pubKey []byte) (bool, error) {
+	ectx = e.context(ectx)
+	if err := e.enforce(ectx, CapCrypto); err != nil {
+		return false, err
+	}
+	return VerifySignature(data, sig, pubKey), nil
+}
+
 // bufferPool reduces GC pressure during streaming.
 var bufferPool = sync.Pool{
 	New: func() interface{} {
@@ -484,6 +526,11 @@ func SafeClear(b []byte) {
 
 // AuditExport returns a forensic history of cryptographic operations.
 func (e *Engine) AuditExport(ectx *EngineContext) ([]AuditEntry, error) {
+	ectx = e.context(ectx)
+	if err := e.enforce(ectx, CapAudit); err != nil {
+		return nil, err
+	}
+
 	logPath := e.Config.Audit.LogFile
 	if logPath == "" {
 		home := GetUserHomeDir()

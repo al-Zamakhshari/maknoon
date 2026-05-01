@@ -19,6 +19,8 @@ const (
 	CapIdentity    Capability = "identity"
 	CapConfig      Capability = "config"
 	CapP2P         Capability = "p2p"
+	CapCrypto      Capability = "crypto"
+	CapAudit       Capability = "audit"
 )
 
 // SecurityPolicy defines the behavioral boundaries and capabilities of the engine.

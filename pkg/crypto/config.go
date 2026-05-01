@@ -187,6 +187,8 @@ func LoadConfig() (*Config, error) {
 	v.AutomaticEnv()
 	_ = v.BindEnv("performance.default_compress")
 	_ = v.BindEnv("performance.default_stealth")
+	_ = v.BindEnv("audit.enabled")
+	_ = v.BindEnv("audit.log_file")
 	_ = v.BindEnv("desec_token", "DESEC_TOKEN")
 
 	home := GetUserHomeDir()

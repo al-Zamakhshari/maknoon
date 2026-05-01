@@ -3,7 +3,6 @@ package commands
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -63,7 +62,9 @@ func registerNetworkTools(s *server.MCPServer, engine crypto.MaknoonEngine) {
 			if err != nil {
 				return crypto.FormatMCPError(err, "tunnel_stop")
 			}
-			return mcp.NewToolResultText(`{"status":"stopped"}`), nil
+			res := crypto.NetworkResult{Status: "stopped"}
+			outData, _ := json.Marshal(res)
+			return mcp.NewToolResultText(string(outData)), nil
 		})
 
 	s.AddTool(mcp.NewTool("tunnel_status", mcp.WithDescription("Retrieve status of the active tunnel")),
@@ -71,6 +72,16 @@ func registerNetworkTools(s *server.MCPServer, engine crypto.MaknoonEngine) {
 			status, err := engine.TunnelStatus(&crypto.EngineContext{Context: ctx})
 			if err != nil {
 				return crypto.FormatMCPError(err, "tunnel_status")
+			}
+			res, _ := json.Marshal(status)
+			return mcp.NewToolResultText(string(res)), nil
+		})
+
+	s.AddTool(mcp.NewTool("network_status", mcp.WithDescription("Retrieve comprehensive P2P and tunnel network status")),
+		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			status, err := engine.NetworkStatus(&crypto.EngineContext{Context: ctx})
+			if err != nil {
+				return crypto.FormatMCPError(err, "network_status")
 			}
 			res, _ := json.Marshal(status)
 			return mcp.NewToolResultText(string(res)), nil
@@ -105,7 +116,9 @@ func registerNetworkTools(s *server.MCPServer, engine crypto.MaknoonEngine) {
 			if err != nil {
 				return crypto.FormatMCPError(err, "p2p_send")
 			}
-			return mcp.NewToolResultText(fmt.Sprintf(`{"peer_id":"%s","status":"established"}`, code)), nil
+			res := crypto.P2PResult{Status: "established", PeerID: code}
+			outData, _ := json.Marshal(res)
+			return mcp.NewToolResultText(string(outData)), nil
 		})
 
 	s.AddTool(mcp.NewTool("p2p_receive", mcp.WithDescription("Wait for and receive a secure P2P file transfer")),
@@ -142,7 +155,9 @@ func registerNetworkTools(s *server.MCPServer, engine crypto.MaknoonEngine) {
 				return crypto.FormatMCPError(lastStatus.Error, "p2p_receive")
 			}
 
-			return mcp.NewToolResultText(fmt.Sprintf(`{"status":"success","path":"%s"}`, lastStatus.FileName)), nil
+			res := crypto.P2PResult{Status: "success", Path: lastStatus.FileName}
+			outData, _ := json.Marshal(res)
+			return mcp.NewToolResultText(string(outData)), nil
 		})
 
 	s.AddTool(mcp.NewTool("chat_start", mcp.WithDescription("Initiate an identity-bound P2P Chat session")),
@@ -154,10 +169,10 @@ func registerNetworkTools(s *server.MCPServer, engine crypto.MaknoonEngine) {
 			if err != nil {
 				return crypto.FormatMCPError(err, "chat_start")
 			}
-			res := map[string]interface{}{
-				"status":  "established",
-				"peer_id": sess.Host.ID().String(),
-				"addrs":   sess.Multiaddrs(),
+			res := crypto.ChatResult{
+				Status: "established",
+				PeerID: sess.Host.ID().String(),
+				Addrs:  sess.Multiaddrs(),
 			}
 			raw, _ := json.Marshal(res)
 			return mcp.NewToolResultText(string(raw)), nil

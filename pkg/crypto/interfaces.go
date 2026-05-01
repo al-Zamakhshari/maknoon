@@ -76,11 +76,12 @@ type Protector interface {
 // IdentityService handles identity lifecycle and discovery.
 type IdentityService interface {
 	IdentityActive(ectx *EngineContext) ([]string, error)
-	IdentityInfo(ectx *EngineContext, name string) (string, error)
+	IdentityInfo(ectx *EngineContext, name string) (*IdentityInfoResult, error)
 	IdentityRename(ectx *EngineContext, oldName, newName string) error
 	IdentitySplit(ectx *EngineContext, name string, threshold, shares int, passphrase string) ([]string, error)
 	IdentityCombine(ectx *EngineContext, mnemonics []string, output string, passphrase string, noPassword bool) (string, error)
 	IdentityPublish(ectx *EngineContext, handle string, opts IdentityPublishOptions) error
+	CreateIdentity(ectx *EngineContext, output string, passphrase []byte, pin string, agent bool, profile string) (*IdentityResult, error)
 	ContactAdd(ectx *EngineContext, petname, kemPub, sigPub, note string) error
 	ContactList(ectx *EngineContext) ([]*Contact, error)
 	ContactDelete(ectx *EngineContext, petname string) error
@@ -147,6 +148,12 @@ type ChatService interface {
 	ChatStart(ectx *EngineContext, identityName string, target string) (*P2PChatSession, error)
 }
 
+// Signer handles digital signature operations.
+type Signer interface {
+	Sign(ectx *EngineContext, data []byte, privKey []byte) ([]byte, error)
+	Verify(ectx *EngineContext, data []byte, sig []byte, pubKey []byte) (bool, error)
+}
+
 // MaknoonEngine is the primary high-level facade for all Maknoon services.
 type MaknoonEngine interface {
 	Protector
@@ -158,6 +165,7 @@ type MaknoonEngine interface {
 	Inspector
 	TunnelService
 	ChatService
+	Signer
 
 	Close() error
 }

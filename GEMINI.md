@@ -76,6 +76,7 @@ NEVER use `fmt.Print` or `json.Marshal` directly in business logic. Use the `Pre
 - **Docker**: `make docker-build` (Generates OCI-compliant secure sandbox)
 
 ## 🧪 Current Status
-- **Architecture**: V4.0 Alpha (DI & Presenter complete).
-- **Testing**: Passed all 45+ cases and high-fidelity P2P smoke test.
-- **Security**: Post-Quantum TLS 1.3 verified.
+- **Architecture**: V4.0 Alpha (DI, Presenter, & 100% MCP Parity complete).
+- **Parity**: 1:1 mapping between CLI commands and MCP tools with high-fidelity structured results.
+- **Testing**: Passed all 65+ unit, integration, and fuzz tests; verified P2P smoke test.
+- **Security**: Post-Quantum TLS 1.3, ML-KEM/Kyber1024, and ML-DSA-87 signatures verified.

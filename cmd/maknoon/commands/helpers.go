@@ -397,6 +397,12 @@ func completeProfiles(cmd *cobra.Command, args []string, toComplete string) ([]s
 	return results, cobra.ShellCompDirectiveNoFileComp
 }
 
+// ResetGlobalContext clears all global state. Used primarily for tests.
+func ResetGlobalContext() {
+	crypto.ResetGlobalConfig()
+	GlobalContext.Engine = nil
+}
+
 // InitEngine initializes the GlobalContext's Engine with the appropriate policy and audit logging.
 func InitEngine() error {
 	if GlobalContext.Engine != nil {

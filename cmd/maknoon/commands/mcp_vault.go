@@ -43,7 +43,98 @@ func registerVaultTools(s *server.MCPServer, engine crypto.MaknoonEngine) {
 			if err != nil {
 				return crypto.FormatMCPError(err, "vault_set")
 			}
-			return mcp.NewToolResultText(`{"status":"success"}`), nil
+			res := crypto.VaultResult{Status: "success", Service: entry.Service}
+			outData, _ := json.Marshal(res)
+			return mcp.NewToolResultText(string(outData)), nil
+		})
+
+	s.AddTool(mcp.NewTool("vault_list", mcp.WithDescription("List all entries in a vault")),
+		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			args := getArgs(request)
+			vault := getString(args, "vault", "default")
+			pass := crypto.SecretBytes(viper.GetString("passphrase"))
+			entries, err := engine.VaultList(&crypto.EngineContext{Context: ctx}, vault, pass)
+			if err != nil {
+				return crypto.FormatMCPError(err, "vault_list")
+			}
+			res := crypto.VaultResult{Status: "success", Vault: vault, Entries: entries}
+			outData, _ := json.Marshal(res)
+			return mcp.NewToolResultText(string(outData)), nil
+		})
+
+	s.AddTool(mcp.NewTool("vault_delete", mcp.WithDescription("Delete a vault or a specific service entry")),
+		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			args := getArgs(request)
+			name := getString(args, "name", "")
+			err := engine.VaultDelete(&crypto.EngineContext{Context: ctx}, name)
+			if err != nil {
+				return crypto.FormatMCPError(err, "vault_delete")
+			}
+			res := crypto.VaultResult{Status: "success", Deleted: name}
+			outData, _ := json.Marshal(res)
+			return mcp.NewToolResultText(string(outData)), nil
+		})
+
+	s.AddTool(mcp.NewTool("vault_rename", mcp.WithDescription("Rename a vault")),
+		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			args := getArgs(request)
+			oldName := getString(args, "old_name", "")
+			newName := getString(args, "new_name", "")
+			err := engine.VaultRename(&crypto.EngineContext{Context: ctx}, oldName, newName)
+			if err != nil {
+				return crypto.FormatMCPError(err, "vault_rename")
+			}
+			res := crypto.VaultResult{Status: "success", From: oldName, To: newName}
+			outData, _ := json.Marshal(res)
+			return mcp.NewToolResultText(string(outData)), nil
+		})
+
+	s.AddTool(mcp.NewTool("vault_split", mcp.WithDescription("Split a vault master key into mnemonic shards")),
+		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			args := getArgs(request)
+			vault := getString(args, "vault", "default")
+			threshold, _ := args["threshold"].(float64)
+			shares, _ := args["shares"].(float64)
+			if threshold == 0 {
+				threshold = 2
+			}
+			if shares == 0 {
+				shares = 3
+			}
+
+			pass := viper.GetString("passphrase")
+			shards, err := engine.VaultSplit(&crypto.EngineContext{Context: ctx}, vault, int(threshold), int(shares), pass)
+			if err != nil {
+				return crypto.FormatMCPError(err, "vault_split")
+			}
+			res := crypto.VaultResult{Status: "success", Vault: vault, Shares: shards}
+			outData, _ := json.Marshal(res)
+			return mcp.NewToolResultText(string(outData)), nil
+		})
+
+	s.AddTool(mcp.NewTool("vault_recover", mcp.WithDescription("Recover a vault using mnemonic shards")),
+		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			args := getArgs(request)
+			vault := getString(args, "vault", "default")
+			output := getString(args, "output", "")
+			pass := viper.GetString("passphrase")
+
+			var shards []string
+			if rawShards, ok := args["shares"].([]any); ok {
+				for _, s := range rawShards {
+					if str, ok := s.(string); ok {
+						shards = append(shards, str)
+					}
+				}
+			}
+
+			path, err := engine.VaultRecover(&crypto.EngineContext{Context: ctx}, shards, vault, output, pass)
+			if err != nil {
+				return crypto.FormatMCPError(err, "vault_recover")
+			}
+			res := crypto.VaultResult{Status: "success", Vault: vault, Output: path}
+			outData, _ := json.Marshal(res)
+			return mcp.NewToolResultText(string(outData)), nil
 		})
 }
 

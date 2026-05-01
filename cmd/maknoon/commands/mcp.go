@@ -95,7 +95,7 @@ func runSSEServer(s *server.MCPServer) error {
 }
 
 func createMCPServer() *server.MCPServer {
-	s := server.NewMCPServer("Maknoon PQC Server", "1.4.0", server.WithLogging())
+	s := server.NewMCPServer("Maknoon PQC Server", "4.0.0", server.WithLogging())
 	engine := GlobalContext.Engine
 
 	// Register Categorized Tools
@@ -103,6 +103,8 @@ func createMCPServer() *server.MCPServer {
 	registerCryptoTools(s, engine)
 	registerNetworkTools(s, engine)
 	registerConfigTools(s, engine)
+	registerIdentityTools(s, engine)
+	registerProfilesTools(s, engine)
 
 	return s
 }

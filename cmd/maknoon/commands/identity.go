@@ -255,19 +255,29 @@ func identityInfoCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			p := GlobalContext.UI.GetPresenter()
 			name := args[0]
-			info, err := GlobalContext.Engine.IdentityInfo(nil, name)
+			res, err := GlobalContext.Engine.IdentityInfo(nil, name)
 			if err != nil {
 				p.RenderError(err)
 				return err
 			}
 
 			if GlobalContext.UI.JSON {
-				p.RenderSuccess(map[string]string{
-					"identity": name,
-					"info":     info,
-				})
+				p.RenderSuccess(res)
 			} else {
-				p.RenderMessage(fmt.Sprintf("Identity: %s\n%s", name, info))
+				msg := fmt.Sprintf("Identity: %s\n", res.Name)
+				if res.KEMPub != "" {
+					msg += fmt.Sprintf("  - KEM Public Key: %s\n", res.KEMPub)
+				}
+				if res.SIGPub != "" {
+					msg += fmt.Sprintf("  - SIG Public Key: %s\n", res.SIGPub)
+				}
+				if res.NostrPub != "" {
+					msg += fmt.Sprintf("  - Nostr Public Key: %s\n", res.NostrPub)
+				}
+				if res.PeerID != "" {
+					msg += fmt.Sprintf("  - Peer ID:        %s\n", res.PeerID)
+				}
+				p.RenderMessage(msg)
 			}
 			return nil
 		},

@@ -2,7 +2,7 @@
 name: maknoon
 description: Post-Quantum cryptographic engine and MCP server. Hybrid HPKE (ML-KEM/X25519), deterministic memory hygiene, and native AI agent integration.
 kind: local
-version: 3.0.0
+version: 4.0.0
 tools:
   - run_shell_command
   - mcp_maknoon_*

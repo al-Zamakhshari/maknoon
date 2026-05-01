@@ -60,7 +60,7 @@ curl -s -X POST "http://127.0.0.1:8080$MSG_PATH" \
     \"jsonrpc\": \"2.0\",
     \"method\": \"tools/call\",
     \"params\": {
-      \"name\": \"tunnel_status\",
+      \"name\": \"network_status\",
       \"arguments\": {}
     },
     \"id\": $ID
@@ -75,7 +75,9 @@ for i in {1..10}; do
 done
 
 if [ -n "$RES" ]; then
-    echo "✅ SUCCESS: Tool call response received via SSE stream."
+    echo "✅ SUCCESS: High-fidelity network_status response received via SSE."
+    # Basic sanity check on the result content
+    echo "$RES" | grep -q "peer_id" && echo "✅ DATA: Peer ID found in result."
 else
     echo "❌ FAILURE: No response received in SSE stream."
     exit 1

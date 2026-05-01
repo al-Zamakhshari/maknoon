@@ -112,8 +112,7 @@ func KeygenCmd() *cobra.Command {
 				fmt.Printf("Generating bleeding-edge %s identity...\n", pName)
 			}
 
-			im := crypto.NewIdentityManager()
-			res, err := im.CreateIdentity(output, password, "", false, profileStr)
+			res, err := GlobalContext.Engine.CreateIdentity(nil, output, password, "", false, profileStr)
 			if err != nil {
 				if JSONOutput {
 					printErrorJSON(err)

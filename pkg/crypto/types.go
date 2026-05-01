@@ -85,6 +85,15 @@ type IdentityResult struct {
 	Shares    []string `json:"shares,omitempty"`
 }
 
+// IdentityInfoResult provides detailed metadata about a local identity.
+type IdentityInfoResult struct {
+	Name     string `json:"name"`
+	KEMPub   string `json:"kem_pub,omitempty"`
+	SIGPub   string `json:"sig_pub,omitempty"`
+	NostrPub string `json:"nostr_pub,omitempty"`
+	PeerID   string `json:"peer_id,omitempty"`
+}
+
 // VaultResult is the standard JSON output for vault operations.
 type VaultResult struct {
 	Status           string           `json:"status"`
@@ -92,11 +101,25 @@ type VaultResult struct {
 	Secret           string           `json:"secret,omitempty"`
 	Service          string           `json:"service,omitempty"`
 	Deleted          string           `json:"deleted,omitempty"`
+	From             string           `json:"from,omitempty"`
+	To               string           `json:"to,omitempty"`
 	Threshold        int              `json:"threshold,omitempty"`
 	Shares           []string         `json:"shares,omitempty"`
 	RecoveredEntries int              `json:"recovered_entries,omitempty"`
 	Output           string           `json:"output,omitempty"`
 	Entries          []VaultListEntry `json:"entries,omitempty"`
+}
+
+// SignResult is the standard JSON output for digital signatures.
+type SignResult struct {
+	Status        string `json:"status"`
+	SignaturePath string `json:"signature_path,omitempty"`
+}
+
+// VerifyResult is the standard JSON output for signature verification.
+type VerifyResult struct {
+	Status   string `json:"status"`
+	Verified bool   `json:"verified"`
 }
 
 // VaultListEntry is a simplified vault entry for listing.
@@ -112,6 +135,65 @@ type ContactResult struct {
 	Removed string `json:"removed,omitempty"`
 }
 
+// P2PResult is the standard JSON output for P2P operations.
+type P2PResult struct {
+	Status string   `json:"status"`
+	PeerID string   `json:"peer_id,omitempty"`
+	Path   string   `json:"path,omitempty"`
+	Addrs  []string `json:"addrs,omitempty"`
+}
+
+// ChatResult is the standard JSON output for chat session initiation.
+type ChatResult struct {
+	Status string   `json:"status"`
+	PeerID string   `json:"peer_id"`
+	Addrs  []string `json:"addrs"`
+}
+
+// ProfileResult is the standard JSON output for profile management.
+type ProfileResult struct {
+	Status  string          `json:"status"`
+	Name    string          `json:"name,omitempty"`
+	ID      byte            `json:"id,omitempty"`
+	Removed string          `json:"removed,omitempty"`
+	Profile *DynamicProfile `json:"profile,omitempty"`
+}
+
+// ProfileInfo provides metadata about a cryptographic profile.
+type ProfileInfo struct {
+	Name        string          `json:"name"`
+	ID          byte            `json:"id"`
+	Description string          `json:"description,omitempty"`
+	Details     *DynamicProfile `json:"details,omitempty"`
+}
+
+// ProfileListResult is the structured output for listing profiles.
+type ProfileListResult struct {
+	Profiles []ProfileInfo `json:"profiles"`
+}
+
+// GenResult is the structured output for generation tools.
+type GenResult struct {
+	Password   string `json:"password,omitempty"`
+	Passphrase string `json:"passphrase,omitempty"`
+}
+
+// ResolveResult is the structured output for identity resolution.
+type ResolveResult struct {
+	PublicKey string `json:"public_key"`
+}
+
+// ConfigResult is the standard JSON output for configuration management.
+type ConfigResult struct {
+	Status  string `json:"status"`
+	Message string `json:"message,omitempty"`
+}
+
+// NetworkResult is the standard JSON output for network management.
+type NetworkResult struct {
+	Status string `json:"status"`
+}
+
 // CommonResult for simple status messages.
 type CommonResult struct {
 	Status  string `json:"status"`
@@ -121,6 +203,7 @@ type CommonResult struct {
 // HeaderInfo represents the metadata extracted from a Maknoon file header.
 type HeaderInfo struct {
 	Magic          string `json:"magic"`
+	Type           string `json:"type"` // "symmetric", "asymmetric", or "stealth"
 	ProfileID      byte   `json:"profile_id"`
 	Flags          byte   `json:"flags"`
 	RecipientCount byte   `json:"recipient_count"`
@@ -128,6 +211,9 @@ type HeaderInfo struct {
 	IsArchive      bool   `json:"is_archive"`
 	IsSigned       bool   `json:"is_signed"`
 	IsStealth      bool   `json:"is_stealth"`
+	KEMAlgorithm   string `json:"kem_algorithm,omitempty"`
+	SIGAlgorithm   string `json:"sig_algorithm,omitempty"`
+	KDFDetails     string `json:"kdf_details,omitempty"`
 }
 
 // DiagnosticResult provides a comprehensive state manifest of the engine and environment.

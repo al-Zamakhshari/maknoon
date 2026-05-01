@@ -439,10 +439,15 @@ func TestCompletions(t *testing.T) {
 	os.Setenv("HOME", tmpDir)
 	defer os.Setenv("HOME", origHome)
 
-	crypto.ResetGlobalConfig()
-	if err := crypto.EnsureMaknoonDirs(); err != nil {
+	ResetGlobalContext()
+	if err := InitEngine(); err != nil {
 		t.Fatal(err)
 	}
+	defer func() {
+		if GlobalContext.Engine != nil {
+			GlobalContext.Engine.Close()
+		}
+	}()
 
 	// 1. Identities
 	keygenCmd := KeygenCmd()
