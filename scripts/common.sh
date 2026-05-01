@@ -7,15 +7,20 @@ fail_trap() {
     local exit_code=$?
     local mission_name=$1
     local compose_file=$2
+    local project_name=$3
 
     if [ $exit_code -ne 0 ]; then
         echo ""
         echo "❌ ERROR: Mission '$mission_name' failed with exit code $exit_code"
         echo "🔍 Capturing container logs for diagnostic..."
         if [ ! -z "$compose_file" ]; then
-            docker compose -f "$compose_file" logs --tail 200
+            local p_flag=""
+            if [ ! -z "$project_name" ]; then
+                p_flag="-p $project_name"
+            fi
+            docker compose $p_flag -f "$compose_file" logs --tail 200
             echo "🧹 Tearing down failed mission infrastructure..."
-            docker compose -f "$compose_file" down
+            docker compose $p_flag -f "$compose_file" down
         fi
         exit $exit_code
     fi

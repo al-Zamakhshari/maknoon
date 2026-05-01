@@ -10,7 +10,7 @@ type MockRegistry struct {
 
 func TestRegistryFactory(t *testing.T) {
 	// Register a mock registry
-	RegisterRegistry("mock-factory-test", func() IdentityRegistry {
+	RegisterRegistry("mock-factory-test", func(conf *Config) IdentityRegistry {
 		return &MockRegistry{}
 	})
 

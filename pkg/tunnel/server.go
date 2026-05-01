@@ -12,7 +12,20 @@ import (
 // TunnelServer handles incoming multiplexed connections and forwards them to internal targets.
 type TunnelServer struct {
 	// Target is the internal address to forward traffic to (e.g. 127.0.0.1:80)
-	Target string
+	Target   string
+	Listener MuxListener
+}
+
+func NewTunnelServer(ln MuxListener) *TunnelServer {
+	return &TunnelServer{
+		Listener: ln,
+	}
+}
+
+// Start begins accepting sessions from its listener.
+func (s *TunnelServer) Start() error {
+	ctx := context.Background()
+	return s.Serve(ctx, s.Listener)
 }
 
 // Serve begins accepting sessions from a polymorphic MuxListener.

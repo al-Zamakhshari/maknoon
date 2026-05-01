@@ -142,6 +142,7 @@ type TunnelService interface {
 	TunnelStart(ectx *EngineContext, opts tunnel.TunnelOptions) (tunnel.TunnelStatus, error)
 	TunnelStop(ectx *EngineContext) error
 	TunnelStatus(ectx *EngineContext) (tunnel.TunnelStatus, error)
+	TunnelListen(ectx *EngineContext, addr string, mode string, identity string) (NetworkResult, error)
 }
 
 // ChatService handles persistent identity-bound chat missions.

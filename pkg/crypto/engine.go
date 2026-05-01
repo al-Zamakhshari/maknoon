@@ -18,6 +18,7 @@ import (
 
 	"github.com/al-Zamakhshari/maknoon/pkg/tunnel"
 	"github.com/libp2p/go-libp2p"
+	"github.com/multiformats/go-multiaddr"
 )
 
 // Engine is the central stateful service for Maknoon operations.
@@ -34,9 +35,10 @@ type Engine struct {
 	contactsPath string
 
 	// Tunnel State
-	activeTunnel *tunnel.TunnelStatus
-	gateway      *tunnel.TunnelGateway
-	tunnelMu     sync.RWMutex
+	activeTunnel  *tunnel.TunnelStatus
+	gateway       *tunnel.TunnelGateway
+	gatewayServer *tunnel.TunnelServer
+	tunnelMu      sync.RWMutex
 }
 
 func (e *Engine) GetPolicy() SecurityPolicy { return e.Policy }
@@ -146,7 +148,7 @@ func (e *Engine) TunnelStart(ectx *EngineContext, opts tunnel.TunnelOptions) (tu
 	}
 
 	if opts.P2PMode && strings.HasPrefix(targetAddr, "@") {
-		reg := NewIdentityRegistry(nil)
+		reg := NewIdentityRegistry(e.Config)
 		record, err := reg.Resolve(ectx.Context, targetAddr)
 		if err != nil {
 			return tunnel.TunnelStatus{}, fmt.Errorf("failed to resolve tunnel peer '%s': %w", targetAddr, err)
@@ -173,7 +175,10 @@ func (e *Engine) TunnelStart(ectx *EngineContext, opts tunnel.TunnelOptions) (tu
 			return tunnel.TunnelStatus{}, fmt.Errorf("failed to resolve a valid multiaddr for '%s' (found %d addrs)", targetAddr, len(record.Multiaddrs))
 		}
 
-		fmt.Fprintf(os.Stderr, "DEBUG: Selected best Multiaddr: %s\n", bestAddr)
+		e.Logger.Info("p2p resolution complete",
+			"handle", targetAddr,
+			"multiaddr", bestAddr,
+			"addr_count", len(record.Multiaddrs))
 		opts.P2PAddr = bestAddr
 	}
 
@@ -249,6 +254,70 @@ func (e *Engine) TunnelStatus(ectx *EngineContext) (tunnel.TunnelStatus, error) 
 		return tunnel.TunnelStatus{Active: false}, nil
 	}
 	return *e.activeTunnel, nil
+}
+
+func (e *Engine) TunnelListen(ectx *EngineContext, addr string, mode string, identity string) (NetworkResult, error) {
+	ectx = e.context(ectx)
+	if err := e.enforce(ectx, CapP2P); err != nil {
+		return NetworkResult{}, err
+	}
+
+	var libp2pOpts []libp2p.Option
+	if mode == "p2p" {
+		if addr != "" {
+			// Try to parse as port (e.g. :4001)
+			port := strings.TrimPrefix(addr, ":")
+			ma, err := multiaddr.NewMultiaddr(fmt.Sprintf("/ip4/0.0.0.0/tcp/%s", port))
+			if err == nil {
+				libp2pOpts = append(libp2pOpts, libp2p.ListenAddrs(ma))
+			}
+		}
+	}
+
+	if mode == "p2p" && identity != "" {
+		id, err := e.Identities.LoadIdentity(identity, nil, "", false)
+		if err != nil {
+			return NetworkResult{}, err
+		}
+		priv, err := id.AsLibp2pKey()
+		if err != nil {
+			return NetworkResult{}, err
+		}
+		libp2pOpts = append(libp2pOpts, libp2p.Identity(priv))
+	}
+
+	if mode == "p2p" {
+		h, err := tunnel.NewLibp2pHost(libp2pOpts...)
+		if err != nil {
+			return NetworkResult{}, err
+		}
+		ln := tunnel.StartLibp2pListener(h)
+		e.gatewayServer = tunnel.NewTunnelServer(ln)
+		go e.gatewayServer.Start()
+
+		res := NetworkResult{
+			Status: "listening",
+			PeerID: h.ID().String(),
+		}
+		for _, a := range h.Addrs() {
+			res.Addrs = append(res.Addrs, fmt.Sprintf("%s/p2p/%s", a, h.ID()))
+		}
+		e.Logger.Info("P2P Tunnel Server active", "peer_id", res.PeerID, "addrs", res.Addrs)
+		return res, nil
+	}
+
+	// Standard (Non-P2P) listener logic
+	factory := &tunnel.TransportFactory{Config: e.Config.Tunnel}
+	ln, err := factory.CreateListener(ectx.Context, addr, mode)
+	if err != nil {
+		return NetworkResult{}, err
+	}
+
+	e.gatewayServer = tunnel.NewTunnelServer(ln)
+	go e.gatewayServer.Start()
+
+	e.Logger.Info("Tunnel Server active", "mode", mode, "addr", addr)
+	return NetworkResult{Status: "listening", Addrs: []string{addr}}, nil
 }
 
 func (e *Engine) ChatStart(ectx *EngineContext, identityName string, target string) (*P2PChatSession, error) {
@@ -386,6 +455,7 @@ func NewEngine(policy SecurityPolicy, idMgr *IdentityManager, conf *Config, vaul
 	if idMgr == nil {
 		idMgr = NewIdentityManager()
 	}
+	idMgr.Config = conf
 
 	if vaultStore == nil {
 		vaultStore = &FileSystemVaultStore{

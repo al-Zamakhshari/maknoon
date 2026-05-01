@@ -13,8 +13,8 @@ import (
 )
 
 func init() {
-	RegisterRegistry("dns", func() IdentityRegistry {
-		return NewDNSRegistry()
+	RegisterRegistry("dns", func(conf *Config) IdentityRegistry {
+		return NewDNSRegistry(conf)
 	})
 }
 
@@ -23,7 +23,7 @@ type DNSRegistry struct {
 	resolver *net.Resolver
 }
 
-func NewDNSRegistry() *DNSRegistry {
+func NewDNSRegistry(conf *Config) *DNSRegistry {
 	return &DNSRegistry{resolver: net.DefaultResolver}
 }
 

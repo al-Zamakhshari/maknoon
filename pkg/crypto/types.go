@@ -191,7 +191,9 @@ type ConfigResult struct {
 
 // NetworkResult is the standard JSON output for network management.
 type NetworkResult struct {
-	Status string `json:"status"`
+	Status string   `json:"status"`
+	PeerID string   `json:"peer_id,omitempty"`
+	Addrs  []string `json:"addrs,omitempty"`
 }
 
 // CommonResult for simple status messages.

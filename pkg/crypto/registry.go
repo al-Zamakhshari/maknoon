@@ -127,10 +127,10 @@ type MultiRegistry struct {
 	Registries []IdentityRegistry
 }
 
-var registryFactories = make(map[string]func() IdentityRegistry)
+var registryFactories = make(map[string]func(conf *Config) IdentityRegistry)
 
 // RegisterRegistry adds a new registry factory to the global map.
-func RegisterRegistry(name string, factory func() IdentityRegistry) {
+func RegisterRegistry(name string, factory func(conf *Config) IdentityRegistry) {
 	registryFactories[name] = factory
 }
 
@@ -148,7 +148,7 @@ func NewIdentityRegistry(conf *Config) IdentityRegistry {
 	mr := &MultiRegistry{}
 	for _, name := range active {
 		if factory, ok := registryFactories[name]; ok {
-			mr.Registries = append(mr.Registries, factory())
+			mr.Registries = append(mr.Registries, factory(conf))
 		}
 	}
 	return mr

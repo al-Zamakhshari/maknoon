@@ -88,6 +88,7 @@ Post-Quantum Cryptography (PQC).`,
 	addCommand(commands.ConfigCmd(), "utils")
 	addCommand(commands.ProfilesCmd(), "utils")
 	addCommand(commands.MCPServerCmd(), "utils")
+	addCommand(commands.CallCmd(), "utils")
 	addCommand(commands.DiagCmd(), "utils")
 
 	// Automation-only commands (Hidden from standard help)

@@ -1,217 +1,36 @@
-.TH MAKNOON 1 "April 2026" "4.0.0" "Maknoon Manual"
+.nh
+.TH "MAKNOON" "1" "May 2026" "Maknoon Post-Quantum Engine" "Maknoon Manual"
+
 .SH NAME
-maknoon \- Enterprise-Grade Post-Quantum Encryption Engine and MCP Server.
+maknoon - Maknoon (مكنون): Enterprise-Grade Post-Quantum Encryption Engine
+
+
 .SH SYNOPSIS
-.B maknoon
-[\fIcommand\fR] [\fIflags\fR]
+\fBmaknoon [flags]\fP
+
+
 .SH DESCRIPTION
-Maknoon (مكنون) is an industrial-grade cryptographic engine designed for a post-quantum world. 
-It implements a stateful **Engine** architecture (v4.0 Alpha) utilizing NIST-standard ML-KEM (Kyber1024) for asymmetric encryption, ML-DSA (Dilithium87) for digital signatures, and XChaCha20-Poly1305 for streaming data integrity.
+Maknoon is a high-performance cryptographic engine and MCP server designed
+to secure data against classical and quantum threats using NIST-standardized
+Post-Quantum Cryptography (PQC).
+
+
+.SH OPTIONS
+\fB-h\fP, \fB--help\fP[=false]
+	help for maknoon
+
 .PP
-The tool features a modular **Profile** system for cryptographic agility, multi-core parallelism, and a capability-based **Agent Sandbox** for secure execution by AI agents. All data is processed in 64KB chunks to ensure a constant memory footprint.
+\fB--json\fP[=false]
+	Output results in JSON format
+
 .PP
-The v4.0 architecture emphasizes **Industrial Observability**, providing low-level diagnostic tracing (\-\-trace) with automatic redaction of sensitive material.
-.SH GLOBAL FLAGS
-.TP
-.B \-\-json
-Output results in structured JSON format for automation and agent consumption.
-.TP
-.B \-\-trace
-Enable low-level diagnostic tracing to stderr. Outputs internal path resolution, argv state, and pipeline transitions. Automatically redacts cryptographic keys and passphrases.
-.TP
-.B \-\-verbose
-Enable verbose console output for human operators.
-.SH COMMANDS
-.SS Cryptographic Operations
-.TP
-.B encrypt [file/dir]
-Encrypt a file or directory. Directories are automatically archived (TAR).
-Supports \-\-public-key for asymmetric mode and \-\-passphrase for symmetric mode.
-.TP
-.B decrypt [file]
-Decrypt and restore data. Automatically detects encryption type, compression, and archiving.
-.TP
-.B send [file/dir]
-Send data via secure ephemeral P2P transport (Magic Wormhole).
-.TP
-.B receive [code]
-Receive data from a peer using a Wormhole code.
-.TP
-.B chat [code]
-Start a secure, ephemeral Ghost Chat session. Supports TUI and JSONL (for agents).
-.TP
-.B tunnel [subcommand]
-Post-Quantum L4 Tunnel Gateway. Manage secure network perimeters via PQC-QUIC and SOCKS5.
-.RS
-.TP
-.B listen
-Start a Post-Quantum Tunnel Server (Gateway Receiver).
-.TP
-.B start
-Start a local Post-Quantum SOCKS5 Gateway.
-.RE
-.TP
-.B info [file]
-Displays detailed cryptographic metadata of an encrypted Maknoon file.
-.SS Identity & Trust
-.TP
-.B keygen
-Generate a full Post-Quantum identity (KEM + SIG + Nostr keys).
-Protected by Argon2id and optionally hardware-backed via FIDO2 (\-\-fido2).
-.TP
-.B identity [subcommand]
-.RS
-.TP
-.B active
-List absolute paths of available public keys for encryption.
-.TP
-.B publish [handle]
-Anchor an identity to a global registry (Nostr, DNS, or deSEC).
-.TP
-.B info [name]
-Show details about a local identity and its filesystem paths.
-.TP
-.B rename [old] [new]
-Rename a local identity and its associated key files.
-.TP
-.B split [name]
-Shard an identity private key using Shamir's Secret Sharing (SSS).
-.TP
-.B combine [shards...]
-Recover an identity from mnemonic shards.
-.TP
-.B shard [secret]
-Split a generic secret into Shamir shards (SSS).
-.TP
-.B reconstruct [shards...]
-Rebuild a secret from threshold shards.
-.RE
-.TP
-.B contact [subcommand]
-Manage trusted Petnames (address book).
-.RS
-.TP
-.B add [petname]
-Add a new trusted contact with their public keys.
-.TP
-.B list
-List all stored contacts and petnames.
-.TP
-.B remove [petname]
-Delete a contact from the local registry.
-.RE
-.SS Security & Integrity
-.TP
-.B sign [file]
-Generate a detached ML-DSA-87 signature for a file.
-.TP
-.B verify [file]
-Verify a file's integrity and origin using an ML-DSA public key.
-.SS Enterprise & System
-.TP
-.B vault [subcommand]
-Manage an encrypted password database (bbolt).
-.RS
-.TP
-.B set [service]
-Store a secret (username, password, notes).
-.TP
-.B get [service]
-Retrieve a secret from the vault.
-.TP
-.B list
-List all services stored in the vault.
-.TP
-.B delete [service]
-Permanently remove a secret.
-.TP
-.B split
-Shard the vault's master access key into mnemonics.
-.TP
-.B recover [shards...]
-Reconstruct a vault using mnemonic shards.
-.RE
-.TP
-.B gen [subcommand]
-Generate high-entropy secure credentials.
-.RS
-.TP
-.B passphrase
-Generate a mnemonic passphrase. Supports \-\-words and \-\-separator.
-.TP
-.B password
-Generate a random character password. Supports \-\-length and \-\-no-symbols.
-.RE
-.TP
-.B config [subcommand]
-.RS
-.TP
-.B list
-List all active configuration settings (relays, limits, paths).
-.TP
-.B set [key] [value]
-Update a configuration setting (e.g., security.time, agent.max_workers).
-.TP
-.B init
-Initialize the default configuration file (~/.maknoon/config.json).
-.RE
-.TP
-.B profiles [subcommand]
-Manage cryptographic agility profiles.
-.RS
-.TP
-.B list
-List all built-in and custom profiles.
-.TP
-.B gen [name]
-Generate a new functional profile with Functional Smoke Testing.
-.TP
-.B rm [name]
-Remove a custom profile from the configuration.
-.RE
-.TP
-.B mcp
-Launch the native Model Context Protocol (MCP) server for AI agent integration.
-.TP
-.B diag
-Output a machine-readable engine state manifest (JSON).
-.TP
-.B net
-Manage network and P2P connectivity.
-.RS
-.TP
-.B status
-Display P2P network health and tunnel status.
-.RE
-.TP
-.B audit
-Manage and export cryptographic audit logs.
-.RS
-.TP
-.B export
-Export a forensic summary of all cryptographic operations.
-.RE
-.SH ENVIRONMENT
-.TP
-.B MAKNOON_AGENT_MODE
-Set to "1" to enable the restricted Agent Sandbox.
-.TP
-.B MAKNOON_JSON
-Set to "1" to force JSON output mode globally.
-.TP
-.B MAKNOON_PASSPHRASE
-Provide a master passphrase via the environment to bypass interactive prompts.
-.SH FILES
-.TP
-.I ~/.maknoon/config.json
-Global configuration and custom profiles.
-.TP
-.I ~/.maknoon/keys/
-Default identity storage.
-.TP
-.I ~/.maknoon/contacts.db
-Trusted contacts and petnames database.
-.SH AUTHOR
-Ahmed KHALLAF
+\fB--trace\fP[=false]
+	Enable low-level diagnostic tracing to stderr
+
+
 .SH SEE ALSO
-https://github.com/al-Zamakhshari/maknoon
+\fBmaknoon-audit(1)\fP, \fBmaknoon-call(1)\fP, \fBmaknoon-chat(1)\fP, \fBmaknoon-completion(1)\fP, \fBmaknoon-config(1)\fP, \fBmaknoon-contact(1)\fP, \fBmaknoon-decrypt(1)\fP, \fBmaknoon-diag(1)\fP, \fBmaknoon-encrypt(1)\fP, \fBmaknoon-gen(1)\fP, \fBmaknoon-identity(1)\fP, \fBmaknoon-info(1)\fP, \fBmaknoon-keygen(1)\fP, \fBmaknoon-mcp(1)\fP, \fBmaknoon-net(1)\fP, \fBmaknoon-profiles(1)\fP, \fBmaknoon-receive(1)\fP, \fBmaknoon-send(1)\fP, \fBmaknoon-sign(1)\fP, \fBmaknoon-tunnel(1)\fP, \fBmaknoon-vault(1)\fP, \fBmaknoon-verify(1)\fP
+
+
+.SH HISTORY
+2-May-2026 Auto generated by spf13/cobra

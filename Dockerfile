@@ -13,7 +13,7 @@ RUN mkdir -p /tmp/maknoon && chmod 1777 /tmp && chown 1000:1000 /tmp/maknoon
 RUN mkdir -p /home/maknoon && chown 1000:1000 /home/maknoon
 
 # Stage 3: Final Secure Sandbox
-FROM alpine:3.21
+FROM scratch
 
 # OCI Annotations (Industry Standard Metadata)
 LABEL org.opencontainers.image.title="Maknoon" \

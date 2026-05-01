@@ -44,9 +44,6 @@ func registerNetworkTools(s *server.MCPServer, engine crypto.MaknoonEngine) {
 				P2PMode:        p2pMode,
 				P2PAddr:        p2pAddr,
 			}
-			if p2pMode {
-				opts.RemoteEndpoint = "p2p-virtual" // Bypass engine validation
-			}
 
 			status, err := engine.TunnelStart(&crypto.EngineContext{Context: ctx}, opts)
 			if err != nil {
@@ -54,6 +51,21 @@ func registerNetworkTools(s *server.MCPServer, engine crypto.MaknoonEngine) {
 			}
 			res, _ := json.Marshal(status)
 			return mcp.NewToolResultText(string(res)), nil
+		})
+
+	s.AddTool(mcp.NewTool("tunnel_listen", mcp.WithDescription("Start a Post-Quantum Tunnel Server (Gateway Receiver)")),
+		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			args := getArgs(request)
+			addr := getString(args, "address", ":4001")
+			mode := getString(args, "mode", "p2p")
+			identity := getString(args, "identity", "")
+
+			res, err := engine.TunnelListen(&crypto.EngineContext{Context: ctx}, addr, mode, identity)
+			if err != nil {
+				return crypto.FormatMCPError(err, "tunnel_listen")
+			}
+			outData, _ := json.Marshal(res)
+			return mcp.NewToolResultText(string(outData)), nil
 		})
 
 	s.AddTool(mcp.NewTool("tunnel_stop", mcp.WithDescription("Terminate the active PQC tunnel")),

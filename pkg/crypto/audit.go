@@ -520,6 +520,21 @@ func (e *AuditEngine) TunnelStart(ectx *EngineContext, opts tunnel.TunnelOptions
 	return status, err
 }
 
+func (e *AuditEngine) TunnelListen(ectx *EngineContext, addr string, mode string, identity string) (NetworkResult, error) {
+	start := time.Now()
+	res, err := e.Engine.TunnelListen(ectx, addr, mode, identity)
+	duration := time.Since(start)
+
+	e.Logger.LogEvent("tunnel_listen", map[string]any{
+		"addr":        addr,
+		"mode":        mode,
+		"identity":    identity,
+		"duration_ms": duration.Milliseconds(),
+	}, err)
+
+	return res, err
+}
+
 func (e *AuditEngine) TunnelStop(ectx *EngineContext) error {
 	start := time.Now()
 	err := e.Engine.TunnelStop(ectx)

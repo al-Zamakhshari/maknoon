@@ -14,8 +14,8 @@ import (
 )
 
 func init() {
-	RegisterRegistry("nostr", func() IdentityRegistry {
-		return NewNostrRegistry()
+	RegisterRegistry("nostr", func(conf *Config) IdentityRegistry {
+		return NewNostrRegistry(conf)
 	})
 }
 
@@ -25,8 +25,10 @@ type NostrRegistry struct {
 }
 
 // NewNostrRegistry creates a new Nostr registry using configured relays.
-func NewNostrRegistry() *NostrRegistry {
-	conf := GetGlobalConfig()
+func NewNostrRegistry(conf *Config) *NostrRegistry {
+	if conf == nil {
+		conf = GetGlobalConfig()
+	}
 	relays := conf.Nostr.Relays
 	if len(relays) == 0 {
 		relays = DefaultConfig().Nostr.Relays

@@ -86,7 +86,7 @@ func (m *IdentityManager) IdentityPublish(ctx context.Context, handle string, op
 			return fmt.Errorf("deSEC token required")
 		}
 
-		dnsReg := NewDNSRegistry()
+		dnsReg := NewDNSRegistry(m.Config)
 		if err := dnsReg.PublishWithKey(ctx, record, []byte(token)); err != nil {
 			return err
 		}
@@ -94,7 +94,7 @@ func (m *IdentityManager) IdentityPublish(ctx context.Context, handle string, op
 
 	// Default to Nostr
 	if opts.Nostr || (!opts.DNS && !opts.Desec) {
-		nostrReg := NewNostrRegistry()
+		nostrReg := NewNostrRegistry(m.Config)
 		if len(id.NostrPriv) == 0 {
 			return fmt.Errorf("nostr private key not found")
 		}

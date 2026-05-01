@@ -31,6 +31,15 @@ func registerConfigTools(s *server.MCPServer, engine crypto.MaknoonEngine) {
 			if val, ok := args["stealth_mode"].(bool); ok {
 				conf.Performance.DefaultStealth = val
 			}
+			if val, ok := args["nostr_relays"].([]any); ok {
+				var relays []string
+				for _, v := range val {
+					if s, ok := v.(string); ok {
+						relays = append(relays, s)
+					}
+				}
+				conf.Nostr.Relays = relays
+			}
 
 			err := engine.UpdateConfig(&crypto.EngineContext{Context: ctx}, conf)
 			if err != nil {

@@ -2,10 +2,12 @@ package commands
 
 import (
 	"crypto/tls"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
 
+	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -70,9 +72,36 @@ func runSSEServer(s *server.MCPServer) error {
 
 	sseServer := server.NewSSEServer(s, server.WithBaseURL("http://"+addr))
 
+	// Add an orchestration handler for internal management/verification
+	mux := http.NewServeMux()
+	mux.Handle("/", sseServer)
+	mux.HandleFunc("/call", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		var req mcp.CallToolRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "Invalid request", http.StatusBadRequest)
+			return
+		}
+		tool := s.GetTool(req.Params.Name)
+		if tool == nil {
+			http.Error(w, fmt.Sprintf("Tool '%s' not found", req.Params.Name), http.StatusNotFound)
+			return
+		}
+		res, err := tool.Handler(r.Context(), req)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		json.NewEncoder(w).Encode(res)
+	})
+
 	// Define the HTTP server with Post-Quantum TLS 1.3 configuration
 	httpServer := &http.Server{
-		Addr: addr,
+		Addr:    addr,
+		Handler: mux,
 		TLSConfig: &tls.Config{
 			MinVersion: tls.VersionTLS13,
 			CurvePreferences: []tls.CurveID{
@@ -81,7 +110,6 @@ func runSSEServer(s *server.MCPServer) error {
 				tls.CurveP256,
 			},
 		},
-		Handler: sseServer,
 	}
 
 	fmt.Printf("🚀 Starting Post-Quantum Secure MCP SSE Server on %s\n", addr)
