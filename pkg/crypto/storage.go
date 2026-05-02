@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/dgraph-io/badger/v4"
 	"go.etcd.io/bbolt"
 )
 
@@ -111,9 +112,10 @@ func (s *FileSystemConfigStore) Save(conf *Config) error {
 	return conf.Save()
 }
 
-// FileSystemVaultStore manages secure vaults on disk using bbolt.
+// FileSystemVaultStore manages secure vaults on disk.
 type FileSystemVaultStore struct {
 	BaseDir string
+	Backend string
 }
 
 func (s *FileSystemVaultStore) Open(path string) (Store, error) {
@@ -122,14 +124,41 @@ func (s *FileSystemVaultStore) Open(path string) (Store, error) {
 		return nil, &ErrIO{Path: dir, Reason: "failed to create directory: " + err.Error()}
 	}
 
-	db, err := bbolt.Open(path, 0600, &bbolt.Options{Timeout: 1 * time.Second})
-	if err != nil {
-		return nil, &ErrIO{Path: path, Reason: err.Error()}
+	backend := strings.ToLower(s.Backend)
+	if backend == "" {
+		backend = "bbolt"
 	}
-	return &BboltStore{db: db}, nil
+
+	switch backend {
+	case "badger":
+		opts := badger.DefaultOptions(path)
+		opts.Logger = nil // Suppress noisy logs
+		db, err := badger.Open(opts)
+		if err != nil {
+			return nil, &ErrIO{Path: path, Reason: err.Error()}
+		}
+		return &BadgerStore{db: db}, nil
+	default:
+		db, err := bbolt.Open(path, 0600, &bbolt.Options{Timeout: 1 * time.Second})
+		if err != nil {
+			return nil, &ErrIO{Path: path, Reason: err.Error()}
+		}
+		return &BboltStore{db: db}, nil
+	}
 }
 
 func (s *FileSystemVaultStore) DeleteVault(path string) error {
+	// Badger uses a directory, Bolt uses a file
+	info, err := os.Stat(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	if info.IsDir() {
+		return os.RemoveAll(path)
+	}
 	return os.Remove(path)
 }
 
@@ -211,4 +240,79 @@ func (t *BboltTransaction) ForEach(bucket string, fn func(k, v []byte) error) er
 func (t *BboltTransaction) CreateBucket(bucket string) error {
 	_, err := t.tx.CreateBucketIfNotExists([]byte(bucket))
 	return err
+}
+
+// BadgerStore implements the Store interface using BadgerDB.
+type BadgerStore struct {
+	db *badger.DB
+}
+
+func (s *BadgerStore) Update(fn func(tx Transaction) error) error {
+	return s.db.Update(func(txn *badger.Txn) error {
+		return fn(&BadgerTransaction{txn: txn})
+	})
+}
+
+func (s *BadgerStore) View(fn func(tx Transaction) error) error {
+	return s.db.View(func(txn *badger.Txn) error {
+		return fn(&BadgerTransaction{txn: txn})
+	})
+}
+
+func (s *BadgerStore) Close() error {
+	return s.db.Close()
+}
+
+// BadgerTransaction implements the Transaction interface using BadgerDB.
+// It simulates buckets by prefixing keys with "bucket/".
+type BadgerTransaction struct {
+	txn *badger.Txn
+}
+
+func (t *BadgerTransaction) Get(bucket, key string) []byte {
+	fullKey := []byte(bucket + "/" + key)
+	item, err := t.txn.Get(fullKey)
+	if err != nil {
+		return nil
+	}
+	var val []byte
+	_ = item.Value(func(v []byte) error {
+		val = make([]byte, len(v))
+		copy(val, v)
+		return nil
+	})
+	return val
+}
+
+func (t *BadgerTransaction) Put(bucket, key string, val []byte) error {
+	fullKey := []byte(bucket + "/" + key)
+	return t.txn.Set(fullKey, val)
+}
+
+func (t *BadgerTransaction) Delete(bucket, key string) error {
+	fullKey := []byte(bucket + "/" + key)
+	return t.txn.Delete(fullKey)
+}
+
+func (t *BadgerTransaction) ForEach(bucket string, fn func(k, v []byte) error) error {
+	it := t.txn.NewIterator(badger.DefaultIteratorOptions)
+	defer it.Close()
+	prefix := []byte(bucket + "/")
+	for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
+		item := it.Item()
+		k := item.Key()
+		err := item.Value(func(v []byte) error {
+			// Strip prefix from key (bucket + "/")
+			return fn(k[len(prefix):], v)
+		})
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (t *BadgerTransaction) CreateBucket(bucket string) error {
+	// Badger doesn't have buckets, prefixing handles it
+	return nil
 }

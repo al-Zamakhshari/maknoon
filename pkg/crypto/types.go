@@ -30,6 +30,12 @@ func (s SecretString) LogValue() slog.Value {
 	return slog.StringValue("[REDACTED]")
 }
 
+// DataKey represents a wrapped symmetric key for envelope encryption.
+type DataKey struct {
+	Plaintext []byte `json:"plaintext"`
+	Wrapped   []byte `json:"wrapped"`
+}
+
 // EncryptResult is the standard JSON output for the encrypt command.
 type EncryptResult struct {
 	Status       string            `json:"status"`

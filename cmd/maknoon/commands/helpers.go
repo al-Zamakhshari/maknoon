@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -251,6 +252,18 @@ func formatBytes(b int64) string {
 		exp++
 	}
 	return fmt.Sprintf("%.1f %cB", float64(b)/float64(div), "KMGTPE"[exp])
+}
+
+// GetTLSConfig returns a standardized Post-Quantum TLS 1.3 configuration.
+func GetTLSConfig() *tls.Config {
+	return &tls.Config{
+		MinVersion: tls.VersionTLS13,
+		CurvePreferences: []tls.CurveID{
+			tls.X25519MLKEM768,
+			tls.X25519,
+			tls.CurveP256,
+		},
+	}
 }
 
 func printJSON(data interface{}) {

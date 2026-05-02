@@ -29,6 +29,7 @@ type Config struct {
 	Nostr              NostrConfig                `json:"nostr" mapstructure:"nostr"`
 	Tunnel             tunnel.TunnelConfig        `json:"tunnel" mapstructure:"tunnel"`
 	Paths              PathConfig                 `json:"paths" mapstructure:"paths"`
+	VaultBackend       string                     `json:"vault_backend" mapstructure:"vault_backend"` // bbolt or badger
 	Profiles           map[string]*DynamicProfile `json:"profiles,omitempty" mapstructure:"profiles"`
 }
 
@@ -141,7 +142,8 @@ func DefaultConfig() *Config {
 			KeysDir:   filepath.Join(home, MaknoonDir, KeysDir),
 			VaultsDir: filepath.Join(home, MaknoonDir, VaultsDir),
 		},
-		Profiles: make(map[string]*DynamicProfile),
+		VaultBackend: "bbolt",
+		Profiles:     make(map[string]*DynamicProfile),
 	}
 }
 

@@ -3,6 +3,7 @@ package crypto
 import (
 	"bufio"
 	"context"
+	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -17,6 +18,7 @@ import (
 	"time"
 
 	"github.com/al-Zamakhshari/maknoon/pkg/tunnel"
+	"github.com/awnumar/memguard"
 	"github.com/libp2p/go-libp2p"
 	"github.com/multiformats/go-multiaddr"
 )
@@ -460,6 +462,7 @@ func NewEngine(policy SecurityPolicy, idMgr *IdentityManager, conf *Config, vaul
 	if vaultStore == nil {
 		vaultStore = &FileSystemVaultStore{
 			BaseDir: conf.Paths.VaultsDir,
+			Backend: conf.VaultBackend,
 		}
 	}
 
@@ -614,6 +617,64 @@ func (e *Engine) Verify(ectx *EngineContext, data []byte, sig []byte, pubKey []b
 		return false, err
 	}
 	return VerifySignature(data, sig, pubKey), nil
+}
+
+func (e *Engine) Wrap(ectx *EngineContext, pubKey []byte) (DataKey, error) {
+	ectx = e.context(ectx)
+	if err := e.enforce(ectx, CapCrypto); err != nil {
+		return DataKey{}, err
+	}
+
+	// Generate a high-entropy 32-byte Data Encryption Key (DEK)
+	dek := make([]byte, 32)
+	if _, err := io.ReadFull(rand.Reader, dek); err != nil {
+		return DataKey{}, err
+	}
+	defer SafeClear(dek)
+
+	// Create a copy of the plaintext for the result BEFORE it's wiped by memguard
+	plaintext := make([]byte, len(dek))
+	copy(plaintext, dek)
+
+	// Encapsulate the DEK using the provided public key (ML-KEM-768 hybrid)
+	// memguard.NewEnclave takes ownership of dek and wipes it.
+	profile := DefaultProfile()
+	dekEnclave := memguard.NewEnclave(dek)
+	wrapped, err := profile.WrapFEK(pubKey, 0, dekEnclave)
+	if err != nil {
+		return DataKey{}, err
+	}
+
+	return DataKey{
+		Plaintext: plaintext,
+		Wrapped:   wrapped,
+	}, nil
+}
+
+func (e *Engine) Unwrap(ectx *EngineContext, wrappedKey []byte, privKey []byte) ([]byte, error) {
+	ectx = e.context(ectx)
+	if err := e.enforce(ectx, CapCrypto); err != nil {
+		return nil, err
+	}
+
+	profile := DefaultProfile()
+	dekEnclave, err := profile.UnwrapFEK(privKey, 0, wrappedKey)
+	if err != nil {
+		return nil, err
+	}
+
+	// Decapsulate and reveal the DEK
+	lb, err := dekEnclave.Open()
+	if err != nil {
+		return nil, fmt.Errorf("failed to open DEK enclave: %w", err)
+	}
+	defer lb.Destroy()
+
+	// Return a copy of the plaintext bytes
+	plaintext := make([]byte, lb.Size())
+	copy(plaintext, lb.Bytes())
+
+	return plaintext, nil
 }
 
 // bufferPool reduces GC pressure during streaming.

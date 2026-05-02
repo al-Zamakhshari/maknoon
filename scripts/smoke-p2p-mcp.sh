@@ -4,15 +4,21 @@ set -e
 # Maknoon high-fidelity P2P E2E Verification (V3 - Stable Sessions)
 # Uses the unified binary in a 2-node PQC DMZ.
 
+source "$(dirname "$0")/common.sh"
+
 export MAKNOON_PASSPHRASE=mcp-test-secret
 export MAKNOON_JSON=1
+
+CERT_DIR="deploy/docker/certs"
+mkdir -p "$CERT_DIR"
+generate_test_certs "$CERT_DIR"
 
 cleanup() {
     echo "🧹 Tearing down PQC DMZ..."
     [ -n "$SENDER_CURL_PID" ] && kill $SENDER_CURL_PID 2>/dev/null || true
     [ -n "$RECV_CURL_PID" ] && kill $RECV_CURL_PID 2>/dev/null || true
     docker compose -p maknoon -f deploy/docker/mcp.yml down 2>/dev/null || true
-    rm -rf *.tmp *.hash *.bin *.txt
+    rm -rf *.tmp *.hash *.bin *.txt "$CERT_DIR"
 }
 trap cleanup EXIT
 
@@ -22,7 +28,7 @@ get_session() {
     local log="session_$port.txt"
     rm -f "$log"
     # Use --no-buffer and -s -N to ensure we get output immediately
-    curl -s -N "http://127.0.0.1:$port/sse" > "$log" &
+    curl -k -s -N "https://127.0.0.1:$port/sse" > "$log" &
     local pid=$!
     
     local msg_path=""
@@ -56,7 +62,7 @@ mcp_call_node() {
     local id=$RANDOM
     
     # Send the request
-    local status=$(curl -s -w "%{http_code}" -X POST "http://127.0.0.1:$port$path" \
+    local status=$(curl -k -s -w "%{http_code}" -X POST "https://127.0.0.1:$port$path" \
       -H "Content-Type: application/json" \
       -d "{
         \"jsonrpc\": \"2.0\",

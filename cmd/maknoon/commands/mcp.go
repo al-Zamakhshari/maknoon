@@ -1,7 +1,6 @@
 package commands
 
 import (
-	"crypto/tls"
 	"fmt"
 	"net/http"
 	"strings"
@@ -72,16 +71,9 @@ func runSSEServer(s *server.MCPServer) error {
 
 	// Define the HTTP server with Post-Quantum TLS 1.3 configuration
 	httpServer := &http.Server{
-		Addr:    addr,
-		Handler: sseServer,
-		TLSConfig: &tls.Config{
-			MinVersion: tls.VersionTLS13,
-			CurvePreferences: []tls.CurveID{
-				tls.X25519MLKEM768,
-				tls.X25519,
-				tls.CurveP256,
-			},
-		},
+		Addr:      addr,
+		Handler:   sseServer,
+		TLSConfig: GetTLSConfig(),
 	}
 
 	fmt.Printf("🚀 Starting Post-Quantum Secure MCP SSE Server on %s\n", addr)

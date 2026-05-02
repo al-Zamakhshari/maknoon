@@ -156,6 +156,12 @@ type Signer interface {
 	Verify(ectx *EngineContext, data []byte, sig []byte, pubKey []byte) (bool, error)
 }
 
+// KMSService provides enterprise-grade envelope encryption (Key Wrapping).
+type KMSService interface {
+	Wrap(ectx *EngineContext, pubKey []byte) (DataKey, error)
+	Unwrap(ectx *EngineContext, wrappedKey []byte, privKey []byte) ([]byte, error)
+}
+
 // MaknoonEngine is the primary high-level facade for all Maknoon services.
 type MaknoonEngine interface {
 	Protector
@@ -168,6 +174,7 @@ type MaknoonEngine interface {
 	TunnelService
 	ChatService
 	Signer
+	KMSService
 
 	Close() error
 }

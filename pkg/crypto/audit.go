@@ -592,6 +592,30 @@ func (e *AuditEngine) Verify(ectx *EngineContext, data []byte, sig []byte, pubKe
 	return res, err
 }
 
+func (e *AuditEngine) Wrap(ectx *EngineContext, pubKey []byte) (DataKey, error) {
+	start := time.Now()
+	res, err := e.Engine.Wrap(ectx, pubKey)
+	duration := time.Since(start)
+
+	e.Logger.LogEvent("kms_wrap", map[string]any{
+		"duration_ms": duration.Milliseconds(),
+	}, err)
+
+	return res, err
+}
+
+func (e *AuditEngine) Unwrap(ectx *EngineContext, wrappedKey []byte, privKey []byte) ([]byte, error) {
+	start := time.Now()
+	res, err := e.Engine.Unwrap(ectx, wrappedKey, privKey)
+	duration := time.Since(start)
+
+	e.Logger.LogEvent("kms_unwrap", map[string]any{
+		"duration_ms": duration.Milliseconds(),
+	}, err)
+
+	return res, err
+}
+
 func (e *AuditEngine) Close() error {
 	var errs []string
 	if err := e.Engine.Close(); err != nil {
