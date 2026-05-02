@@ -6,7 +6,7 @@ Maknoon (مكنون) is a high-performance cryptographic engine designed to secu
 
 ---
 
-## V4 Platform Architecture (Industrial Agility)
+## V1.x Platform Architecture (Industrial Agility)
 
 | Capability | Technical Specification |
 | :--- | :--- |
@@ -40,4 +40,4 @@ Strategic engineering objectives for future enhancements, including hardware sec
 
 ---
 
-> **V4 Industrial Milestone:** Maknoon has successfully passed four high-impact "Red-Team" missions (Blind Proxy, Multi-Bridge, Dead Man, and Agility), validating its readiness for enterprise autonomous orchestration.
+> **V1.3 Industrial Milestone:** Maknoon has successfully passed four high-impact "Red-Team" missions (Blind Proxy, Multi-Bridge, Dead Man, and Agility), validating its readiness for enterprise autonomous orchestration.
