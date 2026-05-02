@@ -6,6 +6,9 @@ set -e
 
 source "$(dirname "$0")/common.sh"
 
+export MAKNOON_AUDIT_ENABLED=1
+export MAKNOON_AUDIT_LOG_FILE="tmp/audit.log"
+
 echo "🏗️  Preparing API Smoke Test..."
 CERT_DIR="tmp/api-certs"
 generate_test_certs "$CERT_DIR"
