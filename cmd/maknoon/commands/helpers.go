@@ -387,7 +387,7 @@ func completeVaults(cmd *cobra.Command, args []string, toComplete string) ([]str
 }
 
 func completeServices(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-	// Service names are now hashed for privacy in V4.1.
+	// Service names are now hashed for privacy in V1.4.
 	// Autocomplete is disabled to prevent leaking service presence without the vault passphrase.
 	return nil, cobra.ShellCompDirectiveNoFileComp
 }
@@ -505,7 +505,7 @@ func InitEngine() error {
 			}
 		}
 
-		slog.Debug("Maknoon Engine initializing", "version", "v4.0 Alpha", "args", safeArgs)
+		slog.Debug("Maknoon Engine initializing", "version", "v1.3.x", "args", safeArgs)
 		slog.Debug("Paths resolved", "home", crypto.GetUserHomeDir(), "keys", conf.Paths.KeysDir, "vaults", conf.Paths.VaultsDir)
 	}
 

@@ -515,7 +515,7 @@ func (id *Identity) Wipe() {
 }
 
 // AsLibp2pKey converts the Maknoon signing key to a libp2p private key.
-// In v4.0, we support Hybrid SIG (ML-DSA + Ed25519). If an Ed25519 key is bundled,
+// In v1.x, we support Hybrid SIG (ML-DSA + Ed25519). If an Ed25519 key is bundled,
 // we use it directly. Otherwise, we fallback to deterministic derivation.
 func (id *Identity) AsLibp2pKey() (libp2pcrypto.PrivKey, error) {
 	if len(id.SIGPriv) == 0 {

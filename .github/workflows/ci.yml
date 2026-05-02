@@ -73,6 +73,11 @@ jobs:
           chmod +x scripts/smoke-p2p-mcp.sh
           ./scripts/smoke-p2p-mcp.sh
 
+      - name: Run REST API Smoke Test
+        run: |
+          chmod +x scripts/smoke-api.sh
+          ./scripts/smoke-api.sh
+
   docker:
     name: Container Integrity
     needs: quality

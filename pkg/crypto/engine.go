@@ -769,7 +769,7 @@ func (e *Engine) Diagnostic() DiagnosticResult {
 	res.System.OS = runtime.GOOS
 	res.System.Arch = runtime.GOARCH
 	res.System.Go = runtime.Version()
-	res.System.Version = "v4.0.0" // TODO: Wire to a central version constant
+	res.System.Version = "v1.3.x" // TODO: Wire to a central version constant
 
 	// User Info
 	if u, err := user.Current(); err == nil {
