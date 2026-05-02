@@ -118,7 +118,7 @@ jobs:
 
       - name: Get Next Version
         id: next_version
-        uses: anothrNick/github-tag-action@1.71.0
+        uses: anothrNick/github-tag-action@1.75.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           WITH_V: true
@@ -142,7 +142,7 @@ jobs:
 
       - name: Bump version and push tag
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        uses: anothrNick/github-tag-action@1.71.0
+        uses: anothrNick/github-tag-action@1.75.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           WITH_V: true
