@@ -35,10 +35,11 @@ COPY --from=builder /app/maknoon /usr/local/bin/maknoon
 
 WORKDIR /home/maknoon
 ENV HOME=/home/maknoon
+ENV PATH="/usr/local/bin"
 USER 1000:1000
 
 # Define persistent storage locations
 VOLUME ["/home/maknoon"]
 
 # Default to MCP Stdio, but ready for SSE
-CMD ["maknoon", "mcp"]
+CMD ["/usr/local/bin/maknoon", "mcp"]

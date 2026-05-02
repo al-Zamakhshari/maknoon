@@ -100,8 +100,8 @@ docker compose -p maknoon -f deploy/docker/mcp.yml up -d --build
 sleep 15
 
 echo "🔑 Provisioning PQC Identities..."
-docker compose -p maknoon -f deploy/docker/mcp.yml exec -T sender maknoon keygen -o default --no-password --profile nist
-docker compose -p maknoon -f deploy/docker/mcp.yml exec -T receiver maknoon keygen -o default --no-password --profile nist
+docker compose -p maknoon -f deploy/docker/mcp.yml exec -T sender /usr/local/bin/maknoon keygen -o default --no-password --profile nist
+docker compose -p maknoon -f deploy/docker/mcp.yml exec -T receiver /usr/local/bin/maknoon keygen -o default --no-password --profile nist
 
 echo "📡 Establishing MCP sessions..."
 S_DATA=$(get_session 8080)
