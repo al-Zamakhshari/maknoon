@@ -14,10 +14,12 @@ services:
     environment:
       - MAKNOON_PASSPHRASE=london-secret
       - MAKNOON_JSON=1
+    volumes:
+      - ./certs:/etc/maknoon/certs:ro
     networks:
       global-net:
         ipv4_address: 172.30.0.10
-    command: ["maknoon", "mcp", "--transport", "sse", "--address", ":8080"]
+    command: ["maknoon", "mcp", "--transport", "sse", "--address", ":8080", "--tls-cert", "/etc/maknoon/certs/server.crt", "--tls-key", "/etc/maknoon/certs/server.key"]
 
   agent-ny:
     build:
@@ -26,10 +28,12 @@ services:
     environment:
       - MAKNOON_PASSPHRASE=ny-secret
       - MAKNOON_JSON=1
+    volumes:
+      - ./certs:/etc/maknoon/certs:ro
     networks:
       global-net:
         ipv4_address: 172.30.0.20
-    command: ["maknoon", "mcp", "--transport", "sse", "--address", ":8080"]
+    command: ["maknoon", "mcp", "--transport", "sse", "--address", ":8080", "--tls-cert", "/etc/maknoon/certs/server.crt", "--tls-key", "/etc/maknoon/certs/server.key"]
 
 networks:
   global-net:

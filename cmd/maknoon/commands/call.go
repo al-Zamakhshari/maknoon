@@ -2,12 +2,15 @@ package commands
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"strings"
 
 	"github.com/mark3labs/mcp-go/client"
+	"github.com/mark3labs/mcp-go/client/transport"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -16,11 +19,15 @@ import (
 func CallCmd() *cobra.Command {
 	var addr string
 	var argsStr string
+	var insecure bool
 
 	cmd := &cobra.Command{
 		Use:   "call [tool_name]",
 		Short: "Invoke an MCP tool on a running Maknoon agent via a standard SSE client",
-		Args:  cobra.ExactArgs(1),
+		Long: `Invokes an MCP tool using a standard SSE client. 
+By default, this command uses HTTPS with Post-Quantum TLS 1.3 (ML-KEM) 
+to ensure a quantum-resistant orchestration handshake.`,
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			toolName := args[0]
 			ctx := context.Background()
@@ -35,17 +42,32 @@ func CallCmd() *cobra.Command {
 			// Ensure address has protocol and standard SSE path
 			baseURL := addr
 			if !strings.HasPrefix(baseURL, "http://") && !strings.HasPrefix(baseURL, "https://") {
-				baseURL = "http://" + baseURL
+				baseURL = "https://" + baseURL
 			}
 			if !strings.HasSuffix(baseURL, "/sse") {
 				baseURL = strings.TrimSuffix(baseURL, "/") + "/sse"
+			}
+
+			// Configure HTTP Client with PQC-preferring TLS
+			tlsConfig := &tls.Config{
+				InsecureSkipVerify: insecure,
+				MinVersion:         tls.VersionTLS13,
+				CurvePreferences: []tls.CurveID{
+					tls.X25519MLKEM768,
+					tls.X25519,
+				},
+			}
+			httpClient := &http.Client{
+				Transport: &http.Transport{
+					TLSClientConfig: tlsConfig,
+				},
 			}
 
 			// STANDARD PATH: Formal MCP Client Lifecycle
 			if viper.GetBool("trace") {
 				fmt.Fprintf(os.Stderr, "TRACE: Initializing standard MCP SSE client for %s\n", baseURL)
 			}
-			mcpClient, err := client.NewSSEMCPClient(baseURL)
+			mcpClient, err := client.NewSSEMCPClient(baseURL, transport.WithHTTPClient(httpClient))
 			if err != nil {
 				return fmt.Errorf("failed to create MCP client: %v", err)
 			}
@@ -101,5 +123,6 @@ func CallCmd() *cobra.Command {
 
 	cmd.Flags().StringVar(&addr, "addr", "localhost:8080", "Address of the running Maknoon agent")
 	cmd.Flags().StringVar(&argsStr, "args", "", "JSON string of tool arguments")
+	cmd.Flags().BoolVar(&insecure, "insecure", false, "Skip TLS certificate verification (ONLY FOR TESTING)")
 	return cmd
 }

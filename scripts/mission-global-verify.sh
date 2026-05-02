@@ -11,6 +11,7 @@ PROJECT="maknoon-global"
 trap 'fail_trap "Global Orchestration" "$COMPOSE_FILE" "$PROJECT"' EXIT
 
 echo "🏗️  Provisioning Global Mesh (Nostr + 2 Agents)..."
+generate_test_certs "deploy/docker/certs"
 docker compose -p $PROJECT -f $COMPOSE_FILE up -d --build
 sleep 15
 
@@ -22,12 +23,12 @@ N_EXEC="docker compose -p $PROJECT -f $COMPOSE_FILE exec -T $NY"
 
 echo "🔑 Step 1: Provisioning London PQC Identity..."
 $L_EXEC maknoon keygen -o london-id --no-password
-# Use the native simple call for orchestration
-$L_EXEC maknoon call config_update --args '{"nostr_relays":["ws://172.30.0.5:8080"]}' > /dev/null
+# Use the native standard call for orchestration (HTTPS + PQC)
+$L_EXEC maknoon call --insecure config_update --args '{"nostr_relays":["ws://172.30.0.5:8080"]}' > /dev/null
 
 echo "📡 Step 2: Starting London P2P Listener via API..."
-# Use native standard call for listener establishment
-$L_EXEC maknoon call tunnel_listen --args '{"address":":4001","mode":"p2p","identity":"london-id"}' > /dev/null
+# Use native standard call for listener establishment (HTTPS + PQC)
+$L_EXEC maknoon call --insecure tunnel_listen --args '{"address":":4001","mode":"p2p","identity":"london-id"}' > /dev/null
 
 sleep 2
 # Extract PeerID from London (Raw CLI JSON)
@@ -44,8 +45,8 @@ LONDON_NOSTR_HEX=$($L_EXEC maknoon identity info london-id --json | jq -r '.nost
 echo "📍 London Gateway Nostr Hex: $LONDON_NOSTR_HEX"
 
 echo "🌍 Step 3: Global Discovery from New York..."
-# Update NY live agent config via API
-$N_EXEC maknoon call config_update --args '{"nostr_relays":["ws://172.30.0.5:8080"]}' > /dev/null
+# Update NY live agent config via API (HTTPS + PQC)
+$N_EXEC maknoon call --insecure config_update --args '{"nostr_relays":["ws://172.30.0.5:8080"]}' > /dev/null
 
 echo "🔍 NY Agent searching for London Gateway via Nostr..."
 # Retry loop for discovery
@@ -53,8 +54,8 @@ MAX_RETRIES=10
 PUBKEY=""
 for i in $(seq 1 $MAX_RETRIES); do
     echo "   Attempt $i/$MAX_RETRIES..."
-    # Use native standard call for discovery
-    RESOLVE_RES=$($N_EXEC maknoon call resolve_identity --args "{\"input\":\"@$LONDON_NOSTR_HEX\"}")
+    # Use native standard call for discovery (HTTPS + PQC)
+    RESOLVE_RES=$($N_EXEC maknoon call --insecure resolve_identity --args "{\"input\":\"@$LONDON_NOSTR_HEX\"}")
 
     # Standard client returns wrapped result
     PUBKEY=$(echo "$RESOLVE_RES" | jq -r '.content[0].text | fromjson | .public_key // empty')
@@ -73,17 +74,17 @@ echo "✅ Discovery SUCCESS: Retrieved ML-KEM Key: ${PUBKEY:0:16}..."
 
 
 echo "🌉 Step 4: Autonomous PQC Tunnel Provisioning via API..."
-# Establishment of PQC tunnel via standard call
-$N_EXEC maknoon call tunnel_start --args "{\"remote\":\"@$LONDON_NOSTR_HEX\",\"p2p_mode\":true,\"port\":1080}" > /dev/null
+# Establishment of PQC tunnel via standard call (HTTPS + PQC)
+$N_EXEC maknoon call --insecure tunnel_start --args "{\"remote\":\"@$LONDON_NOSTR_HEX\",\"p2p_mode\":true,\"port\":1080}" > /dev/null
 
 sleep 5
 
-# Verify tunnel state via standard call
-STATUS_RES=$($N_EXEC maknoon call tunnel_status)
+# Verify tunnel state via standard call (HTTPS + PQC)
+STATUS_RES=$($N_EXEC maknoon call --insecure tunnel_status)
 IS_ACTIVE=$(echo "$STATUS_RES" | jq -r '.content[0].text | fromjson | .active')
 
 if [ "$IS_ACTIVE" == "true" ]; then
-    echo "✅ SUCCESS: Global PQC Tunnel provisioned and verified via standard MCP client."
+    echo "✅ SUCCESS: Global PQC Tunnel provisioned and verified via Secure standard MCP client."
 else
     echo "❌ FAILED: Tunnel provisioning failed."
     echo "Final Status: $STATUS_RES"
@@ -91,7 +92,7 @@ else
 fi
 
 echo -e "\n🏆 SUCCESS: Global Orchestration Mission Passed."
-echo "Verified: NIP-05 Resolution, Multiaddr Mesh Discovery, and MCP Provisioning."
+echo "Verified: NIP-05 Resolution, Multiaddr Mesh Discovery, and Secure PQC-MCP Provisioning."
 
 echo "🧹 Tearing down Global Mesh..."
 docker compose -p maknoon-global -f $COMPOSE_FILE down

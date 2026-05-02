@@ -26,6 +26,15 @@ fail_trap() {
     fi
 }
 
+# generate_test_certs creates a self-signed certificate for testing
+generate_test_certs() {
+    local dir=$1
+    mkdir -p "$dir"
+    if [ ! -f "$dir/server.crt" ]; then
+        echo "🔐 Generating self-signed test certificates in $dir..."
+        openssl req -x509 -newkey rsa:4096 -keyout "$dir/server.key" -out "$dir/server.crt" -days 365 -nodes -subj "/CN=localhost" 2>/dev/null
+    fi
+}
 # wait_for_port waits for a specific port to be open in a container
 wait_for_port() {
     local container=$1

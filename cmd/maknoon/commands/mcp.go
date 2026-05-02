@@ -85,13 +85,12 @@ func runSSEServer(s *server.MCPServer) error {
 	}
 
 	fmt.Printf("🚀 Starting Post-Quantum Secure MCP SSE Server on %s\n", addr)
-	if certFile != "" && keyFile != "" {
-		fmt.Println("🔒 Transport encryption active (PQ-TLS 1.3)")
-		return httpServer.ListenAndServeTLS(certFile, keyFile)
+	if certFile == "" || keyFile == "" {
+		return fmt.Errorf("TLS is REQUIRED for MCP SSE mode. Please provide --tls-cert and --tls-key. Maknoon mandates Post-Quantum Secure transport for all orchestration")
 	}
 
-	fmt.Println("⚠️  Warning: Running SSE server without TLS (Not Recommended)")
-	return httpServer.ListenAndServe()
+	fmt.Println("🔒 Transport encryption active (PQ-TLS 1.3)")
+	return httpServer.ListenAndServeTLS(certFile, keyFile)
 }
 
 func createMCPServer() *server.MCPServer {
