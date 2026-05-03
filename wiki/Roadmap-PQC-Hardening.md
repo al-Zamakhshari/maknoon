@@ -65,6 +65,8 @@ As cryptographic standards evolve, Maknoon's architecture must remain adaptable 
 | **Initial Security Audit** | Completed | April 2026 |
 | **Industrial Capability Missions** | Completed | May 2026 |
 | **Algorithm Diversity (FrodoKEM)** | Completed | June 2026 |
-| **MCP Governance Gates** | In Progress | Q3 2026 |
+| **Observability & Diagnostics** | Completed | July 2026 |
+| **P2P Protocol Stabilization** | Completed | August 2026 |
+| **MCP Governance Gates** | Completed | September 2026 |
 | **Hardware Binding (PKCS#11)** | Planned | Q4 2026 |
 | **SLSA Level 4 Certification** | Planned | 2027 |
