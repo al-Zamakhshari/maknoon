@@ -125,7 +125,7 @@ func registerCryptoTools(s *server.MCPServer, engine crypto.MaknoonEngine) {
 				return crypto.FormatMCPError(err, "sign_file")
 			}
 
-			if err := os.WriteFile(output, sig, 0644); err != nil {
+			if err := os.WriteFile(output, sig, 0600); err != nil {
 				return crypto.FormatMCPError(err, "sign_file")
 			}
 

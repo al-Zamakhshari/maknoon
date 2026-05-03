@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/mark3labs/mcp-go/server"
 	"github.com/spf13/cobra"
@@ -71,9 +72,10 @@ func runSSEServer(s *server.MCPServer) error {
 
 	// Define the HTTP server with Post-Quantum TLS 1.3 configuration
 	httpServer := &http.Server{
-		Addr:      addr,
-		Handler:   sseServer,
-		TLSConfig: GetTLSConfig(),
+		Addr:              addr,
+		Handler:           sseServer,
+		TLSConfig:         GetTLSConfig(),
+		ReadHeaderTimeout: 10 * time.Second,
 	}
 
 	fmt.Printf("🚀 Starting Post-Quantum Secure MCP SSE Server on %s\n", addr)

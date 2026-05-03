@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/al-Zamakhshari/maknoon/pkg/crypto"
 	"github.com/al-Zamakhshari/maknoon/pkg/tunnel"
@@ -78,9 +79,10 @@ func runAPIServer() error {
 
 	// Define the HTTP server with Post-Quantum TLS 1.3 configuration
 	httpServer := &http.Server{
-		Addr:      addr,
-		Handler:   mux,
-		TLSConfig: GetTLSConfig(),
+		Addr:              addr,
+		Handler:           mux,
+		TLSConfig:         GetTLSConfig(),
+		ReadHeaderTimeout: 10 * time.Second,
 	}
 
 	fmt.Printf("🚀 Starting Maknoon PQC API Server on %s\n", addr)

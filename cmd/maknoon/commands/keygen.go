@@ -131,7 +131,7 @@ func KeygenCmd() *cobra.Command {
 					}
 					return err
 				}
-				if err := os.WriteFile(res.BasePath+".fido2", raw, 0644); err != nil {
+				if err := os.WriteFile(res.BasePath+".fido2", raw, 0600); err != nil {
 					err := fmt.Errorf("failed to write fido2 metadata: %w", err)
 					if JSONOutput {
 						printErrorJSON(err)

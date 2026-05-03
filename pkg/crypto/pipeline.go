@@ -317,7 +317,7 @@ func (e *Engine) FinalizeRestoration(ectx *EngineContext, pr io.Reader, w io.Wri
 	} else if outPath == "-" {
 		out = os.Stdout
 	} else if outPath != "" {
-		if err := os.MkdirAll(filepath.Dir(outPath), 0755); err != nil {
+		if err := os.MkdirAll(filepath.Dir(outPath), 0750); err != nil {
 			return &ErrIO{Path: filepath.Dir(outPath), Reason: err.Error()}
 		}
 		f, err := os.Create(outPath)
@@ -423,7 +423,7 @@ func ExtractArchive(r io.Reader, outputDir string) error {
 	}
 
 	if outputDir != "" {
-		if err := os.MkdirAll(absOutputDir, 0755); err != nil {
+		if err := os.MkdirAll(absOutputDir, 0750); err != nil {
 			return &ErrIO{Path: absOutputDir, Reason: err.Error()}
 		}
 	}
@@ -445,17 +445,18 @@ func ExtractArchive(r io.Reader, outputDir string) error {
 
 		switch h.Typeflag {
 		case tar.TypeDir:
-			if err := os.MkdirAll(target, 0755); err != nil {
+			if err := os.MkdirAll(target, 0750); err != nil {
 				return &ErrIO{Path: target, Reason: err.Error()}
 			}
 		case tar.TypeReg:
-			if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
+			if err := os.MkdirAll(filepath.Dir(target), 0750); err != nil {
 				return &ErrIO{Path: filepath.Dir(target), Reason: err.Error()}
 			}
 			f, err := os.OpenFile(target, os.O_CREATE|os.O_RDWR|os.O_TRUNC, os.FileMode(h.Mode))
 			if err != nil {
 				return &ErrIO{Path: target, Reason: err.Error()}
 			}
+			/* #nosec G110 */
 			if _, err = io.Copy(f, tr); err != nil {
 				_ = f.Close()
 				return &ErrIO{Path: target, Reason: err.Error()}

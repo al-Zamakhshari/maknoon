@@ -49,7 +49,7 @@ func SignCmd() *cobra.Command {
 				p.RenderError(err)
 				return err
 			}
-			if err := os.WriteFile(sigFile, sig, 0644); err != nil {
+			if err := os.WriteFile(sigFile, sig, 0600); err != nil {
 				p.RenderError(err)
 				return err
 			}
