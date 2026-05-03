@@ -9,7 +9,7 @@ import (
 )
 
 // SecureDelete securely wipes and removes a file or directory.
-func (e *Engine) SecureDelete(path string) error {
+func (e *Engine) SecureDeleteStream(path string) error {
 	e.Logger.Debug("securely deleting path", "path", path)
 	info, err := os.Stat(path)
 	if err != nil {

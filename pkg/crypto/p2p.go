@@ -3,10 +3,6 @@ package crypto
 import (
 	"crypto/rand"
 	"encoding/hex"
-	"io"
-
-	"github.com/al-Zamakhshari/maknoon/pkg/tunnel"
-	"github.com/libp2p/go-libp2p"
 )
 
 // P2PStatus represents a progress update in a P2P transfer.
@@ -54,89 +50,5 @@ type P2PReceiveOptions struct {
 }
 
 // P2PSend initiates a libp2p P2P transfer.
-func (e *Engine) P2PSend(ectx *EngineContext, identityName string, inputName string, r io.Reader, opts P2PSendOptions) (string, <-chan P2PStatus, error) {
-	ectx = e.context(ectx)
-	if opts.TraceID == "" {
-		opts.TraceID = GenerateTraceID()
-	}
-	e.Logger.Debug("P2PSend initiating", "trace_id", opts.TraceID, "input", inputName, "target", opts.To)
-
-	status := make(chan P2PStatus, 10)
-
-	// 1. Load active identity
-	idName := identityName
-	if idName == "" {
-		idName = e.GetConfig().DefaultIdentity
-	}
-	if idName == "" {
-		idName = "default"
-	}
-
-	id, err := e.Identities.LoadIdentity(idName, nil, "", false)
-	if err != nil {
-		return "", nil, err
-	}
-	priv, err := id.AsLibp2pKey()
-	if err != nil {
-		return "", nil, err
-	}
-	h, err := tunnel.NewLibp2pHost(libp2p.Identity(priv))
-	if err != nil {
-		return "", nil, err
-	}
-	go e.runLibp2pSend(ectx, inputName, r, h, opts.To, opts, status)
-	return h.ID().String(), status, nil
-}
 
 // P2PReceive completes a libp2p P2P transfer.
-func (e *Engine) P2PReceive(ectx *EngineContext, identityName string, code string, opts P2PReceiveOptions) (<-chan P2PStatus, error) {
-	ectx = e.context(ectx)
-	if opts.TraceID == "" {
-		opts.TraceID = GenerateTraceID()
-	}
-	e.Logger.Debug("P2PReceive initiating", "trace_id", opts.TraceID, "identity", identityName)
-
-	status := make(chan P2PStatus, 10)
-
-	// 1. Load active identity
-	idName := identityName
-	if idName == "" {
-		idName = e.GetConfig().DefaultIdentity
-	}
-	if idName == "" {
-		idName = "default"
-	}
-
-	id, err := e.Identities.LoadIdentity(idName, nil, "", false)
-	if err != nil {
-		return nil, err
-	}
-
-	// Use identity's KEM private key for decryption if not explicitly provided
-	if len(opts.PrivateKey) == 0 {
-		opts.PrivateKey = id.KEMPriv
-	}
-
-	priv, err := id.AsLibp2pKey()
-	if err != nil {
-		return nil, err
-	}
-	h, err := tunnel.NewLibp2pHost(libp2p.Identity(priv))
-	if err != nil {
-		return nil, err
-	}
-	go e.runLibp2pReceive(ectx, h, opts, status)
-
-	var addrs []string
-	for _, a := range h.Addrs() {
-		addrs = append(addrs, a.String()+"/p2p/"+h.ID().String())
-	}
-
-	// We return our ID in the "connecting" phase so the user can share it
-	status <- P2PStatus{Phase: "connecting", Code: h.ID().String(), Addrs: addrs}
-	return status, nil
-}
-
-func (e *Engine) ValidateWormholeURL(ectx *EngineContext, url string) error {
-	return nil // Deprecated
-}

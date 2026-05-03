@@ -59,3 +59,10 @@ local_hash.txt
 local_integrity.bin
 source_hash.txt
 target_hash.txt
+
+# Local Go Cache
+.gocache/
+# Temporary Workspaces
+tmp/
+tmp_certs/
+deploy/docker/certs/

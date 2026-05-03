@@ -5,7 +5,9 @@ Maknoon is an industrial-grade, post-quantum CLI encryption engine and Model Con
 ## 🏗 Project Architecture (v1.x Series - Industrial PQC Backbone)
 
 - **`Unified Binary`**: A single statically linked binary hosts the CLI, the native MCP server, and the new **Service-Grade REST API**. Mode of operation is determined by the command: `keygen`, `mcp`, or `serve`.
-- **`Pure Engine (DI)`**: The central Engine is fully decoupled from the environment via **Dependency Injection**. All storage logic is abstracted into `KeyStore`, `ConfigStore`, and `VaultStore` interfaces.
+- **`Pure Engine (DI)`**: The central Engine is fully decoupled from the environment via **Dependency Injection**. It follows a **Modular SRP Structure** where the monolithic core is split into specialized logic files (`engine_crypto.go`, `engine_vault.go`, `engine_p2p.go`, etc.) to improve context efficiency and maintainability.
+- **`Modular CLI Commands`**: CLI command logic is decomposed into scoped files (e.g., `vault.go`, `vault_crud.go`, `vault_shard.go`) to prevent file bloating and facilitate targeted feature updates.
+- **`Domain-Specific Test Suites`**: Integration tests are organized into domain-specific suites (`commands_crypto_test.go`, `commands_vault_test.go`) for faster execution and clearer failure attribution.
 - **`Service-Grade Storage`**: In addition to standard `bbolt`, we now support **BadgerDB v4** as a high-concurrency, server-optimized LSM-tree backend for high-volume API workloads.
 - **`Presenter Pattern`**: All user-facing output is managed via the `Presenter` interface. Logic layer returns structured `Result` objects; UI layer renders them as pretty tables (CLI) or JSON (MCP/Agent/REST).
 - **`Transformer Pipeline`**: Data streaming is organized into a modular pipeline defined in `pkg/crypto/transformer.go`. Pluggable stages (Compressor, Encryptor, Archiver) can be chained dynamically.

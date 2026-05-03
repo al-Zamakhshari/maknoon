@@ -449,65 +449,6 @@ func EnsureMaknoonDirs() error {
 	return nil
 }
 
-func (e *Engine) IdentityActive(ectx *EngineContext) ([]string, error) {
-	ectx = e.context(ectx)
-	if err := e.enforce(ectx, CapIdentity); err != nil {
-		return nil, err
-	}
-	return e.Identities.ListActiveIdentities()
-}
-
-func (e *Engine) IdentityInfo(ectx *EngineContext, name string) (*IdentityInfoResult, error) {
-	ectx = e.context(ectx)
-	if err := e.enforce(ectx, CapIdentity); err != nil {
-		return nil, err
-	}
-	return e.Identities.GetIdentityInfo(name)
-}
-
-func (e *Engine) IdentityRename(ectx *EngineContext, oldName, newName string) error {
-	ectx = e.context(ectx)
-	if err := e.enforce(ectx, CapIdentity); err != nil {
-		return err
-	}
-	return e.Identities.RenameIdentity(oldName, newName)
-}
-
-func (e *Engine) IdentitySplit(ectx *EngineContext, name string, threshold, shares int, passphrase string) ([]string, error) {
-	ectx = e.context(ectx)
-	if err := e.enforce(ectx, CapIdentity); err != nil {
-		return nil, err
-	}
-	return e.Identities.SplitIdentity(name, threshold, shares, passphrase)
-}
-
-func (e *Engine) IdentityCombine(ectx *EngineContext, mnemonics []string, output, passphrase string, noPassword bool) (string, error) {
-	ectx = e.context(ectx)
-	if err := e.enforce(ectx, CapIdentity); err != nil {
-		return "", err
-	}
-	return e.Identities.CombineIdentity(mnemonics, output, passphrase, noPassword)
-}
-
-func (e *Engine) IdentityPublish(ectx *EngineContext, handle string, opts IdentityPublishOptions) error {
-	ectx = e.context(ectx)
-	if err := e.enforce(ectx, CapIdentity); err != nil {
-		return err
-	}
-	if err := e.ensureContacts(); err != nil {
-		return err
-	}
-	return e.Identities.IdentityPublish(ectx.Context, handle, opts)
-}
-
-func (e *Engine) CreateIdentity(ectx *EngineContext, output string, passphrase []byte, pin string, agent bool, profile string) (*IdentityResult, error) {
-	ectx = e.context(ectx)
-	if err := e.enforce(ectx, CapIdentity); err != nil {
-		return nil, err
-	}
-	return e.Identities.CreateIdentity(output, passphrase, pin, agent, profile)
-}
-
 func (id *Identity) Wipe() {
 	SafeClear(id.KEMPriv)
 	SafeClear(id.SIGPriv)

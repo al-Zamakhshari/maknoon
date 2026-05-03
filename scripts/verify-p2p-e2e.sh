@@ -9,7 +9,7 @@ export MAKNOON_JSON=1
 MAKNOON_BIN=$(pwd)/maknoon
 
 # Fresh directories for this specific run
-TEST_BASE="/tmp/maknoon_e2e_$(date +%s)"
+TEST_BASE="$(pwd)/tmp/maknoon_e2e_$(date +%s)"
 HOME1="$TEST_BASE/node1"
 HOME2="$TEST_BASE/node2"
 mkdir -p "$HOME1" "$HOME2"
@@ -17,11 +17,11 @@ mkdir -p "$HOME1" "$HOME2"
 cleanup() {
     echo "🧹 Cleaning up..."
     killall maknoon 2>/dev/null || true
-    rm -rf "$TEST_BASE"
+    
     rm -f original.hash received.hash
 }
 
-trap cleanup EXIT
+trap "if [ $? -ne 0 ]; then cat $TEST_BASE/recv.log $TEST_BASE/send.log; fi; cleanup" EXIT
 
 echo "🚀 Starting P2P E2E Test..."
 
@@ -47,11 +47,11 @@ dd if=/dev/urandom of="$TEST_BASE/test_p2p.bin" bs=1k count=10 > /dev/null 2>&1
 sha256sum "$TEST_BASE/test_p2p.bin" | awk '{print $1}' > original.hash
 
 # Receiver (Node 2)
-bash -c "export HOME=$HOME2 && $MAKNOON_BIN receive --p2p --output $TEST_BASE/received.bin > $TEST_BASE/recv.log 2>&1" &
+bash -c "export HOME=$HOME2 && $MAKNOON_BIN receive --p2p --identity id2 --output $TEST_BASE/received.bin > $TEST_BASE/recv.log 2>&1" &
 sleep 5
 
 # Sender (Node 1)
-bash -c "export HOME=$HOME1 && $MAKNOON_BIN send --p2p --to $NODE2_ID $TEST_BASE/test_p2p.bin > $TEST_BASE/send.log 2>&1"
+bash -c "export HOME=$HOME1 && $MAKNOON_BIN send --p2p --identity id1 --to $NODE2_ID $TEST_BASE/test_p2p.bin > $TEST_BASE/send.log 2>&1"
 
 sleep 15
 if [ -f "$TEST_BASE/received.bin" ]; then
@@ -73,10 +73,10 @@ fi
 
 # 2. Test Chat
 echo "💬 Testing Identity-bound Chat..."
-bash -c "export HOME=$HOME1 && $MAKNOON_BIN chat > $TEST_BASE/chat_host.log 2>&1" &
+bash -c "export HOME=$HOME1 && $MAKNOON_BIN chat --identity id1 > $TEST_BASE/chat_host.log 2>&1" &
 sleep 5
 
-bash -c "export HOME=$HOME2 && echo '{\"action\":\"send\",\"text\":\"P2P_FINAL_STABILITY_VERIFIED\"}' | $MAKNOON_BIN chat $NODE1_ID > $TEST_BASE/chat_join.log 2>&1" &
+bash -c "export HOME=$HOME2 && echo '{\"action\":\"send\",\"text\":\"P2P_FINAL_STABILITY_VERIFIED\"}' | $MAKNOON_BIN chat --identity id2 $NODE1_ID > $TEST_BASE/chat_join.log 2>&1" &
 sleep 15
 
 if grep -q "P2P_FINAL_STABILITY_VERIFIED" "$TEST_BASE/chat_host.log"; then

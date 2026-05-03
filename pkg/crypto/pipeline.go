@@ -42,7 +42,7 @@ func (o *Options) Emit(ev EngineEvent) {
 }
 
 // Protect handles the full encryption pipeline under the active policy.
-func (e *Engine) Protect(ectx *EngineContext, inputName string, r io.Reader, w io.Writer, opts Options) (EncryptResult, error) {
+func (e *Engine) ProtectStream(ectx *EngineContext, inputName string, r io.Reader, w io.Writer, opts Options) (EncryptResult, error) {
 	ectx = e.context(ectx)
 	traceID := opts.TraceID
 	if traceID == "" {
@@ -150,7 +150,7 @@ func (e *Engine) Protect(ectx *EngineContext, inputName string, r io.Reader, w i
 }
 
 // Unprotect handles the full decryption pipeline: Handshake -> Decrypt -> Decompress -> Extract.
-func (e *Engine) Unprotect(ectx *EngineContext, r io.Reader, w io.Writer, outPath string, opts Options) (DecryptResult, error) {
+func (e *Engine) UnprotectStream(ectx *EngineContext, r io.Reader, w io.Writer, outPath string, opts Options) (DecryptResult, error) {
 	ectx = e.context(ectx)
 	traceID := opts.TraceID
 	if traceID == "" {
