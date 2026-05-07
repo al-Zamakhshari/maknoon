@@ -40,6 +40,12 @@ type SecurityPolicy interface {
 	// ValidateWormholeURL ensures a network endpoint is permitted.
 	ValidateWormholeURL(url string, allowed []string) error
 
+	// ValidateTunnel ensures the tunnel configuration meets the policy's security standards.
+	ValidateTunnel(insecure bool) error
+
+	// ValidateProfile ensures the selected cryptographic profile is permitted.
+	ValidateProfile(id byte) error
+
 	// ClampConcurrency returns the allowed number of parallel workers.
 	ClampConcurrency(requested int, maxAllowed int) int
 
@@ -65,6 +71,8 @@ func (p *HumanPolicy) HasCapability(cap Capability) bool { return true }
 
 func (p *HumanPolicy) ValidatePath(path string) error                 { return nil }
 func (p *HumanPolicy) ValidateWormholeURL(u string, a []string) error { return nil }
+func (p *HumanPolicy) ValidateTunnel(insecure bool) error             { return nil }
+func (p *HumanPolicy) ValidateProfile(id byte) error                  { return nil }
 func (p *HumanPolicy) ClampConcurrency(req, max int) int {
 	if req <= 0 {
 		return 0 // Auto-detect
@@ -111,6 +119,15 @@ func (p *AgentPolicy) ValidateWormholeURL(u string, allowed []string) error {
 		Reason: fmt.Sprintf("unauthorized network endpoint '%s' is prohibited in agent mode", u),
 	}
 }
+
+func (p *AgentPolicy) ValidateTunnel(insecure bool) error {
+	if insecure {
+		return &ErrPolicyViolation{Reason: "unverified/insecure tunnels are prohibited in agent mode"}
+	}
+	return nil
+}
+
+func (p *AgentPolicy) ValidateProfile(id byte) error { return nil }
 
 func (p *AgentPolicy) ClampConcurrency(req, max int) int {
 	if req <= 0 || req > max {
@@ -188,3 +205,152 @@ func ValidatePath(path string, restricted bool) error {
 
 	return nil
 }
+
+// CompositePolicy implements the Composite Design Pattern for SecurityPolicy.
+// It allows multiple policies to be active simultaneously, enforcing a "strictest-wins" rule.
+type CompositePolicy struct {
+	Policies []SecurityPolicy
+}
+
+func (p *CompositePolicy) Name() string {
+	var names []string
+	for _, sub := range p.Policies {
+		names = append(names, sub.Name())
+	}
+	return "composite[" + strings.Join(names, ",") + "]"
+}
+
+func (p *CompositePolicy) HasCapability(cap Capability) bool {
+	for _, sub := range p.Policies {
+		if !sub.HasCapability(cap) {
+			return false
+		}
+	}
+	return true
+}
+
+func (p *CompositePolicy) ValidatePath(path string) error {
+	for _, sub := range p.Policies {
+		if err := sub.ValidatePath(path); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (p *CompositePolicy) ValidateWormholeURL(u string, allowed []string) error {
+	for _, sub := range p.Policies {
+		if err := sub.ValidateWormholeURL(u, allowed); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (p *CompositePolicy) ValidateTunnel(insecure bool) error {
+	for _, sub := range p.Policies {
+		if err := sub.ValidateTunnel(insecure); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (p *CompositePolicy) ValidateProfile(id byte) error {
+	for _, sub := range p.Policies {
+		if err := sub.ValidateProfile(id); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (p *CompositePolicy) ClampConcurrency(req, max int) int {
+	result := req
+	for _, sub := range p.Policies {
+		result = sub.ClampConcurrency(result, max)
+	}
+	return result
+}
+
+func (p *CompositePolicy) ClampProfileGeneration(t, m uint32, th uint8) (uint32, uint32, uint8) {
+	for _, sub := range p.Policies {
+		t, m, th = sub.ClampProfileGeneration(t, m, th)
+	}
+	return t, m, th
+}
+
+func (p *CompositePolicy) ValidateProfileResource(m, t uint32, th uint8, l AgentLimitsConfig) error {
+	for _, sub := range p.Policies {
+		if err := sub.ValidateProfileResource(m, t, th, l); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (p *CompositePolicy) AllowConfigModification() bool {
+	for _, sub := range p.Policies {
+		if !sub.AllowConfigModification() {
+			return false
+		}
+	}
+	return true
+}
+
+func (p *CompositePolicy) IsAgent() bool {
+	for _, sub := range p.Policies {
+		if sub.IsAgent() {
+			return true
+		}
+	}
+	return false
+}
+
+// FIPSPolicy enforces strict NIST-compliant cryptographic standards.
+type FIPSPolicy struct{}
+
+func (p *FIPSPolicy) Name() string { return "fips" }
+
+func (p *FIPSPolicy) HasCapability(cap Capability) bool {
+	// FIPS mode allows all standard operations but restricts how they are performed
+	return true
+}
+
+func (p *FIPSPolicy) ValidatePath(path string) error                 { return nil }
+func (p *FIPSPolicy) ValidateWormholeURL(u string, a []string) error { return nil }
+
+func (p *FIPSPolicy) ValidateTunnel(insecure bool) error {
+	if insecure {
+		return &ErrPolicyViolation{Reason: "FIPS-140 compliance prohibits unverified/insecure tunnels"}
+	}
+	return nil
+}
+
+func (p *FIPSPolicy) ValidateProfile(id byte) error {
+	if id != 1 {
+		return &ErrPolicyViolation{Reason: fmt.Sprintf("FIPS-140 compliance mandates Profile 1 (NIST); profile %d is prohibited", id)}
+	}
+	return nil
+}
+
+func (p *FIPSPolicy) ClampConcurrency(req, max int) int { return req }
+
+func (p *FIPSPolicy) ClampProfileGeneration(t, m uint32, th uint8) (uint32, uint32, uint8) {
+	// Mandate NIST Industrial parameters
+	return 3, 64 * 1024, 4
+}
+
+func (p *FIPSPolicy) ValidateProfileResource(m, t uint32, th uint8, l AgentLimitsConfig) error {
+	if t < 3 || m < 64*1024 {
+		return &ErrPolicyViolation{Reason: "FIPS-140 compliance prohibits sub-standard KDF parameters"}
+	}
+	return nil
+}
+
+func (p *FIPSPolicy) AllowConfigModification() bool {
+	// FIPS mode is often immutable once engaged
+	return false
+}
+
+func (p *FIPSPolicy) IsAgent() bool { return false }

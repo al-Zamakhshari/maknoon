@@ -18,6 +18,11 @@ func (e *Engine) TunnelStart(ectx *EngineContext, opts tunnel.TunnelOptions) (tu
 		return tunnel.TunnelStatus{}, err
 	}
 
+	// Governance: Validate tunnel security standards
+	if err := ectx.Policy.ValidateTunnel(opts.Insecure); err != nil {
+		return tunnel.TunnelStatus{}, err
+	}
+
 	e.tunnelMu.Lock()
 	defer e.tunnelMu.Unlock()
 

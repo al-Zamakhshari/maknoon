@@ -80,6 +80,12 @@ func (e *Engine) ProtectStream(ectx *EngineContext, inputName string, r io.Reade
 		log.Debug("using default profile from config", "profile_id", *opts.ProfileID)
 	}
 
+	// Governance: Validate the profile selection
+	if err := ectx.Policy.ValidateProfile(*opts.ProfileID); err != nil {
+		log.Error("profile validation failed", "err", err, "profile_id", *opts.ProfileID)
+		return EncryptResult{}, err
+	}
+
 	var flags byte
 	if opts.IsArchive {
 		flags |= FlagArchive
@@ -197,6 +203,12 @@ func (e *Engine) unprotectInternal(ectx *EngineContext, r io.Reader, w io.Writer
 	// 1. Peek at the header to determine flags
 	magic, profileID, flags, recipientCount, err := ReadHeader(r, *opts.Stealth)
 	if err != nil {
+		return 0, err
+	}
+
+	// Governance: Validate discovered profile
+	if err := ectx.Policy.ValidateProfile(profileID); err != nil {
+		log.Error("profile validation failed during restoration", "err", err, "profile_id", profileID)
 		return 0, err
 	}
 

@@ -490,24 +490,45 @@ func InitEngine() error {
 	if err := crypto.EnsureMaknoonDirs(); err != nil {
 		return err
 	}
+	var policies []crypto.SecurityPolicy
+
+	// 1. Core Base Policy
+	isAgent := viper.GetString("agent_mode") == "1"
+	if isAgent {
+		policies = append(policies, &crypto.AgentPolicy{})
+	} else {
+		policies = append(policies, &crypto.HumanPolicy{})
+	}
+
+	// 2. FIPS Compliance Layer
+	if viper.GetBool("fips") {
+		policies = append(policies, &crypto.FIPSPolicy{})
+	}
+
+	// 3. Declarative File-Based Policy
+	if path := viper.GetString("policy"); path != "" {
+		filePol, err := crypto.LoadPolicyFromFile(path)
+		if err != nil {
+			return fmt.Errorf("failed to load governance policy: %w", err)
+		}
+		policies = append(policies, filePol)
+	}
+
+	// Compose policies (Strictest-wins)
 	var policy crypto.SecurityPolicy
+	if len(policies) == 1 {
+		policy = policies[0]
+	} else {
+		policy = &crypto.CompositePolicy{Policies: policies}
+	}
 
 	// Initialize UI Handler if not already present
 	if GlobalContext.UI == nil {
 		GlobalContext.UI = NewUIHandler()
 	}
 
-	// Only enable AgentPolicy if explicitly requested via environment variable.
-	isAgent := viper.GetString("agent_mode") == "1"
-
 	if isAgent || viper.GetBool("json") {
 		SetJSONOutput(true)
-	}
-
-	if isAgent {
-		policy = &crypto.AgentPolicy{}
-	} else {
-		policy = &crypto.HumanPolicy{}
 	}
 
 	// 2. Initialize Engine with DI

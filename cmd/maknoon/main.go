@@ -34,6 +34,8 @@ Post-Quantum Cryptography (PQC).`,
 			// Bind persistent flags to viper
 			_ = viper.BindPFlag("json", cmd.Flags().Lookup("json"))
 			_ = viper.BindPFlag("trace", cmd.Flags().Lookup("trace"))
+			_ = viper.BindPFlag("fips", cmd.Flags().Lookup("fips"))
+			_ = viper.BindPFlag("policy", cmd.Flags().Lookup("policy"))
 
 			if err := commands.InitEngine(); err != nil {
 				return err
@@ -52,6 +54,8 @@ Post-Quantum Cryptography (PQC).`,
 
 	rootCmd.PersistentFlags().BoolVar(&commands.JSONOutput, "json", false, "Output results in JSON format")
 	rootCmd.PersistentFlags().Bool("trace", false, "Enable low-level diagnostic tracing to stderr")
+	rootCmd.PersistentFlags().Bool("fips", false, "Enforce strict FIPS-140 compliant cryptographic standards")
+	rootCmd.PersistentFlags().String("policy", "", "Path to a declarative governance policy file (JSON)")
 
 	// Define Command Groups
 	coreGroup := &cobra.Group{ID: "core", Title: "Cryptographic Operations:"}
