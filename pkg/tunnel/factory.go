@@ -27,7 +27,7 @@ func (f *TransportFactory) CreateClientSession(ctx context.Context, opts TunnelO
 
 	if opts.UseYamux {
 		tlsConf := GetPQCConfig()
-		tlsConf.InsecureSkipVerify = true
+		tlsConf.InsecureSkipVerify = opts.Insecure
 		conn, err := tls.Dial("tcp", opts.RemoteEndpoint, tlsConf)
 		if err != nil {
 			return nil, fmt.Errorf("failed to connect via PQC-TCP: %w", err)
@@ -37,7 +37,7 @@ func (f *TransportFactory) CreateClientSession(ctx context.Context, opts TunnelO
 
 	// Default: Direct PQC QUIC
 	tlsConf := GetPQCConfig()
-	tlsConf.InsecureSkipVerify = true
+	tlsConf.InsecureSkipVerify = opts.Insecure
 	return Dial(ctx, opts.RemoteEndpoint, tlsConf, f.Config)
 }
 

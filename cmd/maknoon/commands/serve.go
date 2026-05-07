@@ -1,17 +1,41 @@
 package commands
 
 import (
+	"crypto/tls"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/al-Zamakhshari/maknoon/pkg/crypto"
 	"github.com/al-Zamakhshari/maknoon/pkg/tunnel"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"golang.org/x/time/rate"
 )
+
+// Rate limiting settings (5 requests/sec with burst of 10)
+var globalLimiter = rate.NewLimiter(rate.Every(200*time.Millisecond), 10)
+
+func rateLimitMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !globalLimiter.Allow() {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusTooManyRequests)
+			json.NewEncoder(w).Encode(map[string]string{
+				"error":  "too many requests",
+				"status": "fail",
+				"retry":  "please slow down, PQC operations are compute-intensive",
+			})
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
 
 // ServeCmd returns the cobra command for launching the Maknoon API server.
 func ServeCmd() *cobra.Command {
@@ -60,12 +84,36 @@ func runAPIServer() error {
 		return fmt.Errorf("TLS is REQUIRED for API Server mode. Maknoon mandates Post-Quantum Secure transport for all cryptographic services")
 	}
 
+	// Initial certificate load
+	cert, err := tls.LoadX509KeyPair(certFile, keyFile)
+	if err != nil {
+		return fmt.Errorf("failed to load TLS certificates: %w", err)
+	}
+	SetActiveCertificate(cert)
+
+	// Background hot-reload handler (SIGHUP)
+	go func() {
+		sigChan := make(chan os.Signal, 1)
+		signal.Notify(sigChan, syscall.SIGHUP)
+		for range sigChan {
+			newCert, err := tls.LoadX509KeyPair(certFile, keyFile)
+			if err != nil {
+				fmt.Printf("⚠️  Failed to reload certificates: %v\n", err)
+				continue
+			}
+			SetActiveCertificate(newCert)
+			fmt.Println("🔄 TLS certificates reloaded successfully")
+		}
+	}()
+
 	mux := http.NewServeMux()
 
 	// Register REST API routes
 	mux.HandleFunc("/v1/health", handleHealth)
 	mux.HandleFunc("/v1/vault/get", handleVaultGet)
 	mux.HandleFunc("/v1/vault/set", handleVaultSet)
+	mux.HandleFunc("/v1/vault/rotate", handleVaultRotate)
+	mux.HandleFunc("/v1/vault/check-shards", handleVaultCheckShards)
 	mux.HandleFunc("/v1/identity/sign", handleSign)
 	mux.HandleFunc("/v1/identity/verify", handleVerify)
 	mux.HandleFunc("/v1/identity/resolve", handleResolve)
@@ -80,7 +128,7 @@ func runAPIServer() error {
 	// Define the HTTP server with Post-Quantum TLS 1.3 configuration
 	httpServer := &http.Server{
 		Addr:              addr,
-		Handler:           mux,
+		Handler:           rateLimitMiddleware(mux),
 		TLSConfig:         GetTLSConfig(),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
@@ -314,6 +362,55 @@ func handleUnwrap(w http.ResponseWriter, r *http.Request) {
 	renderAPISuccess(w, map[string]any{
 		"plaintext": hex.EncodeToString(res),
 	})
+}
+
+func handleVaultRotate(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var req struct {
+		Vault         string `json:"vault"`
+		OldPassphrase string `json:"old_passphrase"`
+		NewPassphrase string `json:"new_passphrase"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	err := GlobalContext.Engine.VaultRotate(nil, req.Vault, []byte(req.OldPassphrase), []byte(req.NewPassphrase))
+	if err != nil {
+		renderAPIError(w, err)
+		return
+	}
+
+	renderAPISuccess(w, map[string]string{
+		"status":  "success",
+		"message": "Vault passphrase rotated successfully",
+	})
+}
+
+func handleVaultCheckShards(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var req struct {
+		Shards []string `json:"shards"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	res, err := GlobalContext.Engine.VaultCheckShards(nil, req.Shards)
+	if err != nil {
+		renderAPIError(w, err)
+		return
+	}
+
+	renderAPISuccess(w, res)
 }
 
 func handleTunnelStart(w http.ResponseWriter, r *http.Request) {

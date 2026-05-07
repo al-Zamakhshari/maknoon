@@ -1,6 +1,8 @@
 package crypto
 
 import (
+	"bytes"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -12,11 +14,28 @@ import (
 	"time"
 
 	"github.com/al-Zamakhshari/maknoon/pkg/tunnel"
+	"github.com/cloudflare/circl/sign/mldsa/mldsa87"
 )
+
+// ... (existing interfaces)
+
+// DeriveSigningKeyFromSeed generates a deterministic ML-DSA-87 private key from a 32-byte seed.
+func DeriveSigningKeyFromSeed(seed []byte) ([]byte, error) {
+	if len(seed) < 32 {
+		return nil, fmt.Errorf("seed too short for ML-DSA (min 32 bytes)")
+	}
+	// Use the seed to initialize a deterministic reader for the key generator
+	_, sk, err := mldsa87.GenerateKey(bytes.NewReader(seed))
+	if err != nil {
+		return nil, err
+	}
+	return sk.MarshalBinary()
+}
 
 // AuditLogger defines the interface for recording engine operations.
 type AuditLogger interface {
 	LogEvent(action string, metadata map[string]any, err error)
+	SetSigningKey(key []byte)
 	Close() error
 }
 
@@ -24,12 +43,14 @@ type AuditLogger interface {
 type NoopLogger struct{}
 
 func (l *NoopLogger) LogEvent(action string, metadata map[string]any, err error) {}
+func (l *NoopLogger) SetSigningKey(key []byte)                                   {}
 func (l *NoopLogger) Close() error                                               { return nil }
 
 // JSONFileLogger appends structured audit logs to a file.
 type JSONFileLogger struct {
-	file *os.File
-	mu   sync.Mutex
+	file       *os.File
+	signingKey []byte
+	mu         sync.Mutex
 }
 
 // NewJSONFileLogger creates a thread-safe JSON line logger.
@@ -39,6 +60,12 @@ func NewJSONFileLogger(path string) (*JSONFileLogger, error) {
 		return nil, fmt.Errorf("failed to open audit log: %w", err)
 	}
 	return &JSONFileLogger{file: f}, nil
+}
+
+func (l *JSONFileLogger) SetSigningKey(key []byte) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.signingKey = key
 }
 
 func (l *JSONFileLogger) LogEvent(action string, metadata map[string]any, err error) {
@@ -58,6 +85,17 @@ func (l *JSONFileLogger) LogEvent(action string, metadata map[string]any, err er
 		Metadata:  metadata,
 		Status:    status,
 		Error:     errMsg,
+	}
+
+	// Industrial Hardening: Integrity Protection
+	// If a signing key is provided, sign the entry to prevent forensic tampering.
+	if l.signingKey != nil {
+		// Canonicalize for signing (simple JSON representation)
+		raw, _ := json.Marshal(entry)
+		sig, sigErr := SignData(raw, l.signingKey)
+		if sigErr == nil {
+			entry.Signature = hex.EncodeToString(sig)
+		}
 	}
 
 	raw, _ := json.Marshal(entry)
@@ -85,6 +123,8 @@ func (l *ConsoleAuditLogger) LogEvent(action string, metadata map[string]any, er
 		time.Now().Format("15:04:05"), action, status, metadata)
 }
 
+func (l *ConsoleAuditLogger) SetSigningKey(key []byte) {}
+
 func (l *ConsoleAuditLogger) Close() error { return nil }
 
 // AuditEngine wraps the core Engine to provide transparent auditing.
@@ -102,6 +142,15 @@ func (e *AuditEngine) sanitizePath(path string) string {
 		return "~" + strings.TrimPrefix(path, home)
 	}
 	return filepath.Base(path)
+}
+
+func (e *AuditEngine) sanitizeMetadata(metadata map[string]any) map[string]any {
+	// Industrial Hardening: Insecure-Mode Warnings
+	// If any metadata indicates an insecure configuration, tag it explicitly.
+	if insecure, ok := metadata["insecure"].(bool); ok && insecure {
+		metadata["SECURITY_WARNING"] = "transport security disabled"
+	}
+	return metadata
 }
 
 func (e *AuditEngine) Protect(ectx *EngineContext, inputName string, r io.Reader, w io.Writer, opts Options) (EncryptResult, error) {
@@ -122,7 +171,7 @@ func (e *AuditEngine) Protect(ectx *EngineContext, inputName string, r io.Reader
 		metadata["concurrency"] = *opts.Concurrency
 	}
 
-	e.Logger.LogEvent("protect", metadata, err)
+	e.Logger.LogEvent("protect", e.sanitizeMetadata(metadata), err)
 
 	return res, err
 }
@@ -132,11 +181,11 @@ func (e *AuditEngine) Unprotect(ectx *EngineContext, r io.Reader, w io.Writer, o
 	res, err := e.Engine.Unprotect(ectx, r, w, outPath, opts)
 	duration := time.Since(start)
 
-	e.Logger.LogEvent("unprotect", map[string]any{
+	e.Logger.LogEvent("unprotect", e.sanitizeMetadata(map[string]any{
 		"output":      e.sanitizePath(outPath),
 		"duration_ms": duration.Milliseconds(),
 		"flags":       res.Flags,
-	}, err)
+	}), err)
 
 	return res, err
 }
@@ -511,11 +560,12 @@ func (e *AuditEngine) TunnelStart(ectx *EngineContext, opts tunnel.TunnelOptions
 	status, err := e.Engine.TunnelStart(ectx, opts)
 	duration := time.Since(start)
 
-	e.Logger.LogEvent("tunnel_start", map[string]any{
+	e.Logger.LogEvent("tunnel_start", e.sanitizeMetadata(map[string]any{
 		"remote":      opts.RemoteEndpoint,
 		"proxy_port":  opts.LocalProxyPort,
+		"insecure":    opts.Insecure,
 		"duration_ms": duration.Milliseconds(),
-	}, err)
+	}), err)
 
 	return status, err
 }
@@ -610,6 +660,32 @@ func (e *AuditEngine) Unwrap(ectx *EngineContext, wrappedKey []byte, privKey []b
 	duration := time.Since(start)
 
 	e.Logger.LogEvent("kms_unwrap", map[string]any{
+		"duration_ms": duration.Milliseconds(),
+	}, err)
+
+	return res, err
+}
+
+func (e *AuditEngine) VaultRotate(ectx *EngineContext, vaultPath string, oldPassphrase, newPassphrase []byte) error {
+	start := time.Now()
+	err := e.Engine.VaultRotate(ectx, vaultPath, oldPassphrase, newPassphrase)
+	duration := time.Since(start)
+
+	e.Logger.LogEvent("vault_rotate", map[string]any{
+		"vault":       vaultPath,
+		"duration_ms": duration.Milliseconds(),
+	}, err)
+
+	return err
+}
+
+func (e *AuditEngine) VaultCheckShards(ectx *EngineContext, mnemonics []string) (*VaultResult, error) {
+	start := time.Now()
+	res, err := e.Engine.VaultCheckShards(ectx, mnemonics)
+	duration := time.Since(start)
+
+	e.Logger.LogEvent("vault_check_shards", map[string]any{
+		"shard_count": len(mnemonics),
 		"duration_ms": duration.Milliseconds(),
 	}, err)
 

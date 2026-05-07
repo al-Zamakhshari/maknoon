@@ -34,8 +34,10 @@ type Config struct {
 }
 
 type AuditConfig struct {
-	Enabled bool   `json:"enabled" mapstructure:"enabled"`
-	LogFile string `json:"log_file" mapstructure:"log_file"`
+	Enabled         bool   `json:"enabled" mapstructure:"enabled"`
+	LogFile         string `json:"log_file" mapstructure:"log_file"`
+	SigningKey      string `json:"signing_key,omitempty" mapstructure:"signing_key"`
+	HardwareSigning bool   `json:"hardware_signing" mapstructure:"hardware_signing"`
 }
 
 type AgentLimitsConfig struct {

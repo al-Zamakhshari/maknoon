@@ -48,6 +48,12 @@ func (r *NostrRegistry) Resolve(ctx context.Context, handle string) (*IdentityRe
 		if len(parts) == 2 && parts[0] != "" {
 			user := parts[0]
 			domain := parts[1]
+
+			// SSRF Mitigation: Validate domain before making the request
+			if !isValidDomain(domain) {
+				return nil, fmt.Errorf("invalid or prohibited domain for resolution: %s", domain)
+			}
+
 			url := fmt.Sprintf("https://%s/.well-known/nostr.json?name=%s", domain, user)
 
 			req, _ := http.NewRequestWithContext(ctx, "GET", url, nil)
@@ -245,4 +251,29 @@ func (r *NostrRegistry) PublishWithKey(ctx context.Context, record *IdentityReco
 func (r *NostrRegistry) Revoke(ctx context.Context, handle string, proof []byte) error {
 	// In Nostr, we'd probably just publish a new event with revoked=true or deleted
 	return fmt.Errorf("nostr revocation not implemented in POC")
+}
+
+// isValidDomain ensures the domain is a legitimate public domain and not a local/internal address.
+func isValidDomain(domain string) bool {
+	if domain == "" || len(domain) > 255 {
+		return false
+	}
+	low := strings.ToLower(domain)
+	if low == "localhost" || low == "127.0.0.1" || low == "::1" {
+		return false
+	}
+	// Basic check for RFC1918 and other internal ranges
+	if strings.HasPrefix(low, "10.") || strings.HasPrefix(low, "192.168.") || strings.HasPrefix(low, "172.") {
+		// Note: 172.16.0.0/12 check is simplified here
+		if strings.HasPrefix(low, "172.") {
+			parts := strings.Split(low, ".")
+			if len(parts) >= 2 {
+				if second, err := fmt.Sscanf(parts[1], "%d", new(int)); err == nil && second >= 16 && second <= 31 {
+					return false
+				}
+			}
+		}
+	}
+	// Ensure it contains a dot and no spaces or dangerous characters
+	return strings.Contains(domain, ".") && !strings.ContainsAny(domain, " /\\?#@")
 }

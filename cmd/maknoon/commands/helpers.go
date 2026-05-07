@@ -1,16 +1,20 @@
 package commands
 
 import (
+	"bufio"
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/al-Zamakhshari/maknoon/pkg/crypto"
+	"github.com/awnumar/memguard"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"golang.org/x/term"
@@ -189,6 +193,8 @@ func getPIN() (string, error) {
 }
 
 // getPassphrase prompts the user for a passphrase if not provided and not in agent mode.
+var stdinReader = bufio.NewReader(os.Stdin)
+
 func getPassphrase(prompt string) ([]byte, bool, error) {
 	if env := viper.GetString("passphrase"); env != "" {
 		return []byte(env), false, nil
@@ -202,8 +208,19 @@ func getPassphrase(prompt string) ([]byte, bool, error) {
 	}
 
 	fmt.Print(prompt)
-	p, err := term.ReadPassword(int(os.Stdin.Fd()))
-	fmt.Println()
+	var p []byte
+	var err error
+	if term.IsTerminal(int(os.Stdin.Fd())) {
+		p, err = term.ReadPassword(int(os.Stdin.Fd()))
+		fmt.Println()
+	} else {
+		line, err2 := stdinReader.ReadString('\n')
+		if err2 != nil && err2 != io.EOF {
+			return nil, false, err2
+		}
+		p = []byte(strings.TrimRight(line, "\r\n"))
+		err = nil
+	}
 	if err != nil {
 		return nil, false, err
 	}
@@ -255,6 +272,11 @@ func formatBytes(b int64) string {
 }
 
 // GetTLSConfig returns a standardized Post-Quantum TLS 1.3 configuration.
+var (
+	certMu     sync.RWMutex
+	activeCert *tls.Certificate
+)
+
 func GetTLSConfig() *tls.Config {
 	return &tls.Config{
 		MinVersion: tls.VersionTLS13,
@@ -263,7 +285,21 @@ func GetTLSConfig() *tls.Config {
 			tls.X25519,
 			tls.CurveP256,
 		},
+		GetCertificate: func(chi *tls.ClientHelloInfo) (*tls.Certificate, error) {
+			certMu.RLock()
+			defer certMu.RUnlock()
+			if activeCert == nil {
+				return nil, fmt.Errorf("no certificate loaded")
+			}
+			return activeCert, nil
+		},
 	}
+}
+
+func SetActiveCertificate(cert tls.Certificate) {
+	certMu.Lock()
+	defer certMu.Unlock()
+	activeCert = &cert
 }
 
 func printJSON(data interface{}) {
@@ -437,6 +473,14 @@ func ResetGlobalContext() {
 
 // InitEngine initializes the GlobalContext's Engine with the appropriate policy and audit logging.
 func InitEngine() error {
+	// Enable memguard crash protection (wipe on interrupt)
+	memguard.CatchInterrupt()
+
+	// 1. Mandatory Power-On Self-Test (POST)
+	if err := crypto.RunPOST(); err != nil {
+		return fmt.Errorf("FATAL: Cryptographic Integrity Failure: %w", err)
+	}
+
 	if GlobalContext.Engine != nil {
 		_ = GlobalContext.Engine.Close()
 	}
@@ -522,6 +566,36 @@ func InitEngine() error {
 		l, err := crypto.NewJSONFileLogger(core.Config.Audit.LogFile)
 		if err == nil {
 			auditLogger = l
+
+			// Load signing key if configured
+			if core.Config.Audit.HardwareSigning {
+				home := crypto.GetUserHomeDir()
+				fidoPath := filepath.Join(home, crypto.MaknoonDir, "audit_fido.json")
+				if _, err := os.Stat(fidoPath); err == nil {
+					fmt.Println("🛡️  Audit Hardening: Please tap your Security Key to unlock forensic signing...")
+					pin, _ := getPIN()
+					seed, err := crypto.Fido2Unlock(fidoPath, pin)
+					if err == nil {
+						sk, err := crypto.DeriveSigningKeyFromSeed(seed)
+						if err == nil {
+							auditLogger.SetSigningKey(sk)
+							fmt.Println("✅ Hardware-backed forensic signing active")
+						}
+					} else {
+						fmt.Printf("⚠️  Failed to unlock hardware audit key: %v\n", err)
+					}
+				} else {
+					fmt.Println("⚠️  Hardware audit signing enabled but not enrolled. Run 'maknoon audit enroll' to bind to hardware.")
+				}
+			} else if core.Config.Audit.SigningKey != "" {
+				// We assume the signing key is protected by the default identity's passphrase
+				// or provided via environment if in agent mode.
+				pass := []byte(viper.GetString("passphrase"))
+				sk, err := idMgr.LoadPrivateKey(core.Config.Audit.SigningKey, pass, "", isAgent)
+				if err == nil {
+					auditLogger.SetSigningKey(sk)
+				}
+			}
 		}
 	}
 

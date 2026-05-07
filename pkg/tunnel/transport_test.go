@@ -2,8 +2,9 @@ package tunnel
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
 	"crypto/rand"
-	"crypto/rsa"
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
@@ -13,6 +14,8 @@ import (
 	"strconv"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestQUICLoopbackTunnel(t *testing.T) {
@@ -129,8 +132,20 @@ func TestQUICLoopbackTunnel(t *testing.T) {
 	}
 }
 
+func TestGenerateTestCertificate(t *testing.T) {
+	cert, err := GenerateTestCertificate()
+	assert.NoError(t, err)
+	assert.NotEmpty(t, cert.Certificate)
+	assert.NotNil(t, cert.PrivateKey)
+
+	// Verify it's an ECDSA P-384 key
+	priv, ok := cert.PrivateKey.(*ecdsa.PrivateKey)
+	assert.True(t, ok)
+	assert.Equal(t, elliptic.P384(), priv.Curve)
+}
+
 func generateSelfSignedCert() (tls.Certificate, error) {
-	priv, err := rsa.GenerateKey(rand.Reader, 2048)
+	priv, err := ecdsa.GenerateKey(elliptic.P384(), rand.Reader)
 	if err != nil {
 		return tls.Certificate{}, err
 	}

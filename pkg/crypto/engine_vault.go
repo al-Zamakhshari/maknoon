@@ -1,7 +1,9 @@
 package crypto
 
 import (
+	"crypto/hmac"
 	"crypto/rand"
+	"crypto/sha256"
 	"fmt"
 	"io"
 	"os"
@@ -272,6 +274,130 @@ func (e *Engine) VaultRecover(ectx *EngineContext, mnemonics []string, vaultPath
 	}
 
 	return recoveredPass, nil
+}
+
+func (e *Engine) VaultCheckShards(ectx *EngineContext, mnemonics []string) (*VaultResult, error) {
+	ectx = e.context(ectx)
+	if err := e.enforce(ectx, CapVaultRead); err != nil {
+		return nil, err
+	}
+
+	if len(mnemonics) == 0 {
+		return nil, &ErrFormat{Reason: "no shards provided"}
+	}
+
+	var threshold int
+	for i, m := range mnemonics {
+		s, err := FromMnemonic(m)
+		if err != nil {
+			return nil, fmt.Errorf("shard %d is invalid: %w", i+1, err)
+		}
+		if i == 0 {
+			threshold = int(s.Threshold)
+		} else if int(s.Threshold) != threshold {
+			return nil, fmt.Errorf("shard %d has inconsistent threshold (expected %d, got %d)", i+1, threshold, s.Threshold)
+		}
+
+		// Verify checksum
+		h := hmac.New(sha256.New, shardChecksumKey)
+		h.Write([]byte{s.Version, s.Threshold, s.Index})
+		h.Write(s.Data)
+		sum := h.Sum(nil)
+		if !hmac.Equal(s.Checksum, sum[:ChecksumSize]) {
+			return nil, fmt.Errorf("checksum mismatch for shard %d", i+1)
+		}
+	}
+
+	msg := fmt.Sprintf("Validated %d healthy shards. Recovery requires %d shards.", len(mnemonics), threshold)
+	if len(mnemonics) < threshold {
+		msg += fmt.Sprintf(" You still need %d more shard(s) to recover.", threshold-len(mnemonics))
+	}
+
+	return &VaultResult{
+		Status:    "success",
+		Message:   msg,
+		Threshold: threshold,
+	}, nil
+}
+
+func (e *Engine) VaultRotate(ectx *EngineContext, vaultPath string, oldPassphrase, newPassphrase []byte) error {
+	ectx = e.context(ectx)
+	if err := e.enforce(ectx, CapVaultWrite); err != nil {
+		return err
+	}
+	if vaultPath == "" {
+		vaultPath = "default"
+	}
+	path, err := e.resolveVaultPath(vaultPath)
+	if err != nil {
+		return err
+	}
+
+	if err := ectx.Policy.ValidatePath(path); err != nil {
+		return err
+	}
+
+	store, err := e.Vaults.Open(path)
+	if err != nil {
+		return err
+	}
+	defer store.Close()
+
+	// 1. Read and decrypt all entries in memory
+	var entries []*VaultEntry
+	err = store.View(func(tx Transaction) error {
+		salt := tx.Get(metaBucket, saltKey)
+		if salt == nil {
+			return &ErrAuthentication{Reason: "vault salt missing"}
+		}
+
+		oldKey := DeriveVaultKey(oldPassphrase, salt)
+		defer SafeClear(oldKey)
+
+		return tx.ForEach(vaultBucket, func(k, v []byte) error {
+			entry, err := OpenEntry(v, oldKey)
+			if err != nil {
+				return err
+			}
+			entries = append(entries, entry)
+			return nil
+		})
+	})
+	if err != nil {
+		return err
+	}
+
+	// 2. Perform in-place rotation with fresh salt and new key
+	return store.Update(func(tx Transaction) error {
+		// Generate fresh salt
+		newSalt := make([]byte, 32)
+		if _, err := io.ReadFull(rand.Reader, newSalt); err != nil {
+			return err
+		}
+
+		newKey := DeriveVaultKey(newPassphrase, newSalt)
+		defer SafeClear(newKey)
+
+		// Update salt in metadata
+		if err := tx.Put(metaBucket, saltKey, newSalt); err != nil {
+			return err
+		}
+
+		// Re-encrypt and update all entries
+		for _, entry := range entries {
+			payload, err := SealEntry(entry, newKey)
+			if err != nil {
+				return err
+			}
+			// Service key remains the same (Hashed service name)
+			serviceKey := Sha256Hex([]byte(strings.ToLower(entry.Service)))
+			if err := tx.Put(vaultBucket, serviceKey, payload); err != nil {
+				return err
+			}
+		}
+
+		return nil
+	})
 }
 
 func (e *Engine) resolveVaultPath(name string) (string, error) {

@@ -89,10 +89,33 @@ func (s *FileSystemKeyStore) EnsureDir(dir string) error {
 }
 
 func (s *FileSystemKeyStore) ResolvePath(name string) (string, error) {
-	if filepath.IsAbs(name) || strings.Contains(name, string(os.PathSeparator)) {
-		return name, nil
+	clean := filepath.Clean(name)
+
+	// Allow absolute paths if they are already within BaseDir
+	if filepath.IsAbs(clean) {
+		rel, err := filepath.Rel(s.BaseDir, clean)
+		if err == nil && !strings.HasPrefix(rel, "..") {
+			return clean, nil
+		}
+
+		// Also allow absolute paths if they are in the system temp dir (important for tests)
+		tmpDir := os.TempDir()
+		if relTmp, err := filepath.Rel(tmpDir, clean); err == nil && !strings.HasPrefix(relTmp, "..") {
+			return clean, nil
+		}
+
+		// If in agent mode, prohibit any other absolute paths
+		if IsAgentMode() {
+			return "", &ErrPolicyViolation{Reason: "absolute path access prohibited in agent mode", Path: name}
+		}
+		return clean, nil
 	}
-	return filepath.Join(s.BaseDir, name), nil
+
+	// For relative paths, ensure they don't escape BaseDir
+	if strings.HasPrefix(clean, "..") {
+		return "", &ErrPolicyViolation{Reason: "illegal path access attempted", Path: name}
+	}
+	return filepath.Join(s.BaseDir, clean), nil
 }
 
 func (s *FileSystemKeyStore) GetBaseDir() string {
@@ -119,7 +142,32 @@ type FileSystemVaultStore struct {
 }
 
 func (s *FileSystemVaultStore) Open(path string) (Store, error) {
-	dir := filepath.Dir(path)
+	clean := filepath.Clean(path)
+	var fullPath string
+
+	if filepath.IsAbs(clean) {
+		// Allow absolute paths if they are within BaseDir or TempDir
+		rel, err := filepath.Rel(s.BaseDir, clean)
+		isWithinBase := (err == nil && !strings.HasPrefix(rel, ".."))
+
+		tmpDir := os.TempDir()
+		relTmp, errTmp := filepath.Rel(tmpDir, clean)
+		isWithinTmp := (errTmp == nil && !strings.HasPrefix(relTmp, ".."))
+
+		if isWithinBase || isWithinTmp || !IsAgentMode() {
+			fullPath = clean
+		} else {
+			return nil, &ErrPolicyViolation{Reason: "illegal vault path access attempted", Path: path}
+		}
+	} else {
+		// Relative path: ensure no escape and join with BaseDir
+		if strings.HasPrefix(clean, "..") {
+			return nil, &ErrPolicyViolation{Reason: "illegal vault path access attempted", Path: path}
+		}
+		fullPath = filepath.Join(s.BaseDir, clean)
+	}
+
+	dir := filepath.Dir(fullPath)
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return nil, &ErrIO{Path: dir, Reason: "failed to create directory: " + err.Error()}
 	}
@@ -131,17 +179,17 @@ func (s *FileSystemVaultStore) Open(path string) (Store, error) {
 
 	switch backend {
 	case "badger":
-		opts := badger.DefaultOptions(path)
+		opts := badger.DefaultOptions(fullPath)
 		opts.Logger = nil // Suppress noisy logs
 		db, err := badger.Open(opts)
 		if err != nil {
-			return nil, &ErrIO{Path: path, Reason: err.Error()}
+			return nil, &ErrIO{Path: fullPath, Reason: err.Error()}
 		}
 		return &BadgerStore{db: db}, nil
 	default:
-		db, err := bbolt.Open(path, 0600, &bbolt.Options{Timeout: 1 * time.Second})
+		db, err := bbolt.Open(fullPath, 0600, &bbolt.Options{Timeout: 1 * time.Second})
 		if err != nil {
-			return nil, &ErrIO{Path: path, Reason: err.Error()}
+			return nil, &ErrIO{Path: fullPath, Reason: err.Error()}
 		}
 		return &BboltStore{db: db}, nil
 	}

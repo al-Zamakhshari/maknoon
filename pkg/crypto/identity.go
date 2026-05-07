@@ -350,8 +350,21 @@ func (m *IdentityManager) ResolvePublicKey(input string, tofu bool) ([]byte, err
 	}
 
 	// 3. Handle Local Paths or Managed Keys
-	resolvedPath := input
-	if _, err := os.Stat(input); err != nil {
+	cleanInput := filepath.Clean(input)
+	if IsAgentMode() && filepath.IsAbs(cleanInput) {
+		// Allow absolute paths if they are in the system temp dir
+		tmpDir := os.TempDir()
+		relTmp, errTmp := filepath.Rel(tmpDir, cleanInput)
+		isWithinTmp := (errTmp == nil && !strings.HasPrefix(relTmp, ".."))
+		if !isWithinTmp {
+			return nil, &ErrPolicyViolation{Reason: "absolute path access prohibited in agent mode", Path: input}
+		}
+	} else if IsAgentMode() && strings.HasPrefix(cleanInput, "..") {
+		return nil, &ErrPolicyViolation{Reason: "relative path escape prohibited in agent mode", Path: input}
+	}
+
+	resolvedPath := cleanInput
+	if _, err := os.Stat(cleanInput); err != nil {
 		// Not a direct local path, check the managed store
 		if managed, err := m.Store.ResolvePath(input); err == nil {
 			resolvedPath = managed

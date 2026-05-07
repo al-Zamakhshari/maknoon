@@ -52,6 +52,15 @@ test-gateway: build
 	@chmod +x scripts/test-gateway.sh
 	@./scripts/test-gateway.sh
 
+# Run all industrial smoke tests
+smoke: build
+	@echo "🔥 Running Maknoon Industrial Smoke Suite..."
+	@chmod +x scripts/smoke-audit.sh scripts/smoke-resilience.sh scripts/smoke-vault-safety.sh
+	@./scripts/smoke-audit.sh
+	@./scripts/smoke-resilience.sh
+	@./scripts/smoke-vault-safety.sh
+	@echo "✅ All smoke tests passed. Industrial Grade verified."
+
 # Cleanup build artifacts
 clean:
 	@echo "🧹  Cleaning up..."

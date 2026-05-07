@@ -136,6 +136,7 @@ func tunnelStartCmd() *cobra.Command {
 	var useP2P bool
 	var p2pAddr string
 	var identityName string
+	var insecure bool
 
 	cmd := &cobra.Command{
 		Use:   "start",
@@ -153,6 +154,7 @@ func tunnelStartCmd() *cobra.Command {
 				P2PMode:        useP2P,
 				P2PAddr:        p2pAddr,
 				Identity:       identityName,
+				Insecure:       insecure,
 			}
 
 			status, err := GlobalContext.Engine.TunnelStart(&crypto.EngineContext{Context: context.Background()}, opts)
@@ -180,6 +182,7 @@ func tunnelStartCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&useP2P, "p2p", false, "Use libp2p for P2P mode")
 	cmd.Flags().StringVar(&p2pAddr, "p2p-addr", "", "Remote P2P Multiaddr")
 	cmd.Flags().StringVar(&identityName, "identity", "", "Identity to use for P2P")
+	cmd.Flags().BoolVar(&insecure, "insecure", false, "Disable TLS certificate verification (DANGEROUS)")
 
 	return cmd
 }

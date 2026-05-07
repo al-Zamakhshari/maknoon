@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"iter"
 	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/mohammadv184/go-fido2"
 	"github.com/mohammadv184/go-fido2/protocol/ctap2"
@@ -182,7 +184,20 @@ func fido2DeriveInternal(dev Authenticator, token []byte, rpID string, credentia
 
 // Fido2Unlock is a helper that loads metadata from a file and derives the key.
 func Fido2Unlock(path, pin string) ([]byte, error) {
-	data, err := os.ReadFile(path)
+	clean := filepath.Clean(path)
+	if filepath.IsAbs(clean) {
+		// Allow absolute paths if they are in the system temp dir
+		tmpDir := os.TempDir()
+		relTmp, errTmp := filepath.Rel(tmpDir, clean)
+		isWithinTmp := (errTmp == nil && !strings.HasPrefix(relTmp, ".."))
+		if !isWithinTmp && IsAgentMode() {
+			return nil, &ErrPolicyViolation{Reason: "illegal fido2 metadata path access", Path: path}
+		}
+	} else if strings.HasPrefix(clean, "..") {
+		return nil, &ErrPolicyViolation{Reason: "illegal fido2 metadata path access", Path: path}
+	}
+
+	data, err := os.ReadFile(clean)
 	if err != nil {
 		return nil, err
 	}

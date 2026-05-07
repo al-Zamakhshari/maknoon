@@ -1,6 +1,7 @@
 package crypto
 
 import (
+	"crypto/aes"
 	"crypto/cipher"
 	"crypto/hpke"
 	"crypto/rand"
@@ -10,7 +11,6 @@ import (
 	"github.com/awnumar/memguard"
 	"github.com/cloudflare/circl/sign/mldsa/mldsa87"
 	"golang.org/x/crypto/argon2"
-	"golang.org/x/crypto/chacha20poly1305"
 )
 
 func init() {
@@ -21,7 +21,7 @@ func init() {
 	})
 }
 
-// ProfileV1 implements the standard NIST PQC suite (Maknoon v2 Hybrid).
+// ProfileV1 implements the Industrial NIST PQC suite.
 type ProfileV1 struct {
 	ArgonTime uint32
 	ArgonMem  uint32
@@ -37,17 +37,21 @@ func (p *ProfileV1) Name() string { return "nist" }
 // SaltSize returns the salt size in bytes (32).
 func (p *ProfileV1) SaltSize() int { return 32 }
 
-// NonceSize returns the nonce size in bytes (24 for XChaCha20).
-func (p *ProfileV1) NonceSize() int { return 24 }
+// NonceSize returns the standard AES-GCM nonce size (12 bytes).
+func (p *ProfileV1) NonceSize() int { return 12 }
 
 // DeriveKey derives a symmetric key using Argon2id.
 func (p *ProfileV1) DeriveKey(passphrase, salt []byte) []byte {
-	return argon2.IDKey(passphrase, salt, p.ArgonTime, p.ArgonMem, p.ArgonThrd, chacha20poly1305.KeySize)
+	return argon2.IDKey(passphrase, salt, p.ArgonTime, p.ArgonMem, p.ArgonThrd, 32)
 }
 
-// NewAEAD returns a new XChaCha20-Poly1305 AEAD.
+// NewAEAD returns a new AES-256-GCM AEAD.
 func (p *ProfileV1) NewAEAD(key []byte) (cipher.AEAD, error) {
-	return chacha20poly1305.NewX(key)
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, err
+	}
+	return cipher.NewGCM(block)
 }
 
 // KEMName returns the KEM algorithm name.

@@ -100,6 +100,8 @@ type VaultManager interface {
 	VaultRename(ectx *EngineContext, oldName, newName string) error
 	VaultDelete(ectx *EngineContext, name string) error
 	VaultList(ectx *EngineContext, vaultPath string, passphrase []byte) ([]VaultListEntry, error)
+	VaultRotate(ectx *EngineContext, vaultPath string, oldPassphrase, newPassphrase []byte) error
+	VaultCheckShards(ectx *EngineContext, mnemonics []string) (*VaultResult, error)
 	VaultSplit(ectx *EngineContext, vaultPath string, threshold, shares int, passphrase string) ([]string, error)
 	VaultRecover(ectx *EngineContext, mnemonics []string, vaultPath string, output string, passphrase string) (string, error)
 }

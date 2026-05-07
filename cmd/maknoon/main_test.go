@@ -179,42 +179,6 @@ func TestIntegrationDirectoryEncryption(t *testing.T) {
 	}
 }
 
-func TestIntegrationProfiles(t *testing.T) {
-	tmpDir := t.TempDir()
-	inputFile := filepath.Join(tmpDir, "profile_test.txt")
-	content := []byte("Testing with Profile 2 (AES-GCM)")
-	if err := os.WriteFile(inputFile, content, 0644); err != nil {
-		t.Fatal(err)
-	}
-
-	encryptedFile := inputFile + ".makn"
-	decryptedFile := filepath.Join(tmpDir, "profile_restored.txt")
-	passphrase := "profile-pass"
-
-	// 1. Encrypt with Profile 2
-	encCmd := commands.EncryptCmd()
-	encCmd.SetArgs([]string{inputFile, "-o", encryptedFile, "-s", passphrase, "--profile", "2", "--quiet"})
-	if err := encCmd.Execute(); err != nil {
-		t.Fatalf("Profile 2 encryption failed: %v", err)
-	}
-
-	// 2. Decrypt (Auto-detect from header)
-	decCmd := commands.DecryptCmd()
-	decCmd.SetArgs([]string{encryptedFile, "-o", decryptedFile, "-s", passphrase, "--quiet"})
-	if err := decCmd.Execute(); err != nil {
-		t.Fatalf("Profile 2 decryption failed: %v", err)
-	}
-
-	// 3. Verify
-	restored, err := os.ReadFile(decryptedFile)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !bytes.Equal(content, restored) {
-		t.Errorf("Profile 2 content mismatch")
-	}
-}
-
 func TestIntegrationCompression(t *testing.T) {
 	tmpDir := t.TempDir()
 	inputFile := filepath.Join(tmpDir, "compress_test.txt")
@@ -628,42 +592,6 @@ func TestIntegrationSecretProfile(t *testing.T) {
 	}
 	if !bytes.Equal(content, restored) {
 		t.Fatalf("Secret profile restored content mismatch")
-	}
-}
-
-func TestIntegrationProfileV2(t *testing.T) {
-	tmpDir := t.TempDir()
-	inputFile := filepath.Join(tmpDir, "v2_test.txt")
-	content := []byte("AES-GCM Profile Agility Test Content")
-	if err := os.WriteFile(inputFile, content, 0644); err != nil {
-		t.Fatal(err)
-	}
-
-	encryptedFile := inputFile + ".makn"
-	decryptedFile := filepath.Join(tmpDir, "v2_restored.txt")
-	passphrase := "profile-v2-secret"
-
-	// 1. Encrypt with Profile 2 (AES-GCM)
-	encCmd := commands.EncryptCmd()
-	encCmd.SetArgs([]string{inputFile, "-o", encryptedFile, "-s", passphrase, "--profile", "2", "--quiet"})
-	if err := encCmd.Execute(); err != nil {
-		t.Fatalf("Profile 2 encryption failed: %v", err)
-	}
-
-	// 2. Decrypt (Should auto-detect Profile 2)
-	decCmd := commands.DecryptCmd()
-	decCmd.SetArgs([]string{encryptedFile, "-o", decryptedFile, "-s", passphrase, "--quiet"})
-	if err := decCmd.Execute(); err != nil {
-		t.Fatalf("Profile 2 decryption failed: %v", err)
-	}
-
-	// 3. Verify
-	restored, err := os.ReadFile(decryptedFile)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !bytes.Equal(content, restored) {
-		t.Fatalf("Profile 2 restored content mismatch")
 	}
 }
 

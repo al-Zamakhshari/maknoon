@@ -103,6 +103,7 @@ type IdentityInfoResult struct {
 // VaultResult is the standard JSON output for vault operations.
 type VaultResult struct {
 	Status           string           `json:"status"`
+	Message          string           `json:"message,omitempty"`
 	Vault            string           `json:"vault,omitempty"`
 	Secret           string           `json:"secret,omitempty"`
 	Service          string           `json:"service,omitempty"`
@@ -276,4 +277,5 @@ type AuditEntry struct {
 	Metadata  map[string]any `json:"metadata"`
 	Status    string         `json:"status"`
 	Error     string         `json:"error,omitempty"`
+	Signature string         `json:"signature,omitempty"`
 }

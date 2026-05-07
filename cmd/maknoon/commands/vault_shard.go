@@ -118,3 +118,28 @@ func vaultRecoverCmd() *cobra.Command {
 	cmd.Flags().StringVarP(&targetPath, "output", "o", "", "Path to save recovered entries as a new vault")
 	return cmd
 }
+
+func vaultCheckShardsCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "check-shards [shards...]",
+		Short: "Validate the integrity of vault shards",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			p := GlobalContext.UI.GetPresenter()
+			if len(args) == 0 {
+				err := fmt.Errorf("at least one shard mnemonic is required")
+				p.RenderError(err)
+				return err
+			}
+
+			result, err := GlobalContext.Engine.VaultCheckShards(nil, args)
+			if err != nil {
+				p.RenderError(err)
+				return err
+			}
+
+			p.RenderSuccess(result)
+			return nil
+		},
+	}
+	return cmd
+}

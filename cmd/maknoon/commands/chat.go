@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"github.com/al-Zamakhshari/maknoon/pkg/crypto"
+	"github.com/awnumar/memguard"
 	"github.com/spf13/cobra"
 )
 
@@ -70,7 +71,7 @@ func runAgentChat(args []string) error {
 				}
 			} else if action == "quit" {
 				sess.Close()
-				os.Exit(0)
+				memguard.SafeExit(0)
 			}
 		}
 	}()

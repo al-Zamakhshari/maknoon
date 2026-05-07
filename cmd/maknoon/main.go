@@ -2,9 +2,8 @@
 package main
 
 import (
-	"os"
-
 	"github.com/al-Zamakhshari/maknoon/cmd/maknoon/commands"
+	"github.com/awnumar/memguard"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -12,8 +11,11 @@ import (
 var version = "dev"
 
 func main() {
+	// Secure memory purge on exit
+	defer memguard.Purge()
+
 	if err := NewRootCmd().Execute(); err != nil {
-		os.Exit(1)
+		memguard.SafeExit(1)
 	}
 }
 

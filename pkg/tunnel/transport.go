@@ -2,8 +2,9 @@ package tunnel
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
 	"crypto/rand"
-	"crypto/rsa"
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
@@ -79,8 +80,8 @@ func ListenWithConn(pconn net.PacketConn, address string, tlsConf *tls.Config, c
 
 // GenerateTestCertificate creates a self-signed TLS certificate for testing purposes.
 func GenerateTestCertificate() (tls.Certificate, error) {
-	// Standard RSA 2048 for the outer TLS layer (Handshake uses ML-KEM/X25519 hybrid curves)
-	priv, err := rsa.GenerateKey(rand.Reader, 2048)
+	// Standard ECDSA P384 for the outer TLS layer (Handshake uses ML-KEM/X25519 hybrid curves)
+	priv, err := ecdsa.GenerateKey(elliptic.P384(), rand.Reader)
 	if err != nil {
 		return tls.Certificate{}, err
 	}

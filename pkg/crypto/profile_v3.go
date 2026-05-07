@@ -1,6 +1,7 @@
 package crypto
 
 import (
+	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
 	"crypto/sha256"
@@ -11,7 +12,6 @@ import (
 	"github.com/cloudflare/circl/kem/frodo/frodo640shake"
 	"github.com/cloudflare/circl/sign/slhdsa"
 	"golang.org/x/crypto/argon2"
-	"golang.org/x/crypto/chacha20poly1305"
 	"golang.org/x/crypto/hkdf"
 )
 
@@ -40,17 +40,21 @@ func (p *ProfileV3) Name() string { return "conservative" }
 // SaltSize returns the salt size in bytes (32).
 func (p *ProfileV3) SaltSize() int { return 32 }
 
-// NonceSize returns the nonce size in bytes (24 for XChaCha20).
-func (p *ProfileV3) NonceSize() int { return 24 }
+// NonceSize returns the standard AES-GCM nonce size (12 bytes).
+func (p *ProfileV3) NonceSize() int { return 12 }
 
 // DeriveKey derives a symmetric key using Argon2id.
 func (p *ProfileV3) DeriveKey(passphrase, salt []byte) []byte {
-	return argon2.IDKey(passphrase, salt, p.ArgonTime, p.ArgonMem, p.ArgonThrd, chacha20poly1305.KeySize)
+	return argon2.IDKey(passphrase, salt, p.ArgonTime, p.ArgonMem, p.ArgonThrd, 32)
 }
 
-// NewAEAD returns a new XChaCha20-Poly1305 AEAD.
+// NewAEAD returns a new AES-256-GCM AEAD.
 func (p *ProfileV3) NewAEAD(key []byte) (cipher.AEAD, error) {
-	return chacha20poly1305.NewX(key)
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, err
+	}
+	return cipher.NewGCM(block)
 }
 
 // KEMName returns the KEM algorithm name.

@@ -18,6 +18,8 @@ func (m *MockAuditLogger) LogEvent(action string, metadata map[string]any, err e
 	m.LastErr = err
 }
 
+func (m *MockAuditLogger) SetSigningKey(key []byte) {}
+
 func (m *MockAuditLogger) Close() error { return nil }
 
 func TestAuditEngineDecorator(t *testing.T) {

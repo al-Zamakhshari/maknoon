@@ -229,3 +229,71 @@ func vaultDeleteCmd() *cobra.Command {
 	}
 	return cmd
 }
+
+func vaultRotateCmd() *cobra.Command {
+	var newPass string
+	cmd := &cobra.Command{
+		Use:   "rotate",
+		Short: "Change the master passphrase of a vault",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			p := GlobalContext.UI.GetPresenter()
+
+			var oldPass []byte
+			var err error
+			if vaultPassphrase != "" {
+				oldPass = []byte(vaultPassphrase)
+			} else {
+				oldPass, _, err = getPassphrase("Enter Current Vault Master Passphrase: ")
+				if err != nil {
+					p.RenderError(err)
+					return err
+				}
+			}
+			defer crypto.SafeClear(oldPass)
+
+			var newPassBytes []byte
+			if newPass != "" {
+				newPassBytes = []byte(newPass)
+			} else {
+				newPassBytes, _, err = getPassphrase("Enter NEW Vault Master Passphrase: ")
+				if err != nil {
+					p.RenderError(err)
+					return err
+				}
+				confirm, _, err := getPassphrase("Confirm NEW Vault Master Passphrase: ")
+				if err != nil {
+					p.RenderError(err)
+					return err
+				}
+				if string(newPassBytes) != string(confirm) {
+					crypto.SafeClear(confirm)
+					err := fmt.Errorf("passphrases do not match")
+					p.RenderError(err)
+					return err
+				}
+				crypto.SafeClear(confirm)
+			}
+			defer crypto.SafeClear(newPassBytes)
+
+			path, err := resolveVaultPath(vaultName)
+			if err != nil {
+				p.RenderError(err)
+				return err
+			}
+
+			err = GlobalContext.Engine.VaultRotate(nil, path, oldPass, newPassBytes)
+			if err != nil {
+				p.RenderError(err)
+				return err
+			}
+
+			p.RenderSuccess(crypto.VaultResult{
+				Status:  "success",
+				Message: "Vault passphrase rotated successfully",
+			})
+			return nil
+		},
+	}
+	cmd.Flags().StringVarP(&newPass, "new-passphrase", "n", "", "New master passphrase (unsafe for CLI history)")
+	return cmd
+}
