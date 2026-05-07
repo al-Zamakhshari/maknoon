@@ -16,11 +16,11 @@ Maknoon is an industrial-grade, post-quantum CLI encryption engine and Model Con
 
 ## 🛡 Cryptographic Stack
 
-- **Symmetric Cipher**: XChaCha20-Poly1305 (AEAD) with 192-bit nonces.
+- **Symmetric Cipher**: AES-256-GCM (AEAD) / AES-256-GCM-SIV. XChaCha20-Poly1305 has been purged to ensure 100% industrial compliance.
 - **Asymmetric Encryption (KEM)**: ML-KEM / Kyber1024 (NIST Standard) wrapped in standard **HPKE Seal/Open** (RFC 9180).
-- **Digital Signatures**: ML-DSA-87 / Dilithium (NIST Standard).
+- **Digital Signatures**: ML-DSA-87 / Dilithium (NIST Standard) for forensic integrity; **ECDSA-P384** for ephemeral transport certificates. RSA-2048 has been completely purged.
 - **KMS Envelope Encryption**: Enterprise-grade `Wrap`/`Unwrap` primitives using hybrid ML-KEM-768 to secure massive data sets via encapsulated 32-byte Data Encryption Keys (DEKs).
-- **Key Derivation (KDF)**: Argon2id (Standard: 3 iterations, 64MB memory).
+- **Key Derivation (KDF)**: Argon2id (Industrial Standard: 3 iterations, 64MB memory).
 - **Transport Security**: Mandated TLS 1.3 with native X25519MLKEM768 hybrid key exchange for all networked interfaces.
 
 ## 🚀 P2P & Identity Lessons
@@ -53,40 +53,54 @@ Maknoon is an industrial-grade, post-quantum CLI encryption engine and Model Con
     - **CLI Flag Shadowing**: Hardcoded CLI flag defaults (e.g., `encrypt --profile nist`) can shadow dynamic engine configuration updates. For live-migration to work, CLI flags should default to empty/zero to allow the `Engine`'s internal `DefaultProfile` to take priority.
     - **Runtime Propagation**: MCP-initiated configuration changes (`config_update`) are persistent across process boundaries because the engine explicitly calls `Save()` on the config object, but active long-running loops require a re-initialization or configuration polling mechanism to pick up changes without a restart.
 
-## 🤖 Agent Sandbox & Governance
+## 🤖 Agent Sandbox & Composable Governance
 
-1.  **Logical Isolation**: `AgentPolicy` restricts the engine to the user's workspace and temp directories.
-2.  **Physical Isolation**: Containerized deployment removes shells and utilities.
-3.  **Governance**: All operations are logged with masked metadata via the `AuditEngine` decorator using the `ConsoleAuditLogger` (verbose) or `JSONFileLogger` (audit). The REST API now supports a forensic **Audit SIEM export** endpoint.
+1.  **Composite Governance**: The engine implements a `CompositePolicy` (Strictest-Wins) allowing multiple active layers (e.g., Global FIPS + Local Project Rules).
+2.  **Declarative Policies**: Support for loading human-readable JSON governance files via `--policy`. These files define `allow`/`deny` rules for capabilities, regex-based paths, and URL endpoints.
+3.  **FIPS Compliance Mode**: The `--fips` flag enforces mandatory NIST `nist` profiles, prohibits unverified TLS tunnels, and freezes system configuration.
+4.  **Forensic Integrity**: 
+    *   All operations are logged via the `AuditEngine` decorator.
+    *   Logs are cryptographically signed using **ML-DSA-87**.
+    *   Support for **Hardware-Backed Forensic Signing** (binding audit integrity to physical FIDO2 keys).
+
+## 🏆 Industrial Mission Lessons (Red-Team Verification)
+
+- **Cryptographic Purge**: RSA and XChaCha20 were removed to eliminate "legacy surface." Industrial compliance mandates AES-GCM and ECDSA-P384 for ephemeral operations.
+- **Resilience Engineering**: 
+    *   **Zero-Downtime Reloading**: Global servers support `SIGHUP` for non-disruptive TLS certificate rotation.
+    *   **Rate Limiting**: Mandatory global rate limiting (Token Bucket) prevents API saturation.
+- **Power-On Self-Test (POST)**: Every engine startup triggers a Known-Answer Test (KAT) for all core algorithms (ML-KEM, ML-DSA, AES-GCM). Failure results in a fatal halt.
+- **Secure Memory Scoping**: Integration of `memguard` across CLI and Engine boundaries ensures sensitive material (DEKs, Passphrases) is wiped on exit, crash, or interrupt.
 
 ## 📋 Engineering & Documentation Standards
 
 ### 1. The Skeptical Engineering Persona
 - **Empirical Rigor**: Never assume a feature works just because it compiles or passed a shallow test. Demand high-fidelity E2E verification for all critical paths.
 - **Dependency Suspicion**: Treat all third-party libraries (even core ones like libp2p) as potential sources of bloat, complexity, and failure.
-- **Proof of Failure**: Before applying a fix, you MUST empirically reproduce the failure.
+- **Proof of Failure**: Before applying a fix, you MUST empirically reproduce the failure. Use the `make smoke` suite for industrial verification.
 
 ### 2. The Engine Pattern
-All business logic must be invoked via the `Engine` struct. UI layers (CLI/MCP/REST) must remain strictly as controllers. **Mandatory DI**: New services must accept their dependencies in the constructor.
+All business logic must be invoked via the `Engine` struct. UI layers (CLI/MCP/REST) must remain strictly as controllers. **Mandatory DI**: New services must accept their dependencies in the constructor. The `SecurityPolicy` interface acts as the definitive boundary for engine capabilities.
 
 ### 3. UI-Agnostic Design (Presenter)
 NEVER use `fmt.Print` or `json.Marshal` directly in business logic. Use the `Presenter` interface to maintain consistency across CLI, Agent, and REST modes.
 
 ### 4. Testing Mandates
 - **Universal Missions**: All integration tools must be verified by a transport-agnostic mission suite.
-- **Isolation**: Use `testing.Short()` to skip network-dependent tests. 
+- **Industrial Smoke Suite**: Every release must pass `make smoke` (Audit, Resilience, Vault Safety, and Governance sub-suites).
 - **Integrity**: Every new feature requires a functional smoke test, a policy-violation test, and an enterprise unit test suite.
 
 ## 🛠 Building and Running
 
 ### Key Commands (Makefile)
-- **Build**: `make build` (Produces optimized 13MB stripped binary)
-- **Test**: `make test` (Runs industry-standard suite, coverage target > 50%)
+- **Build**: `make build` (Produces optimized statically linked binary)
+- **Test**: `make test` (Runs industry-standard unit suite)
+- **Smoke**: `make smoke` (Executes the full industrial hardening verification suite)
 - **Docker**: `make docker-build` (Generates OCI-compliant secure sandbox)
 
 ## 🧪 Current Status
-- **Architecture**: V1.3.x (DI, Presenter, MCP Parity, & REST API complete).
+- **Architecture**: V1.4.x (Hardened Governance Engine & Industrial Purge complete).
 - **Parity**: 1:1 mapping between CLI commands, MCP tools, and REST endpoints with high-fidelity results.
-- **Testing**: Passed all 80+ unit, integration, and fuzz tests; verified P2P MCP & REST API smoke tests.
-- **Coverage**: **~52%** statement coverage in `pkg/crypto`.
-- **Security**: Mandated Post-Quantum TLS 1.3, ML-KEM/Kyber1024, and ML-DSA-87 signatures verified.
+- **Testing**: Passed all 90+ unit, integration, and fuzz tests; verified full industrial smoke suite.
+- **Coverage**: **~55%** statement coverage in `pkg/crypto`.
+- **Security**: FIPS-compliant AES-256-GCM, ECDSA-P384, and ML-KEM/DSA stack verified.

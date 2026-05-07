@@ -17,13 +17,26 @@ Maknoon utilizes a **Unified Binary Architecture**—hosting both its CLI and na
 | Feature | Technical Specification |
 | :--- | :--- |
 | **PQC Encryption** | Hybrid HPKE (RFC 9180) utilizing ML-KEM-1024 (Kyber) and X25519. |
-| **Digital Signatures** | ML-DSA-87 (Dilithium) for high-integrity provenance. |
-| **Dual-Transport MCP** | Support for local `stdio` and remote `sse` (HTTPS) agent integrations. |
+| **Symmetric Cipher**| **AES-256-GCM** (NIST) exclusively. Legacy XChaCha20 purged. |
+| **Digital Signatures**| **ML-DSA-87** (Forensics) and **ECDSA-P384** (Ephemeral transport). |
+| **Governance Engine** | **Composable Policy Layer** with declarative JSON files (`--policy`). |
+| **Compliance Mode** | Hardcoded **FIPS-140** mode (`--fips`) enforcing NIST standards. |
+| **Dual-Transport MCP**| Support for local `stdio` and remote `sse` (HTTPS) agent integrations. |
 | **Secure Transport** | Native **Post-Quantum TLS 1.3** prioritization (ML-KEM hybrid). |
-| **Streaming Engine** | 64KB chunked pipeline ensuring $O(1)$ memory complexity. |
-| **Observability** | Structured internal tracing (`--trace`) with automatic PII redaction. |
-| **Container Sandbox** | Minimal 13MB `scratch` build with zero OS attack surface. |
-| **Configuration** | Standardized **Viper** management with environment-variable overrides. |
+| **Resilience** | Zero-downtime certificate reloading (`SIGHUP`) and global rate limiting. |
+| **Memory Security** | **memguard** integration for secure wiping and crash protection. |
+| **Container Sandbox**| Minimal 13MB `scratch` build with zero OS attack surface. |
+
+---
+
+## 🛡 Industrial Hardening
+Maknoon has undergone an opinionated cryptographic purge and hardening process to meet government and industrial compliance standards:
+
+1.  **Standardization**: Purged RSA-2048 and XChaCha20. Standardized on **AES-256-GCM** and **ECDSA-P384**.
+2.  **Forensic Integrity**: Audit logs are cryptographically signed using ML-DSA-87. Support for **Hardware-Backed Forensic Signing** via physical FIDO2 keys (`maknoon audit enroll`).
+3.  **Active Governance**: Multi-layered policy enforcement (Strictest-Wins) allows stacking organizational, project, and compliance-level constraints.
+4.  **Operational Resilience**: Support for live TLS rotation (SIGHUP) and mandatory API rate limiting prevents service saturation in production.
+5.  **Self-Correction**: Mandatory **Power-On Self-Tests (POST)** verify cryptographic integrity on every startup.
 
 ---
 
