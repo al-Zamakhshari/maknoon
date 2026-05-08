@@ -169,6 +169,31 @@ func LoadPolicyFromFile(path string) (SecurityPolicy, error) {
 	return LoadPolicyFromBytes(data)
 }
 
+// LoadSignedPolicyFromFile reads a JSON policy file and its detached signature,
+// verifying the signature against an authorized public key before loading.
+func LoadSignedPolicyFromFile(path string, authorizedPubKey []byte) (SecurityPolicy, error) {
+	data, err := os.ReadFile(filepath.Clean(path))
+	if err != nil {
+		return nil, err
+	}
+
+	sigPath := path + ".sig"
+	sigData, err := os.ReadFile(filepath.Clean(sigPath))
+	if err != nil {
+		return nil, fmt.Errorf("policy signature not found at %s: %w", sigPath, err)
+	}
+
+	if len(authorizedPubKey) == 0 {
+		return nil, fmt.Errorf("no authorized governance public key provided for verification")
+	}
+
+	if !VerifySignature(data, sigData, authorizedPubKey) {
+		return nil, &ErrPolicyViolation{Reason: "security policy signature verification failed (provenance mismatch or tampering detected)"}
+	}
+
+	return LoadPolicyFromBytes(data)
+}
+
 // LoadPolicyFromBytes parses JSON data into a FilePolicy.
 func LoadPolicyFromBytes(data []byte) (SecurityPolicy, error) {
 	var p FilePolicy

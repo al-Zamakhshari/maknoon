@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
+	"os"
 
 	"github.com/al-Zamakhshari/maknoon/pkg/crypto"
 	"github.com/mark3labs/mcp-go/mcp"
@@ -198,6 +199,37 @@ func registerIdentityTools(s *server.MCPServer, engine crypto.MaknoonEngine) {
 				return crypto.FormatMCPError(err, "resolve_identity")
 			}
 			res := crypto.ResolveResult{PublicKey: hex.EncodeToString(pk)}
+			outData, _ := json.Marshal(res)
+			return mcp.NewToolResultText(string(outData)), nil
+		})
+
+	s.AddTool(mcp.NewTool("aggregate_signatures", mcp.WithDescription("Combine multiple independent signatures into a threshold signature")),
+		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			args := getArgs(request)
+			var sigs [][]byte
+			if rawSigs, ok := args["signatures"].([]any); ok {
+				for _, s := range rawSigs {
+					if str, ok := s.(string); ok {
+						sig, err := os.ReadFile(str)
+						if err != nil {
+							return crypto.FormatMCPError(err, "aggregate_signatures")
+						}
+						sigs = append(sigs, sig)
+					}
+				}
+			}
+
+			output := getString(args, "output", "multi.sig")
+			agg, err := engine.Aggregate(&crypto.EngineContext{Context: ctx}, sigs)
+			if err != nil {
+				return crypto.FormatMCPError(err, "aggregate_signatures")
+			}
+
+			if err := os.WriteFile(output, agg, 0600); err != nil {
+				return crypto.FormatMCPError(err, "aggregate_signatures")
+			}
+
+			res := crypto.SignResult{Status: "success", SignaturePath: output}
 			outData, _ := json.Marshal(res)
 			return mcp.NewToolResultText(string(outData)), nil
 		})

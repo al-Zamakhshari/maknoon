@@ -2,9 +2,11 @@ package commands
 
 import (
 	"crypto/tls"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"os/signal"
@@ -115,13 +117,18 @@ func runAPIServer() error {
 	mux.HandleFunc("/v1/vault/rotate", handleVaultRotate)
 	mux.HandleFunc("/v1/vault/check-shards", handleVaultCheckShards)
 	mux.HandleFunc("/v1/identity/sign", handleSign)
+	mux.HandleFunc("/v1/identity/sign/aggregate", handleAggregateSignatures)
 	mux.HandleFunc("/v1/identity/verify", handleVerify)
 	mux.HandleFunc("/v1/identity/resolve", handleResolve)
 	mux.HandleFunc("/v1/audit/export", handleAuditExport)
 
-	// KMS & Network Orchestration
+	// Crypto & Dispersal
+	mux.HandleFunc("/v1/crypto/fragment", handleFragment)
+	mux.HandleFunc("/v1/crypto/reassemble", handleReassemble)
 	mux.HandleFunc("/v1/crypto/wrap", handleWrap)
 	mux.HandleFunc("/v1/crypto/unwrap", handleUnwrap)
+
+	// KMS & Network Orchestration
 	mux.HandleFunc("/v1/network/tunnel/start", handleTunnelStart)
 	mux.HandleFunc("/v1/network/tunnel/stop", handleTunnelStop)
 
@@ -208,28 +215,34 @@ func handleSign(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		Data       []byte `json:"data"`
+		DataB64    string `json:"data"`
 		KeyPath    string `json:"key_path"`
 		Passphrase string `json:"passphrase"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	data, err := base64.StdEncoding.DecodeString(req.DataB64)
+	if err != nil {
+		http.Error(w, "invalid base64 data: "+err.Error(), http.StatusBadRequest)
 		return
 	}
 
 	privKey, err := GlobalContext.Engine.LoadPrivateKey(nil, req.KeyPath, []byte(req.Passphrase), "", true)
 	if err != nil {
-		renderAPIError(w, err)
+		renderAPIError(w, fmt.Errorf("failed to load private key: %w", err))
 		return
 	}
 
-	sig, err := GlobalContext.Engine.Sign(nil, req.Data, privKey)
+	sig, err := GlobalContext.Engine.Sign(nil, data, privKey)
 	if err != nil {
-		renderAPIError(w, err)
+		renderAPIError(w, fmt.Errorf("signing failed: %w", err))
 		return
 	}
 
-	renderAPISuccess(w, map[string]any{"signature": sig})
+	renderAPISuccess(w, map[string]any{"signature": base64.StdEncoding.EncodeToString(sig)})
 }
 
 func handleVerify(w http.ResponseWriter, r *http.Request) {
@@ -238,22 +251,211 @@ func handleVerify(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		Data      []byte `json:"data"`
-		Signature []byte `json:"signature"`
-		PublicKey []byte `json:"public_key"`
+		DataB64      string   `json:"data"`
+		SignatureB64 string   `json:"signature"`
+		PublicKeyB64 string   `json:"public_key"`
+		PublicKeys   []string `json:"public_keys"`
+		Threshold    int      `json:"threshold"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	data, err := base64.StdEncoding.DecodeString(req.DataB64)
+	if err != nil {
+		http.Error(w, "invalid base64 data", http.StatusBadRequest)
+		return
+	}
+
+	sig, err := base64.StdEncoding.DecodeString(req.SignatureB64)
+	if err != nil {
+		http.Error(w, "invalid base64 signature", http.StatusBadRequest)
+		return
+	}
+
+	var pubKeys [][]byte
+	for i, pkB64 := range req.PublicKeys {
+		pk, err := base64.StdEncoding.DecodeString(pkB64)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("invalid base64 public key at index %d", i), http.StatusBadRequest)
+			return
+		}
+		pubKeys = append(pubKeys, pk)
+	}
+	if req.PublicKeyB64 != "" {
+		pk, err := base64.StdEncoding.DecodeString(req.PublicKeyB64)
+		if err != nil {
+			http.Error(w, "invalid base64 public key", http.StatusBadRequest)
+			return
+		}
+		pubKeys = append(pubKeys, pk)
+	}
+
+	var valid bool
+	if req.Threshold > 1 || len(pubKeys) > 1 {
+		valid, err = GlobalContext.Engine.VerifyThreshold(nil, data, sig, pubKeys, req.Threshold)
+	} else {
+		if len(pubKeys) == 0 {
+			http.Error(w, "public key required", http.StatusBadRequest)
+			return
+		}
+		valid, err = GlobalContext.Engine.Verify(nil, data, sig, pubKeys[0])
+	}
+
+	if err != nil {
+		renderAPIError(w, fmt.Errorf("verification failed: %w", err))
+		return
+	}
+
+	renderAPISuccess(w, map[string]bool{"valid": valid})
+}
+
+func handleAggregateSignatures(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var req struct {
+		Signatures []string `json:"signatures"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	var sigs [][]byte
+	for i, sB64 := range req.Signatures {
+		s, err := base64.StdEncoding.DecodeString(sB64)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("invalid base64 signature at index %d", i), http.StatusBadRequest)
+			return
+		}
+		sigs = append(sigs, s)
+	}
+
+	agg, err := GlobalContext.Engine.Aggregate(nil, sigs)
+	if err != nil {
+		renderAPIError(w, fmt.Errorf("aggregation failed: %w", err))
+		return
+	}
+
+	renderAPISuccess(w, map[string]any{"signature": base64.StdEncoding.EncodeToString(agg)})
+}
+
+func handleFragment(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var req struct {
+		Input        string `json:"input"`
+		Output       string `json:"output"`
+		DataShards   int    `json:"data_shards"`
+		ParityShards int    `json:"parity_shards"`
+		SignWith     string `json:"sign_with"`
+		Passphrase   string `json:"passphrase"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	valid, err := GlobalContext.Engine.Verify(nil, req.Data, req.Signature, req.PublicKey)
+	if req.DataShards == 0 {
+		req.DataShards = 5
+	}
+	if req.ParityShards == 0 {
+		req.ParityShards = 3
+	}
+	if req.Output == "" {
+		req.Output = req.Input + "_fragments"
+	}
+
+	fi, err := os.Stat(req.Input)
 	if err != nil {
 		renderAPIError(w, err)
 		return
 	}
 
-	renderAPISuccess(w, map[string]bool{"valid": valid})
+	in, err := os.Open(req.Input)
+	if err != nil {
+		renderAPIError(w, err)
+		return
+	}
+	defer in.Close()
+
+	var sigKey []byte
+	if req.SignWith != "" {
+		sigKey, err = GlobalContext.Engine.LoadPrivateKey(nil, req.SignWith, []byte(req.Passphrase), "", true)
+		if err != nil {
+			renderAPIError(w, err)
+			return
+		}
+		defer crypto.SafeClear(sigKey)
+	}
+
+	opts := crypto.FragmentOptions{
+		DataShards:   req.DataShards,
+		ParityShards: req.ParityShards,
+		TargetDir:    req.Output,
+		OriginalSize: fi.Size(),
+		SigningKey:   sigKey,
+	}
+
+	fw, err := crypto.NewFragmentWriter(opts)
+	if err != nil {
+		renderAPIError(w, err)
+		return
+	}
+	defer fw.Close()
+
+	if _, err := io.Copy(fw, in); err != nil {
+		renderAPIError(w, err)
+		return
+	}
+
+	renderAPISuccess(w, map[string]any{
+		"status":    "success",
+		"shards":    req.DataShards + req.ParityShards,
+		"directory": req.Output,
+	})
+}
+
+func handleReassemble(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var req struct {
+		InputDir      string `json:"input_dir"`
+		Output        string `json:"output"`
+		AuthorizedKey []byte `json:"authorized_key"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if req.Output == "" {
+		req.Output = "restored.data"
+	}
+
+	f, err := os.Create(req.Output)
+	if err != nil {
+		renderAPIError(w, err)
+		return
+	}
+	defer f.Close()
+
+	if err := GlobalContext.Engine.ReassembleFragments(req.InputDir, f, req.AuthorizedKey); err != nil {
+		renderAPIError(w, err)
+		return
+	}
+
+	renderAPISuccess(w, map[string]any{
+		"status": "success",
+		"file":   req.Output,
+	})
 }
 
 func handleResolve(w http.ResponseWriter, r *http.Request) {

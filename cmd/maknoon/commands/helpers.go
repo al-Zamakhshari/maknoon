@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -507,9 +508,55 @@ func InitEngine() error {
 
 	// 3. Declarative File-Based Policy
 	if path := viper.GetString("policy"); path != "" {
-		filePol, err := crypto.LoadPolicyFromFile(path)
+		conf := crypto.GetGlobalConfig()
+		var filePol crypto.SecurityPolicy
+		var err error
+		var policyData []byte
+		var sigData []byte
+
+		if strings.HasPrefix(path, "http://") || strings.HasPrefix(path, "https://") {
+			// Remote Policy Sync
+			policyData, err = downloadResource(path)
+			if err != nil {
+				return fmt.Errorf("failed to sync remote policy: %w", err)
+			}
+
+			if conf.Governance.RequireSignedPolicies {
+				sigData, err = downloadResource(path + ".sig")
+				if err != nil {
+					return fmt.Errorf("failed to sync remote policy signature: %w", err)
+				}
+			}
+		} else {
+			// Local Policy
+			policyData, err = os.ReadFile(filepath.Clean(path))
+			if err != nil {
+				return fmt.Errorf("failed to read policy file: %w", err)
+			}
+			if conf.Governance.RequireSignedPolicies {
+				sigData, err = os.ReadFile(filepath.Clean(path + ".sig"))
+				if err != nil {
+					return fmt.Errorf("policy signature not found: %w", err)
+				}
+			}
+		}
+
+		if conf.Governance.RequireSignedPolicies {
+			if conf.Governance.AuthorizedKeyPath == "" {
+				return fmt.Errorf("governance.require_signed_policies is enabled but governance.authorized_key_path is not configured")
+			}
+			pubKey, err2 := os.ReadFile(conf.Governance.AuthorizedKeyPath)
+			if err2 != nil {
+				return fmt.Errorf("failed to load authorized governance key: %w", err2)
+			}
+			if !crypto.VerifySignature(policyData, sigData, pubKey) {
+				return fmt.Errorf("failed to verify policy signature: %w", &crypto.ErrPolicyViolation{Reason: "security policy signature verification failed (tampering detected)"})
+			}
+		}
+
+		filePol, err = crypto.LoadPolicyFromBytes(policyData)
 		if err != nil {
-			return fmt.Errorf("failed to load governance policy: %w", err)
+			return fmt.Errorf("failed to parse governance policy: %w", err)
 		}
 		policies = append(policies, filePol)
 	}
@@ -626,4 +673,18 @@ func InitEngine() error {
 	}
 
 	return nil
+}
+
+func downloadResource(url string) ([]byte, error) {
+	resp, err := http.Get(url)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("failed to download resource: status %d", resp.StatusCode)
+	}
+
+	return io.ReadAll(resp.Body)
 }

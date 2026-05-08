@@ -31,6 +31,12 @@ type Config struct {
 	Paths              PathConfig                 `json:"paths" mapstructure:"paths"`
 	VaultBackend       string                     `json:"vault_backend" mapstructure:"vault_backend"` // bbolt or badger
 	Profiles           map[string]*DynamicProfile `json:"profiles,omitempty" mapstructure:"profiles"`
+	Governance         GovernanceConfig           `json:"governance" mapstructure:"governance"`
+}
+
+type GovernanceConfig struct {
+	RequireSignedPolicies bool   `json:"require_signed_policies" mapstructure:"require_signed_policies"`
+	AuthorizedKeyPath     string `json:"authorized_key_path" mapstructure:"authorized_key_path"`
 }
 
 type AuditConfig struct {
@@ -146,6 +152,9 @@ func DefaultConfig() *Config {
 		},
 		VaultBackend: "bbolt",
 		Profiles:     make(map[string]*DynamicProfile),
+		Governance: GovernanceConfig{
+			RequireSignedPolicies: false,
+		},
 	}
 }
 

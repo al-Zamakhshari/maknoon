@@ -68,5 +68,9 @@ func SignCmd() *cobra.Command {
 
 	cmd.Flags().StringVarP(&sigKeyPath, "private-key", "k", "", "Path to the ML-DSA private key")
 	cmd.Flags().StringVarP(&passphrase, "passphrase", "s", "", "Passphrase to unlock the private key")
+
+	// Subcommands
+	cmd.AddCommand(AggregateCmd())
+
 	return cmd
 }

@@ -12,8 +12,6 @@ import (
 	"github.com/multiformats/go-multiaddr"
 )
 
-const P2PSendProtocol = "/maknoon/send/1.0.0"
-
 // runLibp2pSend handles the sender side of a libp2p file transfer.
 func (e *Engine) runLibp2pSend(ectx *EngineContext, inputName string, r io.Reader, h host.Host, target string, opts P2PSendOptions, status chan P2PStatus) {
 	defer close(status)

@@ -6,11 +6,24 @@ import (
 	"io"
 )
 
+const (
+	// P2PSendProtocol is the default protocol for push-based transfers.
+	P2PSendProtocol = "/maknoon/send/1.0.0"
+	// P2PFragmentProtocol is the protocol for pull-based fragment retrieval.
+	P2PFragmentProtocol = "/maknoon/fragment/1.0.0"
+)
+
 // P2PMessageHeader defines the universal header for any Maknoon P2P transport.
 type P2PMessageHeader struct {
 	TraceID string `json:"trace_id,omitempty"`
 	Name    string `json:"name"`
 	Size    int64  `json:"size"`
+}
+
+// P2PFragmentRequest is sent by a receiver to pull a specific fragment from a peer.
+type P2PFragmentRequest struct {
+	FileName string `json:"file_name"`
+	ShardIdx int    `json:"shard_idx"`
 }
 
 // P2PPackMessage prepares a secure payload for P2P transmission.

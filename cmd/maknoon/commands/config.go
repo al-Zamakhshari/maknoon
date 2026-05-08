@@ -86,7 +86,9 @@ Keys:
   audit.enabled      - Toggle forensic auditing (true/false)
   audit.logfile      - Path to structured JSON audit log
   paths.keys         - Custom keys directory
-  paths.vaults       - Custom vaults directory`,
+  paths.vaults       - Custom vaults directory
+  gov.require_signed - Require signed policies (true/false)
+  gov.auth_key       - Path to authorized governance public key`,
 		Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			checkJSONMode(cmd)
@@ -98,6 +100,10 @@ Keys:
 			switch key {
 			case "default_identity":
 				conf.DefaultIdentity = val
+			case "gov.require_signed":
+				conf.Governance.RequireSignedPolicies = (val == "true")
+			case "gov.auth_key":
+				conf.Governance.AuthorizedKeyPath = val
 			case "security.time":
 				v, _ := strconv.ParseUint(val, 10, 32)
 				conf.Security.ArgonTime = uint32(v)

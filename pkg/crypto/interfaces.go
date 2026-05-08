@@ -156,12 +156,19 @@ type ChatService interface {
 type Signer interface {
 	Sign(ectx *EngineContext, data []byte, privKey []byte) ([]byte, error)
 	Verify(ectx *EngineContext, data []byte, sig []byte, pubKey []byte) (bool, error)
+	Aggregate(ectx *EngineContext, signatures [][]byte) ([]byte, error)
+	VerifyThreshold(ectx *EngineContext, data []byte, aggregateSig []byte, authorizedKeys [][]byte, threshold int) (bool, error)
 }
 
 // KMSService provides enterprise-grade envelope encryption (Key Wrapping).
 type KMSService interface {
 	Wrap(ectx *EngineContext, pubKey []byte) (DataKey, error)
 	Unwrap(ectx *EngineContext, wrappedKey []byte, privKey []byte) ([]byte, error)
+}
+
+// DispersalService handles RAID-for-Privacy data dispersal.
+type DispersalService interface {
+	ReassembleFragments(srcDir string, w io.Writer, authorizedPubKey []byte) error
 }
 
 // MaknoonEngine is the primary high-level facade for all Maknoon services.
@@ -177,6 +184,7 @@ type MaknoonEngine interface {
 	ChatService
 	Signer
 	KMSService
+	DispersalService
 
 	Close() error
 }

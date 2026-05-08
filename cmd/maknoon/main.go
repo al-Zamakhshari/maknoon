@@ -80,6 +80,8 @@ Post-Quantum Cryptography (PQC).`,
 	addCommand(commands.TunnelCmd(), "core")
 	addCommand(commands.NetCmd(), "core")
 	addCommand(commands.InfoCmd(), "core")
+	addCommand(commands.FragmentCmd(), "core")
+	addCommand(commands.ReassembleCmd(), "core")
 
 	addCommand(commands.KeygenCmd(), "identity")
 	addCommand(commands.IdentityCmd(), "identity")
@@ -88,6 +90,7 @@ Post-Quantum Cryptography (PQC).`,
 	addCommand(commands.SignCmd(), "security")
 	addCommand(commands.VerifyCmd(), "security")
 	addCommand(commands.AuditCmd(), "security")
+	addCommand(commands.PolicyCmd(), "security")
 
 	addCommand(commands.VaultCmd(), "utils")
 	addCommand(commands.GenCmd(), "utils")

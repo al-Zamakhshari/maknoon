@@ -17,12 +17,14 @@ var (
 	recvPrivateKey string
 	recvP2PMode    bool
 	recvIdentity   string
+	recvFragment   bool
+	recvFrom       string
 )
 
 // ReceiveCmd returns the cobra command for receiving files via secure P2P.
 func ReceiveCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "receive [peer_id]",
+		Use:   "receive [peer_id/file_name]",
 		Short: "Receive a file, directory, or text via secure P2P",
 		Long:  `Downloads and decrypts data directly from a peer via libp2p.`,
 		Args:  cobra.MaximumNArgs(1),
@@ -42,9 +44,12 @@ func ReceiveCmd() *cobra.Command {
 			}
 
 			opts := crypto.P2PReceiveOptions{
-				Passphrase: []byte(recvPassphrase),
-				OutputDir:  recvOutput,
-				P2PMode:    true,
+				Passphrase:   []byte(recvPassphrase),
+				OutputDir:    recvOutput,
+				P2PMode:      true,
+				IsFragmented: recvFragment,
+				From:         recvFrom,
+				FragmentName: code,
 			}
 
 			if cmd.Flags().Changed("stealth") {
@@ -114,6 +119,8 @@ func ReceiveCmd() *cobra.Command {
 	cmd.Flags().StringVarP(&recvPrivateKey, "private-key", "k", "", "Path to your private key")
 	cmd.Flags().BoolVar(&recvP2PMode, "p2p", true, "Use identity-first P2P (libp2p)")
 	cmd.Flags().StringVar(&recvIdentity, "identity", "", "Identity name to use (default: active identity)")
+	cmd.Flags().BoolVar(&recvFragment, "fragment", false, "Enable automated fragment retrieval")
+	cmd.Flags().StringVar(&recvFrom, "from", "", "Comma-separated list of sources (@petname or PeerID)")
 
 	return cmd
 }

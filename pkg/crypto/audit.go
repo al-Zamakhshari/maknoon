@@ -642,6 +642,35 @@ func (e *AuditEngine) Verify(ectx *EngineContext, data []byte, sig []byte, pubKe
 	return res, err
 }
 
+func (e *AuditEngine) Aggregate(ectx *EngineContext, signatures [][]byte) ([]byte, error) {
+	start := time.Now()
+	res, err := e.Engine.Aggregate(ectx, signatures)
+	duration := time.Since(start)
+
+	e.Logger.LogEvent("signature_aggregate", map[string]any{
+		"count":       len(signatures),
+		"duration_ms": duration.Milliseconds(),
+	}, err)
+
+	return res, err
+}
+
+func (e *AuditEngine) VerifyThreshold(ectx *EngineContext, data []byte, aggregateSig []byte, authorizedKeys [][]byte, threshold int) (bool, error) {
+	start := time.Now()
+	res, err := e.Engine.VerifyThreshold(ectx, data, aggregateSig, authorizedKeys, threshold)
+	duration := time.Since(start)
+
+	e.Logger.LogEvent("verify_threshold", map[string]any{
+		"data_size":   len(data),
+		"key_count":   len(authorizedKeys),
+		"threshold":   threshold,
+		"duration_ms": duration.Milliseconds(),
+		"verified":    res,
+	}, err)
+
+	return res, err
+}
+
 func (e *AuditEngine) Wrap(ectx *EngineContext, pubKey []byte) (DataKey, error) {
 	start := time.Now()
 	res, err := e.Engine.Wrap(ectx, pubKey)
@@ -664,6 +693,19 @@ func (e *AuditEngine) Unwrap(ectx *EngineContext, wrappedKey []byte, privKey []b
 	}, err)
 
 	return res, err
+}
+
+func (e *AuditEngine) ReassembleFragments(srcDir string, w io.Writer, authorizedPubKey []byte) error {
+	start := time.Now()
+	err := e.Engine.ReassembleFragments(srcDir, w, authorizedPubKey)
+	duration := time.Since(start)
+
+	e.Logger.LogEvent("fragment_reassemble", map[string]any{
+		"src_dir":     e.sanitizePath(srcDir),
+		"duration_ms": duration.Milliseconds(),
+	}, err)
+
+	return err
 }
 
 func (e *AuditEngine) VaultRotate(ectx *EngineContext, vaultPath string, oldPassphrase, newPassphrase []byte) error {

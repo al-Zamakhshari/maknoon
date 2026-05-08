@@ -100,6 +100,8 @@ NEVER use `fmt.Print` or `json.Marshal` directly in business logic. Use the `Pre
 
 ## 🧪 Current Status
 - **Architecture**: V1.4.x (Hardened Governance Engine & Industrial Purge complete).
+- **Phase 7 (RAID-for-Privacy)**: Successfully implemented stream-level Reed-Solomon erasure coding, fragment forensic signing, and multi-target P2P dispersal/retrieval.
+- **Phase 6 (Threshold Cryptography)**: Completed Milestone 6.1 (Threshold Signatures / Multi-Sig aggregation and verification).
 - **Parity**: 1:1 mapping between CLI commands, MCP tools, and REST endpoints with high-fidelity results.
 - **Testing**: Passed all 90+ unit, integration, and fuzz tests; verified full industrial smoke suite.
 - **Coverage**: **~55%** statement coverage in `pkg/crypto`.

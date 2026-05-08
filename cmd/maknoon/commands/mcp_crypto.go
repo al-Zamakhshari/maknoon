@@ -3,7 +3,9 @@ package commands
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"os"
+	"strings"
 
 	"github.com/al-Zamakhshari/maknoon/pkg/crypto"
 	"github.com/mark3labs/mcp-go/mcp"
@@ -134,12 +136,13 @@ func registerCryptoTools(s *server.MCPServer, engine crypto.MaknoonEngine) {
 			return mcp.NewToolResultText(string(outData)), nil
 		})
 
-	s.AddTool(mcp.NewTool("verify_file", mcp.WithDescription("Verify a file's signature")),
+	s.AddTool(mcp.NewTool("verify_file", mcp.WithDescription("Verify a file's signature (supports threshold verification)")),
 		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			args := getArgs(request)
 			path := getString(args, "path", "")
 			sigPath := getString(args, "signature", "")
-			pubKey := getString(args, "public_key", "")
+			pubKeyList := getString(args, "public_keys", "")
+			threshold, _ := args["threshold"].(float64)
 
 			data, err := os.ReadFile(path)
 			if err != nil {
@@ -150,12 +153,34 @@ func registerCryptoTools(s *server.MCPServer, engine crypto.MaknoonEngine) {
 				return crypto.FormatMCPError(err, "verify_file")
 			}
 
-			pk, err := engine.ResolvePublicKey(&crypto.EngineContext{Context: ctx}, pubKey, false)
-			if err != nil {
-				return crypto.FormatMCPError(err, "verify_file")
+			var pubKeys [][]byte
+			if pubKeyList != "" {
+				parts := strings.Split(pubKeyList, ",")
+				for _, p := range parts {
+					pk, err := engine.ResolvePublicKey(&crypto.EngineContext{Context: ctx}, strings.TrimSpace(p), false)
+					if err != nil {
+						return crypto.FormatMCPError(err, "verify_file")
+					}
+					pubKeys = append(pubKeys, pk)
+				}
+			} else if pkStr := getString(args, "public_key", ""); pkStr != "" {
+				pk, err := engine.ResolvePublicKey(&crypto.EngineContext{Context: ctx}, pkStr, false)
+				if err != nil {
+					return crypto.FormatMCPError(err, "verify_file")
+				}
+				pubKeys = append(pubKeys, pk)
 			}
 
-			valid, err := engine.Verify(&crypto.EngineContext{Context: ctx}, data, sig, pk)
+			var valid bool
+			if threshold > 1 || len(pubKeys) > 1 {
+				valid, err = engine.VerifyThreshold(&crypto.EngineContext{Context: ctx}, data, sig, pubKeys, int(threshold))
+			} else {
+				if len(pubKeys) == 0 {
+					return mcp.NewToolResultError("public key required"), nil
+				}
+				valid, err = engine.Verify(&crypto.EngineContext{Context: ctx}, data, sig, pubKeys[0])
+			}
+
 			if err != nil {
 				return crypto.FormatMCPError(err, "verify_file")
 			}
@@ -166,6 +191,105 @@ func registerCryptoTools(s *server.MCPServer, engine crypto.MaknoonEngine) {
 			}
 			if !valid {
 				res.Status = "failed"
+			}
+			outData, _ := json.Marshal(res)
+			return mcp.NewToolResultText(string(outData)), nil
+		})
+
+	s.AddTool(mcp.NewTool("fragment_file", mcp.WithDescription("Split a file into redundant erasure-coded fragments")),
+		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			args := getArgs(request)
+			input := getString(args, "input", "")
+			output := getString(args, "output", input+"_fragments")
+			dataShards, _ := args["data_shards"].(float64)
+			parityShards, _ := args["parity_shards"].(float64)
+			sigKeyPath := getString(args, "sign_with", "")
+
+			if dataShards == 0 {
+				dataShards = 5
+			}
+			if parityShards == 0 {
+				parityShards = 3
+			}
+
+			fi, err := os.Stat(input)
+			if err != nil {
+				return crypto.FormatMCPError(err, "fragment_file")
+			}
+
+			in, err := os.Open(input)
+			if err != nil {
+				return crypto.FormatMCPError(err, "fragment_file")
+			}
+			defer in.Close()
+
+			var sigKey []byte
+			if sigKeyPath != "" {
+				passRaw := viper.GetString("passphrase")
+				resolved := engine.ResolveKeyPath(&crypto.EngineContext{Context: ctx}, sigKeyPath, "")
+				sigKey, err = engine.LoadPrivateKey(&crypto.EngineContext{Context: ctx}, resolved, []byte(passRaw), "", true)
+				if err != nil {
+					return crypto.FormatMCPError(err, "fragment_file")
+				}
+				defer crypto.SafeClear(sigKey)
+			}
+
+			opts := crypto.FragmentOptions{
+				DataShards:   int(dataShards),
+				ParityShards: int(parityShards),
+				TargetDir:    output,
+				OriginalSize: fi.Size(),
+				SigningKey:   sigKey,
+			}
+
+			fw, err := crypto.NewFragmentWriter(opts)
+			if err != nil {
+				return crypto.FormatMCPError(err, "fragment_file")
+			}
+			defer fw.Close()
+
+			if _, err := io.Copy(fw, in); err != nil {
+				return crypto.FormatMCPError(err, "fragment_file")
+			}
+
+			res := map[string]any{
+				"status":    "success",
+				"shards":    int(dataShards + parityShards),
+				"directory": output,
+			}
+			outData, _ := json.Marshal(res)
+			return mcp.NewToolResultText(string(outData)), nil
+		})
+
+	s.AddTool(mcp.NewTool("reassemble_file", mcp.WithDescription("Reconstruct a file from fragments")),
+		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			args := getArgs(request)
+			input := getString(args, "input_dir", "")
+			output := getString(args, "output", "restored.data")
+			authKeyPath := getString(args, "authorized_key", "")
+
+			var authKey []byte
+			if authKeyPath != "" {
+				var err error
+				authKey, err = os.ReadFile(authKeyPath)
+				if err != nil {
+					return crypto.FormatMCPError(err, "reassemble_file")
+				}
+			}
+
+			f, err := os.Create(output)
+			if err != nil {
+				return crypto.FormatMCPError(err, "reassemble_file")
+			}
+			defer f.Close()
+
+			if err := crypto.ReassembleFragments(input, f, authKey); err != nil {
+				return crypto.FormatMCPError(err, "reassemble_file")
+			}
+
+			res := map[string]any{
+				"status": "success",
+				"file":   output,
 			}
 			outData, _ := json.Marshal(res)
 			return mcp.NewToolResultText(string(outData)), nil

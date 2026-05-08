@@ -315,7 +315,11 @@ func (e *Engine) P2PSend(ectx *EngineContext, identityName string, inputName str
 	if err != nil {
 		return "", nil, err
 	}
-	go e.runLibp2pSend(ectx, inputName, r, h, opts.To, opts, status)
+	if opts.DataShards > 0 {
+		go e.runLibp2pFragmentSend(ectx, inputName, r, h, opts.To, opts, status)
+	} else {
+		go e.runLibp2pSend(ectx, inputName, r, h, opts.To, opts, status)
+	}
 	return h.ID().String(), status, nil
 }
 
@@ -353,7 +357,20 @@ func (e *Engine) P2PReceive(ectx *EngineContext, identityName string, code strin
 	if err != nil {
 		return nil, err
 	}
-	go e.runLibp2pReceive(ectx, h, opts, status)
+
+	// Always register the fragment handler if we have an output directory
+	// This enables us to serve fragments we've already received.
+	storageDir := opts.OutputDir
+	if storageDir == "" {
+		storageDir = "."
+	}
+	e.RegisterFragmentHandler(h, storageDir)
+
+	if opts.IsFragmented {
+		go e.runLibp2pFragmentReceive(ectx, code, h, opts, status)
+	} else {
+		go e.runLibp2pReceive(ectx, h, opts, status)
+	}
 
 	var addrs []string
 	for _, a := range h.Addrs() {

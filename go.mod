@@ -1,6 +1,6 @@
 module github.com/al-Zamakhshari/maknoon
 
-go 1.26.2
+go 1.26.3
 
 require (
 	github.com/awnumar/memguard v0.23.0
@@ -8,6 +8,7 @@ require (
 	github.com/dgraph-io/badger/v4 v4.9.1
 	github.com/hashicorp/yamux v0.1.2
 	github.com/klauspost/compress v1.18.6
+	github.com/klauspost/reedsolomon v1.14.0
 	github.com/libp2p/go-libp2p v0.48.0
 	github.com/mark3labs/mcp-go v0.50.0
 	github.com/mohammadv184/go-fido2 v0.1.1
@@ -67,7 +68,7 @@ require (
 	github.com/jbenet/go-temp-err-catcher v0.1.0 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
-	github.com/klauspost/cpuid/v2 v2.2.10 // indirect
+	github.com/klauspost/cpuid/v2 v2.3.0 // indirect
 	github.com/koron/go-ssdp v0.0.6 // indirect
 	github.com/ldclabs/cose v1.3.2 // indirect
 	github.com/libp2p/go-buffer-pool v0.1.0 // indirect
@@ -151,7 +152,7 @@ require (
 	golang.org/x/arch v0.15.0 // indirect
 	golang.org/x/exp v0.0.0-20250620022241-b7579e27df2b // indirect
 	golang.org/x/mod v0.34.0 // indirect
-	golang.org/x/net v0.52.0 // indirect
+	golang.org/x/net v0.53.0 // indirect
 	golang.org/x/sync v0.20.0 // indirect
 	golang.org/x/sys v0.43.0 // indirect
 	golang.org/x/telemetry v0.0.0-20260311193753-579e4da9a98c // indirect

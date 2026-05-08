@@ -30,23 +30,28 @@ func GenerateTraceID() string {
 
 // P2PSendOptions settings for P2P sending.
 type P2PSendOptions struct {
-	Passphrase  SecretBytes
-	PublicKey   []byte
-	Stealth     *bool
-	IsDirectory bool
-	P2PMode     bool   // Always true in v3.1
-	To          string // Remote PeerID or @petname
-	TraceID     string
+	Passphrase   SecretBytes
+	PublicKey    []byte
+	Stealth      *bool
+	IsDirectory  bool
+	P2PMode      bool   // Always true in v3.1
+	To           string // Remote PeerID or @petname
+	TraceID      string
+	DataShards   int
+	ParityShards int
 }
 
 // P2PReceiveOptions settings for P2P receiving.
 type P2PReceiveOptions struct {
-	Passphrase SecretBytes
-	PrivateKey SecretBytes
-	Stealth    *bool
-	OutputDir  string
-	P2PMode    bool // Always true in v3.1
-	TraceID    string
+	Passphrase   SecretBytes
+	PrivateKey   SecretBytes
+	Stealth      *bool
+	OutputDir    string
+	P2PMode      bool // Always true in v3.1
+	TraceID      string
+	From         string // Comma-separated list of PeerIDs/@petnames for fragments
+	IsFragmented bool
+	FragmentName string // The base name of the file being retrieved via fragments
 }
 
 // P2PSend initiates a libp2p P2P transfer.

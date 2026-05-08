@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/al-Zamakhshari/maknoon/pkg/crypto"
@@ -84,6 +85,18 @@ func SendCmd() *cobra.Command {
 				opts.Stealth = crypto.BoolPtr(useStealth)
 			}
 
+			fragmentStr, _ := cmd.Flags().GetString("fragment")
+			if fragmentStr != "" {
+				// Format: data/parity
+				parts := strings.Split(fragmentStr, "/")
+				if len(parts) == 2 {
+					d, _ := strconv.Atoi(parts[0])
+					r, _ := strconv.Atoi(parts[1])
+					opts.DataShards = d
+					opts.ParityShards = r
+				}
+			}
+
 			if sendPublicKey != "" {
 				im := crypto.NewIdentityManager()
 				pkBytes, err := im.ResolvePublicKey(sendPublicKey, sendTofu)
@@ -151,6 +164,7 @@ func SendCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&useP2PMode, "p2p", true, "Use identity-first P2P (libp2p)")
 	cmd.Flags().StringVar(&sendTo, "to", "", "Recipient @petname or PeerID")
 	cmd.Flags().StringVar(&sendIdentity, "identity", "", "Identity name to use (default: active identity)")
+	cmd.Flags().String("fragment", "", "Enable fragmented dispersal (e.g. 5/3 for 5 data + 3 parity shards)")
 
 	return cmd
 }
