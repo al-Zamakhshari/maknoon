@@ -137,15 +137,3 @@ func registerVaultTools(s *server.MCPServer, engine crypto.MaknoonEngine) {
 			return mcp.NewToolResultText(string(outData)), nil
 		})
 }
-
-func getArgs(request mcp.CallToolRequest) map[string]interface{} {
-	args, _ := request.Params.Arguments.(map[string]interface{})
-	return args
-}
-
-func getString(args map[string]any, key string, def string) string {
-	if val, ok := args[key].(string); ok {
-		return val
-	}
-	return def
-}

@@ -17,28 +17,49 @@ type TransportFactory struct {
 
 // CreateClientSession instantiates a MuxSession based on the provided options.
 func (f *TransportFactory) CreateClientSession(ctx context.Context, opts TunnelOptions, extraOpts ...libp2p.Option) (MuxSession, error) {
-	if opts.P2PMode {
-		h, err := NewLibp2pHost(extraOpts...)
-		if err != nil {
-			return nil, fmt.Errorf("failed to start libp2p host: %w", err)
+	createSingle := func() (MuxSession, error) {
+		if opts.P2PMode {
+			h, err := NewLibp2pHost(extraOpts...)
+			if err != nil {
+				return nil, fmt.Errorf("failed to start libp2p host: %w", err)
+			}
+			return DialLibp2p(ctx, h, opts.P2PAddr)
 		}
-		return DialLibp2p(ctx, h, opts.P2PAddr)
-	}
 
-	if opts.UseYamux {
+		if opts.UseYamux {
+			tlsConf := GetPQCConfig()
+			tlsConf.InsecureSkipVerify = opts.Insecure
+			conn, err := tls.Dial("tcp", opts.RemoteEndpoint, tlsConf)
+			if err != nil {
+				return nil, fmt.Errorf("failed to connect via PQC-TCP: %w", err)
+			}
+			return WrapYamux(conn, false)
+		}
+
+		// Default: Direct PQC QUIC
 		tlsConf := GetPQCConfig()
 		tlsConf.InsecureSkipVerify = opts.Insecure
-		conn, err := tls.Dial("tcp", opts.RemoteEndpoint, tlsConf)
-		if err != nil {
-			return nil, fmt.Errorf("failed to connect via PQC-TCP: %w", err)
-		}
-		return WrapYamux(conn, false)
+		return Dial(ctx, opts.RemoteEndpoint, tlsConf, f.Config)
 	}
 
-	// Default: Direct PQC QUIC
-	tlsConf := GetPQCConfig()
-	tlsConf.InsecureSkipVerify = opts.Insecure
-	return Dial(ctx, opts.RemoteEndpoint, tlsConf, f.Config)
+	if opts.DataLanes > 0 {
+		total := opts.DataLanes + opts.ParityLanes
+		subs := make([]MuxSession, total)
+		for i := 0; i < total; i++ {
+			s, err := createSingle()
+			if err != nil {
+				// Cleanup
+				for j := 0; j < i; j++ {
+					subs[j].Close()
+				}
+				return nil, fmt.Errorf("failed to create sub-session %d: %w", i, err)
+			}
+			subs[i] = s
+		}
+		return NewResilientMuxSession(subs, opts.DataLanes, opts.ParityLanes)
+	}
+
+	return createSingle()
 }
 
 // CreateListener instantiates a MuxListener based on the provided options.

@@ -33,6 +33,8 @@ type TunnelOptions struct {
 	P2PAddr        string `json:"p2p_addr,omitempty"` // Multiaddr or PeerID
 	Identity       string `json:"identity,omitempty"`
 	Insecure       bool   `json:"insecure,omitempty"`
+	DataLanes      int    `json:"data_lanes,omitempty"`
+	ParityLanes    int    `json:"parity_lanes,omitempty"`
 }
 
 // TunnelStatus represents the current state of an active L4 tunnel.

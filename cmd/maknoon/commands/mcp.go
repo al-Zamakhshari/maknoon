@@ -1,11 +1,13 @@
 package commands
 
 import (
+	"crypto/tls"
 	"fmt"
 	"net/http"
 	"strings"
 	"time"
 
+	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -68,7 +70,18 @@ func runSSEServer(s *server.MCPServer) error {
 	certFile := viper.GetString("mcp.tls_cert")
 	keyFile := viper.GetString("mcp.tls_key")
 
-	sseServer := server.NewSSEServer(s, server.WithBaseURL("http://"+addr))
+	if certFile == "" || keyFile == "" {
+		return fmt.Errorf("TLS is REQUIRED for MCP SSE mode. Please provide --tls-cert and --tls-key. Maknoon mandates Post-Quantum Secure transport for all orchestration")
+	}
+
+	// Load and set certificate globally for GetTLSConfig()
+	cert, err := tls.LoadX509KeyPair(certFile, keyFile)
+	if err != nil {
+		return fmt.Errorf("failed to load TLS certificates: %w", err)
+	}
+	SetActiveCertificate(cert)
+
+	sseServer := server.NewSSEServer(s, server.WithBaseURL("https://"+addr))
 
 	// Define the HTTP server with Post-Quantum TLS 1.3 configuration
 	httpServer := &http.Server{
@@ -79,10 +92,6 @@ func runSSEServer(s *server.MCPServer) error {
 	}
 
 	fmt.Printf("🚀 Starting Post-Quantum Secure MCP SSE Server on %s\n", addr)
-	if certFile == "" || keyFile == "" {
-		return fmt.Errorf("TLS is REQUIRED for MCP SSE mode. Please provide --tls-cert and --tls-key. Maknoon mandates Post-Quantum Secure transport for all orchestration")
-	}
-
 	fmt.Println("🔒 Transport encryption active (PQ-TLS 1.3)")
 	return httpServer.ListenAndServeTLS(certFile, keyFile)
 }
@@ -100,4 +109,29 @@ func createMCPServer() *server.MCPServer {
 	registerProfilesTools(s, engine)
 
 	return s
+}
+
+func getArgs(request mcp.CallToolRequest) map[string]interface{} {
+	args, _ := request.Params.Arguments.(map[string]interface{})
+	return args
+}
+
+func getString(args map[string]any, key string, def string) string {
+	if val, ok := args[key].(string); ok {
+		return val
+	}
+	return def
+}
+
+func getInt(args map[string]any, key string, def int) int {
+	if val, ok := args[key].(float64); ok {
+		return int(val)
+	}
+	if val, ok := args[key].(int64); ok {
+		return int(val)
+	}
+	if val, ok := args[key].(int); ok {
+		return val
+	}
+	return def
 }

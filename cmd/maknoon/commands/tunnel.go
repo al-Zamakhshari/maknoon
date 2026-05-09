@@ -137,6 +137,8 @@ func tunnelStartCmd() *cobra.Command {
 	var p2pAddr string
 	var identityName string
 	var insecure bool
+	var dataLanes int
+	var parityLanes int
 
 	cmd := &cobra.Command{
 		Use:   "start",
@@ -155,6 +157,8 @@ func tunnelStartCmd() *cobra.Command {
 				P2PAddr:        p2pAddr,
 				Identity:       identityName,
 				Insecure:       insecure,
+				DataLanes:      dataLanes,
+				ParityLanes:    parityLanes,
 			}
 
 			status, err := GlobalContext.Engine.TunnelStart(&crypto.EngineContext{Context: context.Background()}, opts)
@@ -183,6 +187,8 @@ func tunnelStartCmd() *cobra.Command {
 	cmd.Flags().StringVar(&p2pAddr, "p2p-addr", "", "Remote P2P Multiaddr")
 	cmd.Flags().StringVar(&identityName, "identity", "", "Identity to use for P2P")
 	cmd.Flags().BoolVar(&insecure, "insecure", false, "Disable TLS certificate verification (DANGEROUS)")
+	cmd.Flags().IntVar(&dataLanes, "data-lanes", 0, "Number of data lanes for Reed-Solomon resilience")
+	cmd.Flags().IntVar(&parityLanes, "parity-lanes", 0, "Number of parity lanes for Reed-Solomon resilience")
 
 	return cmd
 }

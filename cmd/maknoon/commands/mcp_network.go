@@ -36,6 +36,8 @@ func registerNetworkTools(s *server.MCPServer, engine crypto.MaknoonEngine) {
 			useYamux, _ := args["use_yamux"].(bool)
 			p2pMode, _ := args["p2p_mode"].(bool)
 			p2pAddr := getString(args, "p2p_addr", "")
+			dataLanes := getInt(args, "data_lanes", 0)
+			parityLanes := getInt(args, "parity_lanes", 0)
 
 			opts := tunnel.TunnelOptions{
 				RemoteEndpoint: remote,
@@ -43,6 +45,8 @@ func registerNetworkTools(s *server.MCPServer, engine crypto.MaknoonEngine) {
 				UseYamux:       useYamux,
 				P2PMode:        p2pMode,
 				P2PAddr:        p2pAddr,
+				DataLanes:      dataLanes,
+				ParityLanes:    parityLanes,
 			}
 
 			status, err := engine.TunnelStart(&crypto.EngineContext{Context: ctx}, opts)
