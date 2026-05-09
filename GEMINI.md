@@ -28,7 +28,7 @@ Maknoon is an industrial-grade, post-quantum CLI encryption engine and Model Con
 - **Identity Collision**: Never use `libp2p.FallbackDefaults` when providing a custom identity. This triggers a "cannot specify multiple identities" error.
 - **Explicit Identity**: All P2P operations (`send`, `receive`, `chat`) support explicit identity selection via the `--identity` flag.
 - **Transport Agnosticism**: The Maknoon P2P Wire Protocol (defined in `p2p_message.go`) is isolated from the `libp2p` transport.
-- **MCP-over-SSE**: Tool responses are pushed through the long-lived SSE stream (`/sse`), not the POST body.
+- **MCP-over-SSE**: Tool responses are pushed through the long-lived SSE stream (`/sse`), not the POST body. Requires explicit certificate loading (`SetActiveCertificate`) to avoid internal handshake errors.
 - **Identity Discovery Service**: The REST API now exposes decentralized **Nostr/DNS resolution** as a service, allowing external apps to discover PQC public keys via a simple GET request.
 
 ## 🏗 Mission & Docker Infrastructure Lessons
@@ -39,12 +39,15 @@ Maknoon is an industrial-grade, post-quantum CLI encryption engine and Model Con
 - **Shell Quoting in YAML**: Avoid double-quoting shell command blocks in YAML (e.g., `command: "sh -c '...'"`). Use the literal block scalar `>` or a simple string to prevent argument misparsing.
 -   **Verification Robustness**: Integration scripts MUST implement explicit timeouts and log capturing for failing services to prevent infinite "wait" loops in CI.
 -   **Test Environmental Isolation**: Unit tests that interact with the filesystem (Vaults, Config) MUST override the `HOME` environment variable and call `commands.ResetGlobalConfig()` to ensure a clean state and prevent contamination from the developer's real environment.
+-   **Go Module Cache Noise**: Isolated tests with `HOME` redirection must recursively grant write permissions (`chmod -R +w`) before cleaning up `TEST_DIR` to avoid "Permission denied" errors on read-only module paths.
 
 ## 🏆 Industrial Mission Lessons (Red-Team Verification)
 
 - **Nested Verification (Blind Proxy)**: The engine supports verifying outer PQC signatures while remaining "blind" to inner payloads. This allows secure relay orchestration without exposing end-to-end private keys at the transport layer.
 - **P2P Network Bridging**: DHT-based discovery is resilient across disconnected network segments when a bootstrap node is reachable via a secure P2P relay. SOCKS5 gateways over PQC L4 tunnels provide industrial-grade cross-network security.
+- **RAID-for-Networking (Phase 7.4)**: L4 Tunnels support stream-level **Reed-Solomon erasure coding**. Data is striped across multiple parallel sessions (lanes), surviving up to 66% lane failure with zero connection drop. Parameters: `--data-lanes` and `--parity-lanes`.
 - **Master Secret Sharding (Dead Man's Switch)**: Secret sharding (SSS) for the master passphrase is the definitive protection against single-point-of-failure in automated vaults. 3-of-4 thresholds provide the ideal balance of availability and security.
+- **MPC Pivot (Phase 6.2)**: Standard MPC protocols like FROST are mathematically incompatible with lattice-based ML-DSA (rejection sampling). Maknoon favors **Orchestrated Quorum Unlocking**: a high-fidelity combination of Phase 6.1 (Threshold-Sig) and Phase 7.4 (Resilient Tunnels) to securely reconstruct vault DEKs inside `memguard` enclaves only after quorum consensus.
 - **Memory-Safe KMS Primitive**: 
     - **Buffer Ownership**: `memguard.NewEnclave(buf)` takes ownership of the source buffer and **wipes it immediately**. When returning a plaintext DEK, you MUST copy it to a new slice *before* creating the enclave.
     - **Locked Buffer Lifecycle**: Bytes opened from an enclave (`lb.Bytes()`) must be copied to a new buffer if they need to persist after `lb.Destroy()` is called.
