@@ -1,0 +1,7 @@
+{
+  "name": "no-delete-policy",
+  "rules": [
+    { "type": "capability", "action": "deny", "values": ["vault_delete"] },
+    { "type": "capability", "action": "allow", "values": ["vault_read", "vault_write", "protect", "unprotect", "identity", "config", "p2p", "crypto", "audit"] }
+  ]
+}

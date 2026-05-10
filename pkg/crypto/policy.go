@@ -60,6 +60,13 @@ type SecurityPolicy interface {
 
 	// IsAgent returns true if this is a restricted agent policy (used for UI-branching).
 	IsAgent() bool
+
+	// AllowAutoQuorum returns true if the policy permits automatic approval of quorum requests.
+	AllowAutoQuorum(id, action string) bool
+
+	// QuorumRequirement returns the required threshold and authorized peers for a sensitive action.
+	// If threshold is 0, no quorum is required.
+	QuorumRequirement(action string) (threshold int, peers []string)
 }
 
 // HumanPolicy represents an unrestricted user-driven session.
@@ -87,6 +94,13 @@ func (p *HumanPolicy) ValidateProfileResource(m, t uint32, th uint8, l AgentLimi
 }
 func (p *HumanPolicy) AllowConfigModification() bool { return true }
 func (p *HumanPolicy) IsAgent() bool                 { return false }
+func (p *HumanPolicy) AllowAutoQuorum(id, action string) bool {
+	// Human policy defaults to false for auto-approvals to force manual review
+	return false
+}
+func (p *HumanPolicy) QuorumRequirement(action string) (int, []string) {
+	return 0, nil
+}
 
 // AgentPolicy represents a restricted sandbox for autonomous agents.
 type AgentPolicy struct{}
@@ -161,6 +175,13 @@ func (p *AgentPolicy) ValidateProfileResource(memKB, time uint32, threads uint8,
 
 func (p *AgentPolicy) AllowConfigModification() bool { return true }
 func (p *AgentPolicy) IsAgent() bool                 { return true }
+func (p *AgentPolicy) AllowAutoQuorum(id, action string) bool {
+	// Agent policy may allow auto-approvals if explicitly configured
+	return false
+}
+func (p *AgentPolicy) QuorumRequirement(action string) (int, []string) {
+	return 0, nil
+}
 
 // ValidatePath is the internal implementation of path restricted mode.
 func ValidatePath(path string, restricted bool) error {
@@ -307,6 +328,35 @@ func (p *CompositePolicy) IsAgent() bool {
 	return false
 }
 
+func (p *CompositePolicy) AllowAutoQuorum(id, action string) bool {
+	for _, sub := range p.Policies {
+		if !sub.AllowAutoQuorum(id, action) {
+			return false
+		}
+	}
+	return true
+}
+
+func (p *CompositePolicy) QuorumRequirement(action string) (int, []string) {
+	maxT := 0
+	var allPeers []string
+	peerSet := make(map[string]bool)
+
+	for _, sub := range p.Policies {
+		t, peers := sub.QuorumRequirement(action)
+		if t > maxT {
+			maxT = t
+		}
+		for _, peer := range peers {
+			if !peerSet[peer] {
+				peerSet[peer] = true
+				allPeers = append(allPeers, peer)
+			}
+		}
+	}
+	return maxT, allPeers
+}
+
 // FIPSPolicy enforces strict NIST-compliant cryptographic standards.
 type FIPSPolicy struct{}
 
@@ -354,3 +404,11 @@ func (p *FIPSPolicy) AllowConfigModification() bool {
 }
 
 func (p *FIPSPolicy) IsAgent() bool { return false }
+
+func (p *FIPSPolicy) AllowAutoQuorum(id, action string) bool {
+	return false
+}
+
+func (p *FIPSPolicy) QuorumRequirement(action string) (int, []string) {
+	return 0, nil
+}

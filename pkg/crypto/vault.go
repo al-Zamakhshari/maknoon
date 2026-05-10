@@ -9,9 +9,11 @@ import (
 )
 
 const (
-	vaultBucket = "secrets"
-	metaBucket  = "metadata"
-	saltKey     = "salt"
+	vaultBucket      = "secrets"
+	metaBucket       = "metadata"
+	saltKey          = "salt"
+	institutionalKey = "institutional"
+	quorumPeersKey   = "quorum_peers"
 )
 
 // VaultEntry represents a single secret stored in the vault.

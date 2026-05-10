@@ -115,6 +115,8 @@ type VaultResult struct {
 	RecoveredEntries int              `json:"recovered_entries,omitempty"`
 	Output           string           `json:"output,omitempty"`
 	Entries          []VaultListEntry `json:"entries,omitempty"`
+	IsInstitutional  bool             `json:"is_institutional,omitempty"`
+	QuorumPeers      []string         `json:"quorum_peers,omitempty"`
 }
 
 // SignResult is the standard JSON output for digital signatures.

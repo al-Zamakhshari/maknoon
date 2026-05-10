@@ -4,12 +4,113 @@ import (
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
 )
+
+// VaultInitInstitutional creates a new institutional vault governed by a quorum.
+func (e *Engine) VaultInitInstitutional(ectx *EngineContext, name string, threshold, shares int, peerIDs []string, passphrase []byte) (*VaultResult, error) {
+	ectx = e.context(ectx)
+	if err := e.enforce(ectx, CapVaultWrite); err != nil {
+		return nil, err
+	}
+
+	path, err := e.resolveVaultPath(name)
+	if err != nil {
+		return nil, err
+	}
+
+	if _, err := os.Stat(path); err == nil {
+		return nil, &ErrState{Reason: fmt.Sprintf("vault '%s' already exists", name)}
+	}
+
+	// 1. Shard the master passphrase using SSS
+	mnemonics, err := e.VaultSplit(ectx, path, threshold, shares, string(passphrase))
+	if err != nil {
+		return nil, fmt.Errorf("failed to shard passphrase: %w", err)
+	}
+
+	// 2. Open vault and save metadata
+	store, err := e.Vaults.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer store.Close()
+
+	err = store.Update(func(tx Transaction) error {
+		// Save Salt
+		salt := make([]byte, 32)
+		if _, err := io.ReadFull(rand.Reader, salt); err != nil {
+			return err
+		}
+		if err := tx.Put(metaBucket, saltKey, salt); err != nil {
+			return err
+		}
+
+		// Save Institutional Marker
+		if err := tx.Put(metaBucket, institutionalKey, []byte("true")); err != nil {
+			return err
+		}
+
+		// Save Quorum Peers
+		peersJSON, _ := json.Marshal(peerIDs)
+		if err := tx.Put(metaBucket, quorumPeersKey, peersJSON); err != nil {
+			return err
+		}
+
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &VaultResult{
+		Status:          "success",
+		Message:         fmt.Sprintf("Institutional vault '%s' initialized. Distribute the %d shares to the authorized peers.", name, shares),
+		IsInstitutional: true,
+		Threshold:       threshold,
+		Shares:          mnemonics,
+		QuorumPeers:     peerIDs,
+	}, nil
+}
+
+// VaultStatus returns the governance status of a vault.
+func (e *Engine) VaultStatus(ectx *EngineContext, name string) (*VaultResult, error) {
+	ectx = e.context(ectx)
+	if err := e.enforce(ectx, CapVaultRead); err != nil {
+		return nil, err
+	}
+	path, err := e.resolveVaultPath(name)
+	if err != nil {
+		return nil, err
+	}
+
+	store, err := e.Vaults.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer store.Close()
+
+	var res VaultResult
+	err = store.View(func(tx Transaction) error {
+		inst := tx.Get(metaBucket, institutionalKey)
+		res.IsInstitutional = string(inst) == "true"
+
+		peersRaw := tx.Get(metaBucket, quorumPeersKey)
+		if peersRaw != nil {
+			json.Unmarshal(peersRaw, &res.QuorumPeers)
+		}
+		return nil
+	})
+
+	res.Status = "success"
+	res.Vault = name
+	return &res, err
+}
 
 // VaultSet encrypts and saves a vault entry to disk.
 func (e *Engine) VaultSet(ectx *EngineContext, vaultPath string, entry *VaultEntry, passphrase []byte, pin string, overwrite bool) error {
@@ -92,6 +193,48 @@ func (e *Engine) VaultGet(ectx *EngineContext, vaultPath string, service string,
 	}
 	defer store.Close()
 
+	// 1. Check Governance Status
+	var isInstitutional bool
+	var quorumPeers []string
+	store.View(func(tx Transaction) error {
+		inst := tx.Get(metaBucket, institutionalKey)
+		isInstitutional = string(inst) == "true"
+		peersRaw := tx.Get(metaBucket, quorumPeersKey)
+		if peersRaw != nil {
+			json.Unmarshal(peersRaw, &quorumPeers)
+		}
+		return nil
+	})
+
+	// 2. Handle Quorum Unlocking if necessary
+	finalPassphrase := passphrase
+	if isInstitutional && len(passphrase) == 0 {
+		e.Logger.Info("Institutional vault detected: initiating quorum unlock", "vault", vaultPath, "peers", len(quorumPeers))
+		responses, err := e.QuorumRequest(ectx, "", quorumPeers, ActionVaultUnlock, vaultPath, "Consensus-based vault access requested")
+		if err != nil {
+			return nil, fmt.Errorf("quorum request failed: %w", err)
+		}
+
+		var shares []string
+		for _, r := range responses {
+			if r.Approved && len(r.Payload) > 0 {
+				shares = append(shares, string(r.Payload))
+			}
+		}
+
+		if len(shares) == 0 {
+			return nil, &ErrAuthentication{Reason: "quorum failed: no approvals received from authorized peers"}
+		}
+
+		// Attempt recovery from collected shares
+		recovered, err := e.VaultRecover(ectx, shares, vaultPath, "", "")
+		if err != nil {
+			return nil, fmt.Errorf("quorum recovery failed: %w (threshold may not have been met)", err)
+		}
+		finalPassphrase = []byte(recovered)
+		defer SafeClear(finalPassphrase)
+	}
+
 	var entry *VaultEntry
 	err = store.View(func(tx Transaction) error {
 		salt := tx.Get(metaBucket, saltKey)
@@ -106,7 +249,7 @@ func (e *Engine) VaultGet(ectx *EngineContext, vaultPath string, service string,
 			return &ErrState{Reason: fmt.Sprintf("service '%s' not found", service)}
 		}
 
-		key := DeriveVaultKey(passphrase, salt)
+		key := DeriveVaultKey(finalPassphrase, salt)
 		defer SafeClear(key)
 
 		var err error
@@ -186,6 +329,47 @@ func (e *Engine) VaultList(ectx *EngineContext, vaultPath string, passphrase []b
 	}
 	defer store.Close()
 
+	// 1. Check Governance Status
+	var isInstitutional bool
+	var quorumPeers []string
+	store.View(func(tx Transaction) error {
+		inst := tx.Get(metaBucket, institutionalKey)
+		isInstitutional = string(inst) == "true"
+		peersRaw := tx.Get(metaBucket, quorumPeersKey)
+		if peersRaw != nil {
+			json.Unmarshal(peersRaw, &quorumPeers)
+		}
+		return nil
+	})
+
+	// 2. Handle Quorum Unlocking if necessary
+	finalPassphrase := passphrase
+	if isInstitutional && len(passphrase) == 0 {
+		e.Logger.Info("Institutional vault detected: initiating quorum unlock for listing", "vault", vaultPath)
+		responses, err := e.QuorumRequest(ectx, "", quorumPeers, ActionVaultUnlock, vaultPath, "Consensus-based vault listing requested")
+		if err != nil {
+			return nil, fmt.Errorf("quorum request failed: %w", err)
+		}
+
+		var shares []string
+		for _, r := range responses {
+			if r.Approved && len(r.Payload) > 0 {
+				shares = append(shares, string(r.Payload))
+			}
+		}
+
+		if len(shares) == 0 {
+			return nil, &ErrAuthentication{Reason: "quorum failed: no approvals received from authorized peers"}
+		}
+
+		recovered, err := e.VaultRecover(ectx, shares, vaultPath, "", "")
+		if err != nil {
+			return nil, fmt.Errorf("quorum recovery failed: %w (threshold may not have been met)", err)
+		}
+		finalPassphrase = []byte(recovered)
+		defer SafeClear(finalPassphrase)
+	}
+
 	var entries []VaultListEntry
 	err = store.View(func(tx Transaction) error {
 		salt := tx.Get(metaBucket, saltKey)
@@ -193,7 +377,7 @@ func (e *Engine) VaultList(ectx *EngineContext, vaultPath string, passphrase []b
 			return &ErrAuthentication{Reason: "vault salt missing"}
 		}
 
-		key := DeriveVaultKey(passphrase, salt)
+		key := DeriveVaultKey(finalPassphrase, salt)
 		defer SafeClear(key)
 
 		return tx.ForEach(vaultBucket, func(_, v []byte) error {

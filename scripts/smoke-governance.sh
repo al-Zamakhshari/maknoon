@@ -7,6 +7,8 @@ set -e
 TEST_DIR=$(mktemp -d)
 trap 'rm -rf "$TEST_DIR"' EXIT
 
+export HOME="$TEST_DIR"
+
 echo "🧪 Starting Mission: Governance Enforcement Verification..."
 
 # 1. FIPS Mode Enforcement (Profile Restriction)
@@ -79,6 +81,30 @@ if ./maknoon encrypt - --profile 3 -s "pass" -o "$TEST_DIR/out_composite.makn" -
 else
     echo "❌ FAILED: Composite policy failed to enforce FIPS restriction when stacked."
     exit 1
+fi
+
+# 6. Administrative Quorum Enforcement (Phase 6.3)
+echo "🔍 Task 6: Verifying Administrative Quorum Enforcement..."
+cat > "$TEST_DIR/quorum_policy.json" <<EOF
+{
+  "name": "quorum-policy",
+  "rules": [
+    { "type": "capability", "action": "allow", "values": ["config"] },
+    { "type": "quorum", "action": "config_admin", "values": ["threshold:3"] }
+  ]
+}
+EOF
+
+if ./maknoon config set perf.concurrency 4 --policy "$TEST_DIR/quorum_policy.json" 2>&1 | grep -q "administrative quorum required"; then
+    echo "✅ Success: Engine mandated quorum for administrative action."
+else
+    # Check if it fails safely due to missing quorum
+    if ./maknoon config set perf.concurrency 4 --policy "$TEST_DIR/quorum_policy.json" 2>&1 | grep -q "administrative quorum failed\|no authorized peers configured"; then
+         echo "✅ Success: Engine correctly failed administrative action due to missing quorum."
+    else
+        echo "❌ FAILED: Engine allowed administrative change without quorum check."
+        exit 1
+    fi
 fi
 
 echo "🏆 Mission Accomplished: Governance Engine Verified."

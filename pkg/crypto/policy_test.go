@@ -89,3 +89,38 @@ func TestFilePolicy(t *testing.T) {
 		t.Errorf("FilePolicy ClampConcurrency failed: got %d, want 2", p.ClampConcurrency(10, 10))
 	}
 }
+
+func TestPolicyQuorumRequirement(t *testing.T) {
+	hp := &HumanPolicy{}
+	ap := &AgentPolicy{}
+
+	// Human/Agent should require no quorum by default
+	if threshold, _ := hp.QuorumRequirement("any"); threshold != 0 {
+		t.Errorf("HumanPolicy should not require quorum, got %d", threshold)
+	}
+	if threshold, _ := ap.QuorumRequirement("any"); threshold != 0 {
+		t.Errorf("AgentPolicy should not require quorum, got %d", threshold)
+	}
+
+	// Composite with custom authorized peers
+	classB := &adminPolicy{threshold: 2, peers: []string{"peer1", "peer2"}}
+	classC := &adminPolicy{threshold: 3, peers: []string{"peer2", "peer3"}}
+	comp2 := &CompositePolicy{Policies: []SecurityPolicy{classB, classC}}
+	tVal, peers := comp2.QuorumRequirement(string(ActionConfigAdmin))
+	if tVal != 3 {
+		t.Errorf("CompositePolicy should take max threshold 3 (from classC), got %d", tVal)
+	}
+	if len(peers) != 3 { // peer1, peer2, peer3
+		t.Errorf("CompositePolicy should aggregate unique peers, got %d", len(peers))
+	}
+}
+
+type adminPolicy struct {
+	HumanPolicy
+	threshold int
+	peers     []string
+}
+
+func (p *adminPolicy) QuorumRequirement(action string) (int, []string) {
+	return p.threshold, p.peers
+}

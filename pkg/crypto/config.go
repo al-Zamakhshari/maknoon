@@ -35,8 +35,10 @@ type Config struct {
 }
 
 type GovernanceConfig struct {
-	RequireSignedPolicies bool   `json:"require_signed_policies" mapstructure:"require_signed_policies"`
-	AuthorizedKeyPath     string `json:"authorized_key_path" mapstructure:"authorized_key_path"`
+	RequireSignedPolicies bool     `json:"require_signed_policies" mapstructure:"require_signed_policies"`
+	AuthorizedKeyPath     string   `json:"authorized_key_path" mapstructure:"authorized_key_path"`
+	AdminThreshold        int      `json:"admin_threshold" mapstructure:"admin_threshold"`
+	AdminPeers            []string `json:"admin_peers" mapstructure:"admin_peers"`
 }
 
 type AuditConfig struct {

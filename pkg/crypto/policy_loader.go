@@ -160,6 +160,34 @@ func (p *FilePolicy) IsAgent() bool {
 	return !p.HasCapability(CapVaultDelete)
 }
 
+func (p *FilePolicy) AllowAutoQuorum(id, action string) bool {
+	// File policies default to false for safety unless we add a specific rule type later
+	return false
+}
+
+func (p *FilePolicy) QuorumRequirement(action string) (int, []string) {
+	for _, r := range p.Rules {
+		if r.Type == "quorum" && r.Action == action {
+			// For simplicity in FilePolicy, if values contains "threshold:N", parse it
+			// e.g., ["threshold:3", "peer1", "peer2"]
+			for _, v := range r.Values {
+				var t int
+				if n, _ := fmt.Sscanf(v, "threshold:%d", &t); n == 1 {
+					// Collect remaining values as peers
+					var peers []string
+					for _, pv := range r.Values {
+						if pv != v {
+							peers = append(peers, pv)
+						}
+					}
+					return t, peers
+				}
+			}
+		}
+	}
+	return 0, nil
+}
+
 // LoadPolicyFromFile reads a JSON policy file and returns a SecurityPolicy.
 func LoadPolicyFromFile(path string) (SecurityPolicy, error) {
 	data, err := os.ReadFile(filepath.Clean(path))

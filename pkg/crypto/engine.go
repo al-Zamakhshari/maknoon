@@ -36,6 +36,41 @@ func (e *Engine) UpdateConfig(ectx *EngineContext, newConf *Config) error {
 	if !ectx.Policy.AllowConfigModification() {
 		return &ErrPolicyViolation{Reason: "configuration modification is prohibited under the active policy"}
 	}
+
+	// Phase 6.3: Threshold-bound Policy Enforcement
+	threshold, peers := ectx.Policy.QuorumRequirement(string(ActionConfigAdmin))
+	if threshold > 0 {
+		if len(peers) == 0 {
+			peers = e.Config.Governance.AdminPeers
+		}
+		if len(peers) == 0 {
+			return &ErrPolicyViolation{Reason: "administrative quorum required but no authorized peers configured"}
+		}
+
+		e.Logger.Info("Administrative quorum required for config update", "threshold", threshold, "peers", len(peers))
+
+		// In a real CLI/API flow, this would be an asynchronous or multi-step process.
+		// For the DI-driven engine, we attempt to gather consensus if targets are available.
+		resps, err := e.QuorumRequest(ectx, e.Config.DefaultIdentity, peers, ActionConfigAdmin, "global_config", "Update system configuration")
+		if err != nil {
+			return fmt.Errorf("administrative quorum request failed: %w", err)
+		}
+
+		approvals := 0
+		for _, r := range resps {
+			if r.Approved {
+				approvals++
+			}
+		}
+
+		if approvals < threshold {
+			return &ErrPolicyViolation{
+				Reason: fmt.Sprintf("administrative quorum failed: received %d approvals, required %d", approvals, threshold),
+			}
+		}
+		e.Logger.Info("Administrative quorum achieved", "approvals", approvals)
+	}
+
 	if err := newConf.Validate(); err != nil {
 		return err
 	}

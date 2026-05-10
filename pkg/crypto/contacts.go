@@ -3,6 +3,7 @@ package crypto
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"strings"
 	"time"
 
@@ -105,6 +106,30 @@ func (m *ContactManager) Get(petname string) (*Contact, error) {
 		return json.Unmarshal(v, &c)
 	})
 	return &c, err
+}
+
+// GetByPeerID retrieves a contact by their libp2p Peer ID.
+func (m *ContactManager) GetByPeerID(peerID string) (*Contact, error) {
+	var c *Contact
+	err := m.store.View(func(tx Transaction) error {
+		return tx.ForEach(contactBucket, func(_, v []byte) error {
+			var curr Contact
+			if err := json.Unmarshal(v, &curr); err == nil {
+				if curr.PeerID == peerID {
+					c = &curr
+					return io.EOF // Found, stop iteration
+				}
+			}
+			return nil
+		})
+	})
+	if err == io.EOF {
+		return c, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return nil, fmt.Errorf("contact with PeerID '%s' not found", peerID)
 }
 
 // List returns all saved contacts.

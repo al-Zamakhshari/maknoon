@@ -25,8 +25,9 @@ Maknoon is an industrial-grade, post-quantum CLI encryption engine and Model Con
 
 ## 🚀 P2P & Identity Lessons
 
+- **Identity Format**: Maknoon Identities are **Hybrid ML-DSA-87 + Ed25519** bundles. Ed25519 is used for the libp2p PeerID, while ML-DSA-87 is used for forensic payload signing.
 - **Identity Collision**: Never use `libp2p.FallbackDefaults` when providing a custom identity. This triggers a "cannot specify multiple identities" error.
-- **Explicit Identity**: All P2P operations (`send`, `receive`, `chat`) support explicit identity selection via the `--identity` flag.
+- **Explicit Identity**: All P2P operations (`send`, `receive`, `chat`, `tunnel`) support explicit identity selection via the `--identity` flag.
 - **Transport Agnosticism**: The Maknoon P2P Wire Protocol (defined in `p2p_message.go`) is isolated from the `libp2p` transport.
 - **MCP-over-SSE**: Tool responses are pushed through the long-lived SSE stream (`/sse`), not the POST body. Requires explicit certificate loading (`SetActiveCertificate`) to avoid internal handshake errors.
 - **Identity Discovery Service**: The REST API now exposes decentralized **Nostr/DNS resolution** as a service, allowing external apps to discover PQC public keys via a simple GET request.
@@ -37,9 +38,9 @@ Maknoon is an industrial-grade, post-quantum CLI encryption engine and Model Con
 - **Volume Permission Shadowing**: Mounted volumes often default to root ownership. Use the `su-exec` pattern: start as `root`, `chown` the mount point, and then drop privileges using `su-exec maknoon ...`.
 - **Mandated TLS In Containers**: When running `mcp --transport sse` or `serve` in Docker, TLS is no longer optional. Use shared volumes (e.g., `./certs:/certs:ro`) to provide certificates to all nodes in the DMZ.
 - **Shell Quoting in YAML**: Avoid double-quoting shell command blocks in YAML (e.g., `command: "sh -c '...'"`). Use the literal block scalar `>` or a simple string to prevent argument misparsing.
--   **Verification Robustness**: Integration scripts MUST implement explicit timeouts and log capturing for failing services to prevent infinite "wait" loops in CI.
--   **Test Environmental Isolation**: Unit tests that interact with the filesystem (Vaults, Config) MUST override the `HOME` environment variable and call `commands.ResetGlobalConfig()` to ensure a clean state and prevent contamination from the developer's real environment.
--   **Go Module Cache Noise**: Isolated tests with `HOME` redirection must recursively grant write permissions (`chmod -R +w`) before cleaning up `TEST_DIR` to avoid "Permission denied" errors on read-only module paths.
+- **Verification Robustness**: Integration scripts MUST implement explicit timeouts and log capturing for failing services to prevent infinite "wait" loops in CI.
+- **Test Environmental Isolation**: Unit tests that interact with the filesystem (Vaults, Config) MUST override the `HOME` environment variable and call `commands.ResetGlobalConfig()` to ensure a clean state and prevent contamination from the developer's real environment.
+- **Go Module Cache Noise**: Isolated tests with `HOME` redirection must recursively grant write permissions (`chmod -R +w`) before cleaning up `TEST_DIR` to avoid "Permission denied" errors on read-only module paths.
 
 ## 🏆 Industrial Mission Lessons (Red-Team Verification)
 
@@ -51,10 +52,6 @@ Maknoon is an industrial-grade, post-quantum CLI encryption engine and Model Con
 - **Memory-Safe KMS Primitive**: 
     - **Buffer Ownership**: `memguard.NewEnclave(buf)` takes ownership of the source buffer and **wipes it immediately**. When returning a plaintext DEK, you MUST copy it to a new slice *before* creating the enclave.
     - **Locked Buffer Lifecycle**: Bytes opened from an enclave (`lb.Bytes()`) must be copied to a new buffer if they need to persist after `lb.Destroy()` is called.
-- **Dynamic Configuration Agility**:
-    - **Policy Precedence**: In `AgentMode`, the `SecurityPolicy` must explicitly allow `CapConfig` for runtime management. 
-    - **CLI Flag Shadowing**: Hardcoded CLI flag defaults (e.g., `encrypt --profile nist`) can shadow dynamic engine configuration updates. For live-migration to work, CLI flags should default to empty/zero to allow the `Engine`'s internal `DefaultProfile` to take priority.
-    - **Runtime Propagation**: MCP-initiated configuration changes (`config_update`) are persistent across process boundaries because the engine explicitly calls `Save()` on the config object, but active long-running loops require a re-initialization or configuration polling mechanism to pick up changes without a restart.
 
 ## 🤖 Agent Sandbox & Composable Governance
 
@@ -65,15 +62,6 @@ Maknoon is an industrial-grade, post-quantum CLI encryption engine and Model Con
     *   All operations are logged via the `AuditEngine` decorator.
     *   Logs are cryptographically signed using **ML-DSA-87**.
     *   Support for **Hardware-Backed Forensic Signing** (binding audit integrity to physical FIDO2 keys).
-
-## 🏆 Industrial Mission Lessons (Red-Team Verification)
-
-- **Cryptographic Purge**: RSA and XChaCha20 were removed to eliminate "legacy surface." Industrial compliance mandates AES-GCM and ECDSA-P384 for ephemeral operations.
-- **Resilience Engineering**: 
-    *   **Zero-Downtime Reloading**: Global servers support `SIGHUP` for non-disruptive TLS certificate rotation.
-    *   **Rate Limiting**: Mandatory global rate limiting (Token Bucket) prevents API saturation.
-- **Power-On Self-Test (POST)**: Every engine startup triggers a Known-Answer Test (KAT) for all core algorithms (ML-KEM, ML-DSA, AES-GCM). Failure results in a fatal halt.
-- **Secure Memory Scoping**: Integration of `memguard` across CLI and Engine boundaries ensures sensitive material (DEKs, Passphrases) is wiped on exit, crash, or interrupt.
 
 ## 📋 Engineering & Documentation Standards
 
@@ -101,11 +89,64 @@ NEVER use `fmt.Print` or `json.Marshal` directly in business logic. Use the `Pre
 - **Smoke**: `make smoke` (Executes the full industrial hardening verification suite)
 - **Docker**: `make docker-build` (Generates OCI-compliant secure sandbox)
 
-## 🧪 Current Status
-- **Architecture**: V1.4.x (Hardened Governance Engine & Industrial Purge complete).
-- **Phase 7 (RAID-for-Privacy)**: Successfully implemented stream-level Reed-Solomon erasure coding, fragment forensic signing, and multi-target P2P dispersal/retrieval.
-- **Phase 6 (Threshold Cryptography)**: Completed Milestone 6.1 (Threshold Signatures / Multi-Sig aggregation and verification).
-- **Parity**: 1:1 mapping between CLI commands, MCP tools, and REST endpoints with high-fidelity results.
-- **Testing**: Passed all 90+ unit, integration, and fuzz tests; verified full industrial smoke suite.
-- **Coverage**: **~55%** statement coverage in `pkg/crypto`.
-- **Security**: FIPS-compliant AES-256-GCM, ECDSA-P384, and ML-KEM/DSA stack verified.
+## 🗺 Codebase Architectural Map
+
+### 🧠 The Engine Core (`pkg/crypto/`)
+- **`engine.go`**: Core initialization and capability enforcement.
+- **`engine_crypto.go`**: High-level encryption/decryption/signing orchestration.
+- **`engine_vault.go`**: Vault lifecycle, CRUD, and passphrase management.
+- **`engine_p2p.go`**: P2P protocol coordination (libp2p lifecycle).
+- **`engine_identity.go`**: ML-DSA/Ed25519 identity generation and registry ops.
+- **`engine_observability.go`**: Audit logging and telemetry hooks.
+- **`engine_dispersal.go`**: (Phase 7) Fragment dispersal and RAID-for-Privacy logic.
+
+### 🛡 Cryptographic Primitives (`pkg/crypto/`)
+- **`encrypt.go` / `decrypt.go`**: AEAD (AES-GCM) and HPKE (ML-KEM) streaming.
+- **`asymmetric.go`**: ML-KEM/ML-DSA standard wrappers (using CIRCL).
+- **`threshold_sig.go`**: (Phase 6.1) Multi-signature aggregation and verification.
+- **`erasure.go`**: Reed-Solomon encoding/decoding for dispersal.
+- **`shares.go`**: Shamir's Secret Sharing (SSS) implementation.
+- **`fido2.go`**: Hardware-backed signing via FIDO2/WebAuthn.
+- **`policy.go`**: The Governance Engine (Human vs. Agent constraints).
+
+### 📡 Networking & Resilience
+- **`pkg/tunnel/resilient.go`**: (Phase 7.4) Reed-Solomon lane striping for tunnels.
+- **`pkg/crypto/p2p_message.go`**: Wire protocol definitions.
+- **`pkg/crypto/p2p_send.go`**: Direct P2P transfer logic.
+- **`pkg/crypto/p2p_fragment.go`**: Pull-based shard retrieval.
+
+### 🎮 Orchestration & UI (`cmd/maknoon/commands/`)
+- **`mcp.go`**: Main MCP server logic.
+- **`serve.go`**: Enterprise REST API server.
+- **`call.go`**: Native MCP SSE client for testing.
+
+## 🏁 Phase Roadmap (v1.x)
+1.  [DONE] **Phase 1-3**: Core CLI, PQC Engine, and Vault CRUD.
+2.  [DONE] **Phase 4**: P2P Networking (libp2p) and Direct Shard Transfer.
+3.  [DONE] **Phase 5**: Model Context Protocol (MCP) and REST API parity.
+4.  [DONE] **Phase 6.1**: PQC Threshold Multi-Sig (M-of-N signing).
+5.  [DONE] **Phase 7**: RAID-for-Privacy (Reed-Solomon dispersal & retrieval).
+6.  [DONE] **Phase 7.4**: Resilient L4 Tunnels (Reed-Solomon lane striping).
+7.  [TODO] **Phase 6.2**: Orchestrated Quorum Unlocking (Consensus-based vaults).
+8.  [TODO] **Phase 8**: Post-Quantum FIPS Certification & Final Hardening.
+
+## ⚙️ Protocol & Header Specifications
+
+### 📦 Dispersal Fragment Format (MAKF)
+`[MAKF(4), Ver(1), Index(1), Data(1), Parity(1), ShardSize(8), ShardData(N), ForensicSig(ML-DSA)]`
+
+### 🔑 Forensic Audit Log Format
+`[Timestamp(RFC3339), PeerID(B58), Action(string), Status(string), Meta(JSON), Signature(ML-DSA-87)]`
+
+## ⚡ Rapid Reference (Agent Cheat Sheet)
+
+### MCP Server Entry Points:
+- **Stdio**: `maknoon mcp`
+- **SSE**: `maknoon mcp --transport sse --address :8080 --tls-cert cert.pem --tls-key key.pem`
+- **Verification**: `./maknoon call profiles_list --addr 127.0.0.1:8080 --insecure`
+
+### Core MCP Tools:
+- **Vault**: `vault_get`, `vault_set`, `vault_list`, `vault_shard_check`
+- **Network**: `tunnel_start`, `tunnel_stop`, `p2p_identity_get`, `p2p_send`, `fragment_retrieve`
+- **Crypto**: `encrypt_file`, `decrypt_file`, `sign_aggregate`, `verify_threshold`
+- **Config**: `profiles_list`, `profiles_gen`, `config_update`
