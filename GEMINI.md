@@ -56,8 +56,8 @@ Maknoon is an industrial-grade, post-quantum CLI encryption engine and Model Con
 ## 🤖 Agent Sandbox & Composable Governance
 
 1.  **Composite Governance**: The engine implements a `CompositePolicy` (Strictest-Wins) allowing multiple active layers (e.g., Global FIPS + Local Project Rules).
-2.  **Declarative Policies**: Support for loading human-readable JSON governance files via `--policy`. These files define `allow`/`deny` rules for capabilities, regex-based paths, and URL endpoints.
-3.  **FIPS Compliance Mode**: The `--fips` flag enforces mandatory NIST `nist` profiles, prohibits unverified TLS tunnels, and freezes system configuration.
+2.  **Declarative Policies**: Support for loading human-readable JSON governance files via `--policy`. These files define `allow`/`deny` rules for capabilities, regex-based paths, URL endpoints, and **Threshold-bound rules (Phase 6.3)** for administrative quorum.
+3.  **FIPS Compliance Mode**: The `--fips` flag enforces mandatory NIST `nist` profiles, prohibits unverified TLS tunnels, and **strictly freezes system configuration** (rendering it entirely immutable at runtime).
 4.  **Forensic Integrity**: 
     *   All operations are logged via the `AuditEngine` decorator.
     *   Logs are cryptographically signed using **ML-DSA-87**.

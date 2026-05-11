@@ -2,6 +2,7 @@ package tunnel
 
 import (
 	"context"
+	"crypto/rand"
 	"fmt"
 	"io"
 	"net"
@@ -66,6 +67,36 @@ func TestResilientTunnelChaos(t *testing.T) {
 	}
 
 	fmt.Println("✅ Chaos Test Passed: Connection survived lane loss.")
+}
+
+func BenchmarkResilientConn(b *testing.B) {
+	subs := make([]MuxSession, 4)
+	for i := 0; i < 4; i++ {
+		subs[i] = &MockMuxSession{ID: i}
+	}
+
+	resSess, _ := NewResilientMuxSession(subs, 2, 2)
+	conn, _ := resSess.OpenStream(context.Background())
+	defer conn.Close()
+
+	data := make([]byte, 64*1024)
+	_, _ = rand.Read(data)
+
+	b.ResetTimer()
+	b.SetBytes(int64(len(data)))
+
+	for i := 0; i < b.N; i++ {
+		_, err := conn.Write(data)
+		if err != nil {
+			b.Fatal(err)
+		}
+		// Read it back
+		readBuf := make([]byte, len(data))
+		_, err = io.ReadFull(conn, readBuf)
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
 }
 
 // MockMuxSession for chaos testing

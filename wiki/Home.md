@@ -11,13 +11,13 @@ Maknoon (مكنون) is a high-performance cryptographic engine designed to secu
 | Capability | Technical Specification |
 | :--- | :--- |
 | **PQC Encryption** | Hybrid HPKE utilizing ML-KEM-1024 (Kyber) and X25519. |
-| **Unified Binary** | Single statically linked binary hosting both CLI and MCP server. |
+| **Resilient Tunnels** | **Phase 7.4**: RAID-for-Networking surviving up to 66% lane failure. |
+| **Unified Binary** | Single statically linked binary hosting CLI, MCP, and REST API. |
 | **Dual-Transport MCP**| Native support for local `stdio` and remote `sse` (HTTPS). |
-| **Transport Security**| **Post-Quantum TLS 1.3** prioritization (ML-KEM hybrid). |
-| **Industrial Agility** | Live cryptographic profile migration via MCP runtime management. |
+| **Non-Lattice Hedge** | Support for **FrodoKEM** and **SLH-DSA** (Conservative Profile). |
 | **Secret Sharding** | Shamir Secret Sharing (SSS) for decentralized vault governance. |
 | **Streaming Engine** | Parallel sequencer model with 64KB constant-memory chunking. |
-| **Memory Hygiene** | Deterministic buffer zeroization and RAM pinning via `mlock()`. |
+| **RAID-for-Privacy** | Fragment dispersal and reassembly for distributed storage. |
 
 ---
 

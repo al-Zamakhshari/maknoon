@@ -30,8 +30,8 @@ func ProfilesCmd() *cobra.Command {
 func printProfiles() {
 	fmt.Println("🛡️  Maknoon Cryptographic Profiles")
 	fmt.Println("\nBuilt-in Profiles:")
-	fmt.Println("  nist (1):         NIST PQC (Kyber1024 + Dilithium87) + XChaCha20-Poly1305 (Default)")
-	fmt.Println("  aes (2):          NIST PQC (Kyber1024 + Dilithium87) + AES-256-GCM")
+	fmt.Println("  nist (1):         NIST PQC (Kyber1024 + Dilithium87) + AES-256-GCM (Default)")
+	fmt.Println("  aes (2):          NIST PQC (Kyber1024 + Dilithium87) + AES-256-GCM-SIV")
 	fmt.Println("  conservative (3): FrodoKEM-640 + SLH-DSA-SHA2-128s (Non-Lattice)")
 
 	conf := crypto.GetGlobalConfig()
@@ -87,9 +87,9 @@ func profilesListCmd() *cobra.Command {
 
 			fmt.Printf("%-20s %-5s %-15s %-30s\n", "NAME", "ID", "CIPHER", "KDF SETTINGS")
 			fmt.Println("------------------------------------------------------------------------------------------")
-			fmt.Printf("%-20s %-5d %-15s %-30s\n", "nist", 1, "XChaCha20", "Argon2id (Default)")
-			fmt.Printf("%-20s %-5d %-15s %-30s\n", "aes", 2, "AES-GCM", "Argon2id (Default)")
-			fmt.Printf("%-20s %-5d %-15s %-30s\n", "conservative", 3, "XChaCha20", "Argon2id (Default)")
+			fmt.Printf("%-20s %-5d %-15s %-30s\n", "nist", 1, "AES-256-GCM", "Argon2id (Default)")
+			fmt.Printf("%-20s %-5d %-15s %-30s\n", "aes", 2, "AES-GCM-SIV", "Argon2id (Default)")
+			fmt.Printf("%-20s %-5d %-15s %-30s\n", "conservative", 3, "AES-256-GCM", "Argon2id (Default)")
 
 			var names []string
 			for name := range conf.Profiles {

@@ -29,14 +29,18 @@ V3 introduces native support for **Post-Quantum TLS 1.3** to secure remote agent
 ---
 
 ## Cryptographic Primitives
-Maknoon utilizes a selection of high-performance, audited primitives for symmetric encryption, authentication, and key derivation.
+Maknoon utilizes a selection of high-performance, NIST-standardized primitives for symmetric encryption, authentication, and key derivation.
 
 | Function | Algorithm | Specification |
 | :--- | :--- | :--- |
-| **Symmetric Cipher** | XChaCha20-Poly1305 | 256-bit key, 192-bit nonce, AEAD authenticated. |
+| **Symmetric Cipher** | AES-256-GCM | 256-bit key, 12-byte nonce, hardware-accelerated. |
 | **Digital Signatures** | ML-DSA-87 (Dilithium) | NIST-standardized quantum-resistant signatures. |
-| **Key Derivation** | Argon2id | Memory-hard, time-hard password hashing. |
-| **Hashing** | SHA-3 / BLAKE3 | High-performance, collision-resistant digests. |
+| **Non-Lattice KEM** | FrodoKEM-640 | High-security hedging against lattice cryptanalysis. |
+| **Key Derivation** | Argon2id | Industrial Standard (3 iterations, 64MB RAM). |
+| **Hashing** | SHA-3 / SHA-256 | High-performance, collision-resistant digests. |
+
+### Cryptographic Agility: Non-Lattice Hedging
+To protect against the theoretical risk of breakthroughs in structured lattice cryptanalysis (which would affect ML-KEM), Maknoon provides a **Conservative Profile**. This profile utilizes **FrodoKEM-640** (based on un-structured LWE) and **SLH-DSA** (Stateless Hash-Based Signatures), providing a fallback that does not rely on lattice assumptions.
 
 ---
 

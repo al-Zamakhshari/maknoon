@@ -52,7 +52,6 @@ func (s *ResilientMuxSession) OpenStream(ctx context.Context) (net.Conn, error) 
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
-			// Round-robin or mapping logic for sub-sessions
 			sessIdx := idx % len(s.SubSessions)
 			conn, err := s.SubSessions[sessIdx].OpenStream(ctx)
 			if err == nil {
@@ -105,19 +104,35 @@ type ResilientConn struct {
 	Lanes       []net.Conn
 	DataLanes   int
 	ParityLanes int
+	enc         reedsolomon.Encoder
 
 	reader *io.PipeReader
 	writer *io.PipeWriter
 
-	mu     sync.Mutex
-	closed bool
+	mu      sync.Mutex // Protects Lanes and closed state
+	writeMu sync.Mutex // Protects sequential Write operations
+	closed  bool
+}
+
+var shardPool = sync.Pool{
+	New: func() interface{} {
+		// Default to 64KB chunks
+		b := make([]byte, 64*1024)
+		return &b
+	},
 }
 
 func NewResilientConn(lanes []net.Conn, data, parity int) (*ResilientConn, error) {
+	enc, err := reedsolomon.New(data, parity)
+	if err != nil {
+		return nil, err
+	}
+
 	c := &ResilientConn{
 		Lanes:       lanes,
 		DataLanes:   data,
 		ParityLanes: parity,
+		enc:         enc,
 	}
 
 	pr, pw := io.Pipe()
@@ -134,10 +149,6 @@ func (c *ResilientConn) runReassembler() {
 	defer c.Close()
 
 	totalShards := c.DataLanes + c.ParityLanes
-	enc, err := reedsolomon.New(c.DataLanes, c.ParityLanes)
-	if err != nil {
-		return
-	}
 
 	for {
 		c.mu.Lock()
@@ -145,6 +156,8 @@ func (c *ResilientConn) runReassembler() {
 			c.mu.Unlock()
 			return
 		}
+		lanes := make([]net.Conn, totalShards)
+		copy(lanes, c.Lanes)
 		c.mu.Unlock()
 
 		shardData := make([][]byte, totalShards)
@@ -157,29 +170,33 @@ func (c *ResilientConn) runReassembler() {
 		}
 		resChan := make(chan readResult, totalShards)
 
+		activeCount := 0
 		for i := 0; i < totalShards; i++ {
+			if lanes[i] == nil {
+				continue
+			}
+			activeCount++
 			go func(idx int, conn net.Conn) {
-				if conn == nil {
-					resChan <- readResult{idx, nil, fmt.Errorf("lane dead")}
-					return
-				}
 				// Header: Len(4)
 				var length uint32
 				if err := binary.Read(conn, binary.LittleEndian, &length); err != nil {
 					resChan <- readResult{idx, nil, err}
 					return
 				}
+
+				// Reedsolomon Reconstruct needs consistent sizes.
+				// We allocate a buffer for each shard.
 				buf := make([]byte, length)
 				if _, err := io.ReadFull(conn, buf); err != nil {
 					resChan <- readResult{idx, nil, err}
 					return
 				}
 				resChan <- readResult{idx, buf, nil}
-			}(i, c.Lanes[i])
+			}(i, lanes[i])
 		}
 
 		successCount := 0
-		for i := 0; i < totalShards; i++ {
+		for i := 0; i < activeCount; i++ {
 			res := <-resChan
 			if res.err == nil {
 				shardData[res.idx] = res.data
@@ -188,8 +205,12 @@ func (c *ResilientConn) runReassembler() {
 				}
 				successCount++
 			} else {
-				// Mark lane as potentially failed
-				c.Lanes[res.idx] = nil
+				c.mu.Lock()
+				if c.Lanes[res.idx] != nil {
+					_ = c.Lanes[res.idx].Close()
+					c.Lanes[res.idx] = nil
+				}
+				c.mu.Unlock()
 			}
 		}
 
@@ -197,59 +218,91 @@ func (c *ResilientConn) runReassembler() {
 			return // Connection lost
 		}
 
-		// Normalize shards
+		// Normalize shards for RS
 		for i := 0; i < totalShards; i++ {
-			if shardData[i] == nil {
-				continue
-			}
-			if len(shardData[i]) < shardLen {
+			if shardData[i] != nil && len(shardData[i]) < shardLen {
 				padded := make([]byte, shardLen)
 				copy(padded, shardData[i])
 				shardData[i] = padded
 			}
 		}
 
-		// Reconstruct and join
-		if err := enc.Reconstruct(shardData); err != nil {
+		if err := c.enc.Reconstruct(shardData); err != nil {
 			continue
 		}
 
+		// Header on the reconstructed data: OriginalSize(4)
 		var buf bytes.Buffer
-		_ = enc.Join(&buf, shardData, shardLen*c.DataLanes)
+		_ = c.enc.Join(&buf, shardData, shardLen*c.DataLanes)
 
-		// For now, write everything (TODO: handle original data length if needed)
-		_, _ = c.writer.Write(buf.Bytes())
+		reconstructed := buf.Bytes()
+		if len(reconstructed) < 4 {
+			continue
+		}
+
+		origLen := binary.LittleEndian.Uint32(reconstructed[:4])
+		if int(origLen) > len(reconstructed)-4 {
+			continue // Corrupt
+		}
+
+		_, _ = c.writer.Write(reconstructed[4 : 4+origLen])
 	}
 }
 
 func (c *ResilientConn) Write(b []byte) (n int, err error) {
-	totalShards := c.DataLanes + c.ParityLanes
-	enc, err := reedsolomon.New(c.DataLanes, c.ParityLanes)
+	if len(b) == 0 {
+		return 0, nil
+	}
+
+	c.writeMu.Lock()
+	defer c.writeMu.Unlock()
+
+	// Use pool for payload if it fits
+	var payload []byte
+	if len(b)+4 <= 64*1024 {
+		bufPtr := shardPool.Get().(*[]byte)
+		payload = (*bufPtr)[:4+len(b)]
+		defer shardPool.Put(bufPtr)
+	} else {
+		payload = make([]byte, 4+len(b))
+	}
+
+	binary.LittleEndian.PutUint32(payload[:4], uint32(len(b)))
+	copy(payload[4:], b)
+
+	shards, err := c.enc.Split(payload)
 	if err != nil {
 		return 0, err
 	}
 
-	shards, err := enc.Split(b)
-	if err != nil {
+	if err := c.enc.Encode(shards); err != nil {
 		return 0, err
 	}
 
-	if err := enc.Encode(shards); err != nil {
-		return 0, err
-	}
+	c.mu.Lock()
+	totalShards := len(c.Lanes)
+	lanes := make([]net.Conn, totalShards)
+	copy(lanes, c.Lanes)
+	c.mu.Unlock()
 
 	var wg sync.WaitGroup
 	for i := 0; i < totalShards; i++ {
+		if lanes[i] == nil {
+			continue
+		}
 		wg.Add(1)
 		go func(idx int, shard []byte) {
 			defer wg.Done()
-			if c.Lanes[idx] == nil {
-				return
-			}
-			_ = binary.Write(c.Lanes[idx], binary.LittleEndian, uint32(len(shard)))
-			_, errWrite := c.Lanes[idx].Write(shard)
+
+			_ = binary.Write(lanes[idx], binary.LittleEndian, uint32(len(shard)))
+			_, errWrite := lanes[idx].Write(shard)
 			if errWrite != nil {
-				c.Lanes[idx] = nil
+				c.mu.Lock()
+				if c.Lanes[idx] != nil {
+					_ = c.Lanes[idx].Close()
+					c.Lanes[idx] = nil
+				}
+				c.mu.Unlock()
 			}
 		}(i, shards[i])
 	}
@@ -274,18 +327,41 @@ func (c *ResilientConn) Close() error {
 	_ = c.reader.Close()
 	_ = c.writer.Close()
 
+	c.mu.Lock()
 	for _, l := range c.Lanes {
 		if l != nil {
 			_ = l.Close()
 		}
 	}
+	c.mu.Unlock()
 	return nil
 }
 
-func (c *ResilientConn) LocalAddr() net.Addr  { return c.Lanes[0].LocalAddr() }
-func (c *ResilientConn) RemoteAddr() net.Addr { return c.Lanes[0].RemoteAddr() }
+func (c *ResilientConn) LocalAddr() net.Addr {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, l := range c.Lanes {
+		if l != nil {
+			return l.LocalAddr()
+		}
+	}
+	return nil
+}
+
+func (c *ResilientConn) RemoteAddr() net.Addr {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, l := range c.Lanes {
+		if l != nil {
+			return l.RemoteAddr()
+		}
+	}
+	return nil
+}
 
 func (c *ResilientConn) SetDeadline(t time.Time) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	for _, l := range c.Lanes {
 		if l != nil {
 			_ = l.SetDeadline(t)
@@ -295,6 +371,8 @@ func (c *ResilientConn) SetDeadline(t time.Time) error {
 }
 
 func (c *ResilientConn) SetReadDeadline(t time.Time) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	for _, l := range c.Lanes {
 		if l != nil {
 			_ = l.SetReadDeadline(t)
@@ -304,6 +382,8 @@ func (c *ResilientConn) SetReadDeadline(t time.Time) error {
 }
 
 func (c *ResilientConn) SetWriteDeadline(t time.Time) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	for _, l := range c.Lanes {
 		if l != nil {
 			_ = l.SetWriteDeadline(t)
