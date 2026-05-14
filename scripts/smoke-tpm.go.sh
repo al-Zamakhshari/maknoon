@@ -17,7 +17,7 @@ echo "🏗️  Starting TPM Hardening Smoke Test..."
 # 1. Identity Generation with TPM flag (should fail without device, but verify flag path)
 echo "🛡️  Scenario 1: Identity Generation with TPM flag"
 set +e
-./maknoon keygen tpm-identity --tpm --tpm-device /dev/nonexistent > tpm_gen.log 2>&1
+./maknoon keygen -o tpm-identity --tpm --tpm-device /dev/nonexistent > tpm_gen.log 2>&1
 GEN_EXIT=$?
 set -e
 
@@ -33,16 +33,17 @@ fi
 echo "🛡️  Scenario 2: PCR Flag Parsing"
 # Even if it fails, the log (if trace enabled) would show PCRs.
 set +e
-./maknoon keygen pcr-identity --tpm --tpm-pcrs 7,14 --tpm-device /dev/nonexistent --trace > pcr_trace.log 2>&1
+./maknoon keygen -o pcr-identity --tpm --tpm-pcrs 7,14 --tpm-device /dev/nonexistent --trace > pcr_trace.log 2>&1
 set -e
 
-if grep -q "pcrs=\[7 14\]" pcr_trace.log || grep -q "pcrs=\"\[7 14\]\"" pcr_trace.log; then
+if grep -q "pcrs=\[7 14\]" pcr_trace.log || grep -q "pcrs=\"\[7 14\]\"" pcr_trace.log || grep -q "pcrs=\[7,14\]" pcr_trace.log; then
     echo "✅ PCR Parsing verified."
 else
     echo "❌ PCR Parsing FAILED."
     cat pcr_trace.log
     exit 1
 fi
+
 
 
 
