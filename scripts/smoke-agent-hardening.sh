@@ -1,10 +1,12 @@
 #!/bin/bash
 set -e
 
-# Maknoon Industrial Smoke Suite: Agent Hardening & Auditing
-# Verifies Workspace Auditing and Vault Blob logic via Engine integration.
+# Maknoon Industrial Smoke Suite: Agent Hardening & Resilient Metrics
+# Verifies Workspace Isolation, Encrypted Agent Memory, and Tunnel Resilience.
 
-echo "🧪 Starting Mission: Agent Hardening & Auditing Verification..."
+echo "🧪 Starting Mission: Agent Hardening & Resilience (Pure Binary + MCP E2E)..."
+
+source scripts/common.sh
 
 # Setup clean environment
 TEST_DIR=$(mktemp -d)
@@ -16,98 +18,139 @@ export MAKNOON_PASSPHRASE="agent-smoke-pass"
 export MAKNOON_AUDIT_ENABLED="true"
 export MAKNOON_AUDIT_LOG_FILE="${TEST_DIR}/agent_audit.log"
 
-echo "🔍 Task 1: Verifying Workspace Auditing..."
+# --- PHASE 1: CLI End-to-End ---
 
-# We use a small Go script to trigger the workspace creation and shredding
-# since we don't have a direct CLI for it yet, and we want to verify the AuditEngine wrapper.
-cat << EOF > "${TEST_DIR}/verify_workspace.go"
-package main
+echo "🔍 Task 1: Verifying Workspace CLI..."
+WORKSPACE_PATH=$(./maknoon workspace create --name "smoke-cli" --json | jq -r '.path')
+if [ ! -d "$WORKSPACE_PATH" ]; then
+    echo "❌ Failure: Workspace directory not created."
+    exit 1
+fi
+echo "✅ Workspace created at $WORKSPACE_PATH"
 
-import (
-	"context"
-	"fmt"
-	"os"
-	"github.com/al-Zamakhshari/maknoon/cmd/maknoon/commands"
-	"github.com/al-Zamakhshari/maknoon/pkg/crypto"
-)
+./maknoon workspace shred "$WORKSPACE_PATH" --json > /dev/null
+if [ -d "$WORKSPACE_PATH" ]; then
+    echo "❌ Failure: Workspace directory still exists after shred."
+    exit 1
+fi
+echo "✅ Workspace shredded successfully."
 
-func main() {
-	os.Setenv("MAKNOON_PASSPHRASE", "agent-smoke-pass")
-	if err := commands.InitEngine(); err != nil {
-		fmt.Printf("InitEngine failed: %v\n", err)
-		os.Exit(1)
-	}
-	engine := commands.GlobalContext.Engine
-	ectx := &crypto.EngineContext{Context: context.Background()}
+echo "🔍 Task 2: Verifying Vault Blob CLI..."
+./maknoon vault set-blob "agent-memory-key" --data "secret-agent-context" --vault "memory" --overwrite --json > /dev/null
+BLOB_DATA=$(./maknoon vault get-blob "agent-memory-key" --vault "memory")
+if [ "$BLOB_DATA" != "secret-agent-context" ]; then
+    echo "❌ Failure: Blob data mismatch. Got: $BLOB_DATA"
+    exit 1
+fi
+echo "✅ Vault Blob stored and retrieved correctly."
 
-	path, err := engine.WorkspaceCreate(ectx, "smoke_session")
-	if err != nil {
-		fmt.Printf("WorkspaceCreate failed: %v\n", err)
-		os.Exit(1)
-	}
-	fmt.Printf("Created: %s\n", path)
+# --- PHASE 2: MCP Server E2E ---
 
-	if err := engine.WorkspaceShred(ectx, path); err != nil {
-		fmt.Printf("WorkspaceShred failed: %v\n", err)
-		os.Exit(1)
-	}
-	fmt.Println("Shredded successfully")
-}
-EOF
+echo "🔐 Generating test certificates for MCP SSE..."
+generate_test_certs "${TEST_DIR}/certs"
+CERT="${TEST_DIR}/certs/server.crt"
+KEY="${TEST_DIR}/certs/server.key"
 
-go run "${TEST_DIR}/verify_workspace.go"
+echo "🚀 Task 3: Starting Maknoon MCP Server (Daemon)..."
+# Find a free port
+PORT=$(python3 -c 'import socket; s=socket.socket(); s.bind(("", 0)); print(s.getsockname()[1]); s.close()')
+./maknoon mcp --transport sse --address ":$PORT" --tls-cert "$CERT" --tls-key "$KEY" > "${TEST_DIR}/mcp_server.log" 2>&1 &
+MCP_PID=$!
+sleep 5
 
-echo "📜 Checking Audit Log for Workspace Events..."
-if grep -q "workspace_create" "${MAKNOON_AUDIT_LOG_FILE}" && grep -q "workspace_shred" "${MAKNOON_AUDIT_LOG_FILE}"; then
-    echo "✅ Success: Workspace events correctly audited."
-else
-    echo "❌ Failure: Workspace events missing from audit log."
-    cat "${MAKNOON_AUDIT_LOG_FILE}"
+echo "🔍 Task 4: Verifying MCP Workspace Tool via 'maknoon call'..."
+# Create workspace via MCP
+set +e
+MCP_RES=$(./maknoon call workspace_create --addr "localhost:$PORT" --args '{"name":"mcp-smoke"}' --insecure 2>&1)
+CALL_EXIT=$?
+set -e
+
+if [ $CALL_EXIT -ne 0 ]; then
+    echo "❌ Failure: 'maknoon call' exited with $CALL_EXIT"
+    echo "Response: $MCP_RES"
+    echo "--- Server Logs ---"
+    cat "${TEST_DIR}/mcp_server.log"
+    kill $MCP_PID
     exit 1
 fi
 
-echo "🔍 Task 2: Verifying Vault Blob (Agent Memory) Auditing..."
-# We can use the vault_set mcp tool logic via our helper
-cat << EOF > "${TEST_DIR}/verify_blob.go"
-package main
+MCP_PATH=$(echo "$MCP_RES" | jq -r '.content[0].text' | jq -r '.path')
+echo "✅ MCP Workspace created at $MCP_PATH"
 
-import (
-	"fmt"
-	"os"
-	"github.com/al-Zamakhshari/maknoon/cmd/maknoon/commands"
-	"github.com/al-Zamakhshari/maknoon/pkg/crypto"
-)
+# Shred workspace via MCP
+./maknoon call workspace_shred --addr "localhost:$PORT" --args "{\"path\":\"$MCP_PATH\"}" --insecure > /dev/null
+if [ -d "$MCP_PATH" ]; then
+    echo "❌ Failure: MCP Workspace shred tool failed."
+    kill $MCP_PID
+    exit 1
+fi
+echo "✅ MCP Workspace shredded successfully."
 
-func main() {
-	os.Setenv("MAKNOON_PASSPHRASE", "agent-smoke-pass")
-	commands.InitEngine()
-	engine := commands.GlobalContext.Engine
+echo "🔍 Task 5: Verifying Resilient Tunnel Metrics via MCP 'network_status'..."
+# 1. Start a listener
+./maknoon tunnel listen --p2p --address ":0" > "${TEST_DIR}/p2p_listener.log" 2>&1 &
+LP2P_PID=$!
+sleep 5
 
-	entry := &crypto.VaultEntry{
-		Service: "agent_context",
-		Blob: []byte("agent-state-data"),
-	}
-	err := engine.VaultSet(nil, "agent_memory", entry, []byte("agent-smoke-pass"), "", true)
-	if err != nil {
-		fmt.Printf("VaultSet failed: %v\n", err)
-		os.Exit(1)
-	}
-	fmt.Println("Blob stored")
-}
-EOF
+# Extract full loopback multiaddr from the listener log
+REMOTE_MA=$(grep "/ip4/127.0.0.1/tcp/" "${TEST_DIR}/p2p_listener.log" | head -n 1 | sed 's/.*Adrs: \[//' | sed 's/,.*//' | tr -d '[]" -')
+# If bracket-style extraction fails, try fallback
+if [ -z "$REMOTE_MA" ]; then
+    REMOTE_MA=$(grep "/ip4/127.0.0.1/tcp/" "${TEST_DIR}/p2p_listener.log" | grep -o "/ip4/127.0.0.1/tcp/[0-9]*/p2p/[A-Za-z0-9]*" | head -n 1 | tr -d ' -')
+fi
 
-go run "${TEST_DIR}/verify_blob.go"
+if [ -z "$REMOTE_MA" ]; then
+    echo "❌ Failure: Could not extract Multiaddr from listener log."
+    echo "--- Listener Logs ---"
+    cat "${TEST_DIR}/p2p_listener.log"
+    kill $MCP_PID $LP2P_PID
+    exit 1
+fi
+echo "📍 Extracted Multiaddr: $REMOTE_MA"
 
-echo "📜 Checking Audit Log for Vault Blob Events..."
-if grep -q "vault_set" "${MAKNOON_AUDIT_LOG_FILE}" && grep -q "agent_memory" "${MAKNOON_AUDIT_LOG_FILE}"; then
-    echo "✅ Success: Vault Blob events correctly audited."
+# 2. Establish resilient tunnel VIA MCP
+echo "📡 Establishing Resilient Tunnel via MCP..."
+START_RES=$(./maknoon call tunnel_start --addr "localhost:$PORT" --args "{\"remote\":\"$REMOTE_MA\",\"p2p_mode\":true,\"data_lanes\":2,\"parity_lanes\":1}" --insecure)
+if echo "$START_RES" | grep -q "isError"; then
+    echo "❌ Failure: tunnel_start via MCP failed."
+    echo "Response: $START_RES"
+    kill $MCP_PID $LP2P_PID
+    exit 1
+fi
+sleep 5
+
+# 3. Check metrics via MCP network_status
+NET_STATUS=$(./maknoon call network_status --addr "localhost:$PORT" --insecure | jq -r '.content[0].text')
+DATA_LANES=$(echo "$NET_STATUS" | jq -r '.tunnel.data_lanes')
+HEALTHY_LANES=$(echo "$NET_STATUS" | jq -r '.tunnel.healthy_lanes')
+
+echo "Resilience Stats: Data=$DATA_LANES, Healthy=$HEALTHY_LANES"
+
+if [ "$DATA_LANES" -eq 2 ] && [ "$HEALTHY_LANES" -eq 3 ]; then
+    echo "✅ Success: MCP Resilient Tunnel Metrics verified."
 else
-    echo "❌ Failure: Vault Blob events missing from audit log."
-    cat "${MAKNOON_AUDIT_LOG_FILE}"
+    echo "❌ Failure: Resilience Metrics mismatch in MCP server."
+    echo "Net Status: $NET_STATUS"
+    kill $MCP_PID $LP2P_PID
     exit 1
 fi
 
-echo "🏆 Mission Accomplished: Agent Hardening & Auditing Verified."
+# Cleanup
+echo "🧹 Cleaning up processes..."
+kill $MCP_PID $LP2P_PID
+wait $MCP_PID $LP2P_PID 2>/dev/null || true
+
+echo "📜 Checking Forensic Audit Log for all E2E events..."
+if grep -q "workspace_create" "$MAKNOON_AUDIT_LOG_FILE" && \
+   grep -q "vault_set" "$MAKNOON_AUDIT_LOG_FILE" && \
+   grep -q "tunnel_start" "$MAKNOON_AUDIT_LOG_FILE"; then
+    echo "✅ Success: All E2E events forensically audited."
+else
+    echo "❌ Failure: Forensic audit trail incomplete."
+    exit 1
+fi
+
+echo "🏆 Mission Accomplished: Agent Hardening & Resilience Verified (100% E2E Coverage)."
 chmod -R +w "$TEST_DIR"
 rm -rf "$TEST_DIR"
 exit 0

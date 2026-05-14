@@ -33,33 +33,38 @@ func (e *Engine) TunnelStart(ectx *EngineContext, opts tunnel.TunnelOptions) (tu
 	}
 
 	targetAddr := opts.P2PAddr
-	if targetAddr == "" && strings.HasPrefix(opts.RemoteEndpoint, "@") {
+	if targetAddr == "" {
 		targetAddr = opts.RemoteEndpoint
 	}
 
-	if opts.P2PMode && strings.HasPrefix(targetAddr, "@") {
-		reg := NewIdentityRegistry(e.Config)
-		record, err := reg.Resolve(ectx.Context, targetAddr)
-		if err != nil {
-			return tunnel.TunnelStatus{}, fmt.Errorf("failed to resolve tunnel peer '%s': %w", targetAddr, err)
-		}
-		if len(record.Multiaddrs) == 0 {
-			return tunnel.TunnelStatus{}, fmt.Errorf("resolved peer '%s' has no active multiaddrs", targetAddr)
-		}
-		var bestAddr string
-		for _, ma := range record.Multiaddrs {
-			if ma == "" {
-				continue
+	if opts.P2PMode && targetAddr != "" {
+		if strings.HasPrefix(targetAddr, "@") {
+			reg := NewIdentityRegistry(e.Config)
+			record, err := reg.Resolve(ectx.Context, targetAddr)
+			if err != nil {
+				return tunnel.TunnelStatus{}, fmt.Errorf("failed to resolve tunnel peer '%s': %w", targetAddr, err)
 			}
-			if !strings.Contains(ma, "/127.0.0.1/") && !strings.Contains(ma, "/::1/") {
-				bestAddr = ma
-				break
+			if len(record.Multiaddrs) == 0 {
+				return tunnel.TunnelStatus{}, fmt.Errorf("resolved peer '%s' has no active multiaddrs", targetAddr)
 			}
+			var bestAddr string
+			for _, ma := range record.Multiaddrs {
+				if ma == "" {
+					continue
+				}
+				if !strings.Contains(ma, "/127.0.0.1/") && !strings.Contains(ma, "/::1/") {
+					bestAddr = ma
+					break
+				}
+			}
+			if bestAddr == "" && len(record.Multiaddrs) > 0 {
+				bestAddr = record.Multiaddrs[0]
+			}
+			opts.P2PAddr = bestAddr
+		} else {
+			// Direct multiaddr
+			opts.P2PAddr = targetAddr
 		}
-		if bestAddr == "" && len(record.Multiaddrs) > 0 {
-			bestAddr = record.Multiaddrs[0]
-		}
-		opts.P2PAddr = bestAddr
 	}
 
 	var libp2pOpts []libp2p.Option

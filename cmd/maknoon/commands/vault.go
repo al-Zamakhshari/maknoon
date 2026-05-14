@@ -34,6 +34,8 @@ func VaultCmd() *cobra.Command {
 
 	cmd.AddCommand(vaultSetCmd())
 	cmd.AddCommand(vaultGetCmd())
+	cmd.AddCommand(vaultSetBlobCmd())
+	cmd.AddCommand(vaultGetBlobCmd())
 	cmd.AddCommand(vaultListCmd())
 	cmd.AddCommand(vaultRenameCmd())
 	cmd.AddCommand(vaultDeleteCmd())

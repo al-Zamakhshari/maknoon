@@ -305,3 +305,113 @@ func vaultRotateCmd() *cobra.Command {
 	cmd.Flags().StringVarP(&newPass, "new-passphrase", "n", "", "New master passphrase (unsafe for CLI history)")
 	return cmd
 }
+
+func vaultSetBlobCmd() *cobra.Command {
+	var user string
+	var overwrite bool
+	var data string
+
+	cmd := &cobra.Command{
+		Use:   "set-blob [key]",
+		Short: "Store arbitrary encrypted data (blob) in the vault",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			p := GlobalContext.UI.GetPresenter()
+			key := args[0]
+			var blob []byte
+
+			if data != "" {
+				blob = []byte(data)
+			} else {
+				fmt.Print("Enter blob data: ")
+				fmt.Scanln(&data)
+				blob = []byte(data)
+			}
+
+			path, err := resolveVaultPath(vaultName)
+			if err != nil {
+				return err
+			}
+
+			var vPass []byte
+			if vaultPassphrase != "" {
+				vPass = []byte(vaultPassphrase)
+			} else {
+				vPass, _, err = getPassphrase("Enter Vault Master Passphrase: ")
+				if err != nil {
+					return err
+				}
+			}
+			defer crypto.SafeClear(vPass)
+
+			entry := &crypto.VaultEntry{
+				Service:  key,
+				Username: user,
+				Blob:     crypto.SecretBytes(blob),
+			}
+			err = GlobalContext.Engine.VaultSet(nil, path, entry, vPass, "", overwrite)
+			crypto.SafeClear(entry.Blob)
+			if err != nil {
+				return err
+			}
+
+			p.RenderSuccess(crypto.VaultResult{
+				Status:  "success",
+				Service: key,
+			})
+			return nil
+		},
+	}
+
+	cmd.Flags().StringVarP(&user, "user", "u", "agent", "Owner/User for the blob")
+	cmd.Flags().StringVarP(&data, "data", "d", "", "Blob data to store (direct string)")
+	cmd.Flags().BoolVar(&overwrite, "overwrite", false, "Overwrite existing key")
+	return cmd
+}
+
+func vaultGetBlobCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "get-blob [key]",
+		Short: "Retrieve encrypted blob data from the vault",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			p := GlobalContext.UI.GetPresenter()
+			key := args[0]
+
+			path, err := resolveVaultPath(vaultName)
+			if err != nil {
+				return err
+			}
+
+			var vPass []byte
+			if vaultPassphrase != "" {
+				vPass = []byte(vaultPassphrase)
+			} else {
+				vPass, _, err = getPassphrase("Enter Vault Master Passphrase: ")
+				if err != nil {
+					return err
+				}
+			}
+			defer crypto.SafeClear(vPass)
+
+			entry, err := GlobalContext.Engine.VaultGet(nil, path, key, vPass, "")
+			if err != nil {
+				return err
+			}
+
+			if GlobalContext.UI.JSON {
+				res := map[string]string{
+					"status": "success",
+					"key":    key,
+					"data":   string(entry.Blob),
+				}
+				p.RenderSuccess(res)
+			} else {
+				p.RenderMessage(string(entry.Blob))
+			}
+			crypto.SafeClear(entry.Blob)
+			return nil
+		},
+	}
+	return cmd
+}
