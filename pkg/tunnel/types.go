@@ -45,6 +45,9 @@ type TunnelStatus struct {
 	BytesSent      int64  `json:"bytes_sent"`
 	BytesReceived  int64  `json:"bytes_received"`
 	HandshakeTime  string `json:"handshake_time,omitempty"`
+	DataLanes      int    `json:"data_lanes,omitempty"`
+	ParityLanes    int    `json:"parity_lanes,omitempty"`
+	HealthyLanes   int    `json:"healthy_lanes,omitempty"`
 }
 
 // TunnelConfig provides governed tuning for the gateway.

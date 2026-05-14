@@ -25,6 +25,9 @@ func (e *Engine) NetworkStatus(ectx *EngineContext) (NetStatusResult, error) {
 			res.Tunnel.LocalAddress = at.LocalAddress
 			res.Tunnel.RemoteEndpoint = at.RemoteEndpoint
 			res.Tunnel.HandshakeTime = at.HandshakeTime
+			res.Tunnel.DataLanes = at.DataLanes
+			res.Tunnel.ParityLanes = at.ParityLanes
+			res.Tunnel.HealthyLanes = at.HealthyLanes
 		}
 	}
 	e.tunnelMu.RUnlock()

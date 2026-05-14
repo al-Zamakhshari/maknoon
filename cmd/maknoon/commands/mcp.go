@@ -107,6 +107,7 @@ func createMCPServer() *server.MCPServer {
 	registerConfigTools(s, engine)
 	registerIdentityTools(s, engine)
 	registerProfilesTools(s, engine)
+	registerWorkspaceTools(s, engine)
 
 	return s
 }

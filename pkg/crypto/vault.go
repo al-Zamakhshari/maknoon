@@ -21,6 +21,7 @@ type VaultEntry struct {
 	Service  string      `json:"service"`
 	Username string      `json:"username"`
 	Password SecretBytes `json:"password"`
+	Blob     SecretBytes `json:"blob,omitempty"`
 	URL      string      `json:"url,omitempty"`
 	Note     string      `json:"note,omitempty"` // Legacy compatibility
 }

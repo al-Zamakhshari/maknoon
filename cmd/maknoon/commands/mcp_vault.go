@@ -115,6 +115,53 @@ func registerVaultTools(s *server.MCPServer, engine crypto.MaknoonEngine) {
 			return mcp.NewToolResultText(string(outData)), nil
 		})
 
+	s.AddTool(mcp.NewTool("vault_blob_set", mcp.WithDescription("Store arbitrary encrypted data (memory) for the agent")),
+		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			args := getArgs(request)
+			entry := &crypto.VaultEntry{
+				Service:  getString(args, "key", ""),
+				Blob:     crypto.SecretBytes(getString(args, "data", "")),
+				Username: "agent_memory",
+			}
+			overwrite, _ := args["overwrite"].(bool)
+			// Default to 'agent_memory' vault if not specified
+			vault := getString(args, "vault", "agent_memory")
+			pass := crypto.SecretBytes(viper.GetString("passphrase"))
+
+			err := engine.VaultSet(nil, vault, entry, pass, "", overwrite)
+			crypto.SafeClear(entry.Blob)
+			if err != nil {
+				return crypto.FormatMCPError(err, "vault_blob_set")
+			}
+			res := crypto.VaultResult{Status: "success", Service: entry.Service, Vault: vault}
+			outData, _ := json.Marshal(res)
+			return mcp.NewToolResultText(string(outData)), nil
+		})
+
+	s.AddTool(mcp.NewTool("vault_blob_get", mcp.WithDescription("Retrieve arbitrary encrypted data (memory) for the agent")),
+		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			args := getArgs(request)
+			key := getString(args, "key", "")
+			vault := getString(args, "vault", "agent_memory")
+			pass := crypto.SecretBytes(viper.GetString("passphrase"))
+
+			entry, err := engine.VaultGet(nil, vault, key, pass, "")
+			if err != nil {
+				return crypto.FormatMCPError(err, "vault_blob_get")
+			}
+			if entry == nil {
+				return mcp.NewToolResultError(`{"error":"not found"}`), nil
+			}
+			res := map[string]string{
+				"status": "success",
+				"key":    key,
+				"data":   string(entry.Blob),
+			}
+			crypto.SafeClear(entry.Blob)
+			outData, _ := json.Marshal(res)
+			return mcp.NewToolResultText(string(outData)), nil
+		})
+
 	s.AddTool(mcp.NewTool("vault_split", mcp.WithDescription("Split a vault master key into mnemonic shards")),
 		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			args := getArgs(request)

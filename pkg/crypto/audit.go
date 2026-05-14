@@ -744,6 +744,33 @@ func (e *AuditEngine) ReassembleFragments(srcDir string, w io.Writer, authorized
 	return err
 }
 
+func (e *AuditEngine) WorkspaceCreate(ectx *EngineContext, name string) (string, error) {
+	start := time.Now()
+	path, err := e.Engine.WorkspaceCreate(ectx, name)
+	duration := time.Since(start)
+
+	e.Logger.LogEvent("workspace_create", map[string]any{
+		"name":        name,
+		"path":        e.sanitizePath(path),
+		"duration_ms": duration.Milliseconds(),
+	}, err)
+
+	return path, err
+}
+
+func (e *AuditEngine) WorkspaceShred(ectx *EngineContext, path string) error {
+	start := time.Now()
+	err := e.Engine.WorkspaceShred(ectx, path)
+	duration := time.Since(start)
+
+	e.Logger.LogEvent("workspace_shred", map[string]any{
+		"path":        e.sanitizePath(path),
+		"duration_ms": duration.Milliseconds(),
+	}, err)
+
+	return err
+}
+
 func (e *AuditEngine) VaultRotate(ectx *EngineContext, vaultPath string, oldPassphrase, newPassphrase []byte) error {
 	start := time.Now()
 	err := e.Engine.VaultRotate(ectx, vaultPath, oldPassphrase, newPassphrase)

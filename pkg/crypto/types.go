@@ -269,6 +269,9 @@ type NetStatusResult struct {
 		LocalAddress   string `json:"local_address,omitempty"`
 		RemoteEndpoint string `json:"remote_endpoint,omitempty"`
 		HandshakeTime  string `json:"handshake_time,omitempty"`
+		DataLanes      int    `json:"data_lanes,omitempty"`
+		ParityLanes    int    `json:"parity_lanes,omitempty"`
+		HealthyLanes   int    `json:"healthy_lanes,omitempty"`
 	} `json:"tunnel"`
 }
 

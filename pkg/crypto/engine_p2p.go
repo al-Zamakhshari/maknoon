@@ -101,7 +101,15 @@ func (e *Engine) TunnelStart(ectx *EngineContext, opts tunnel.TunnelOptions) (tu
 		LocalAddress:   fmt.Sprintf("127.0.0.1:%d", opts.LocalProxyPort),
 		RemoteEndpoint: remote,
 		HandshakeTime:  time.Now().Format(time.RFC3339),
+		DataLanes:      opts.DataLanes,
+		ParityLanes:    opts.ParityLanes,
 	}
+
+	// For resilient tunnels, check initial healthy count
+	if opts.DataLanes > 0 {
+		status.HealthyLanes = opts.DataLanes + opts.ParityLanes
+	}
+
 	e.activeTunnel = status
 	e.gateway = gw
 
@@ -199,7 +207,8 @@ func (e *Engine) TunnelListen(ectx *EngineContext, addr string, mode string, ide
 	e.gatewayServer = srv
 	go srv.Start()
 
-	return NetworkResult{Status: "listening", Addrs: []string{addr}}, nil
+	actualAddr := ln.Addr().String()
+	return NetworkResult{Status: "listening", Addrs: []string{actualAddr}}, nil
 }
 
 func (e *Engine) ChatStart(ectx *EngineContext, identityName string, target string) (*P2PChatSession, error) {

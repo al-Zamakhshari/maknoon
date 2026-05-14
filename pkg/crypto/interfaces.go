@@ -173,6 +173,12 @@ type DispersalService interface {
 	ReassembleFragments(srcDir string, w io.Writer, authorizedPubKey []byte) error
 }
 
+// WorkspaceManager handles ephemeral sandbox environments.
+type WorkspaceManager interface {
+	WorkspaceCreate(ectx *EngineContext, name string) (string, error)
+	WorkspaceShred(ectx *EngineContext, path string) error
+}
+
 // MaknoonEngine is the primary high-level facade for all Maknoon services.
 type MaknoonEngine interface {
 	Protector
@@ -187,6 +193,7 @@ type MaknoonEngine interface {
 	Signer
 	KMSService
 	DispersalService
+	WorkspaceManager
 
 	Close() error
 }

@@ -122,3 +122,35 @@ func TestBadgerVaultOperations(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "user", res.Username)
 }
+
+func TestVaultBlob(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "maknoon-blob-test-*")
+	require.NoError(t, err)
+	defer os.RemoveAll(tempDir)
+
+	cfg := DefaultConfig()
+	cfg.Paths.VaultsDir = tempDir
+
+	engine, err := NewEngine(&HumanPolicy{}, nil, cfg, nil, nil)
+	require.NoError(t, err)
+	defer engine.Close()
+
+	ectx := &EngineContext{Policy: &HumanPolicy{}}
+	vault := "blobvault"
+	pass := []byte("pass")
+	key := "agent_memory_key"
+	blobData := "some complex agent state or encrypted context"
+
+	entry := &VaultEntry{
+		Service: key,
+		Blob:    SecretBytes(blobData),
+	}
+
+	err = engine.VaultSet(ectx, vault, entry, pass, "", true)
+	require.NoError(t, err)
+
+	entryRetrieved, err := engine.VaultGet(ectx, vault, key, pass, "")
+	require.NoError(t, err)
+	assert.Equal(t, blobData, string(entryRetrieved.Blob))
+	assert.Empty(t, entryRetrieved.Password)
+}
