@@ -22,7 +22,7 @@ echo "🚀 Starting Maknoon PQC API Server (BadgerDB)..."
 API_PID=$!
 
 # Cleanup on exit
-trap "kill $API_PID || true; rm -rf $CERT_DIR maknoon api.log" EXIT
+trap "kill $API_PID || true; rm -rf $CERT_DIR api.log" EXIT
 
 # Wait for server to be ready
 echo "⏳ Waiting for API to become active..."

@@ -21,10 +21,10 @@ set +e
 GEN_EXIT=$?
 set -e
 
-if grep -i "TPM" tpm_gen.log > /dev/null; then
+if grep -i "TPM seal" tpm_gen.log > /dev/null; then
     echo "✅ TPM Path verified: Engine attempted to use TPM."
 else
-    echo "❌ TPM Path FAILED: Engine did not attempt to use TPM."
+    echo "❌ TPM Path FAILED: Engine did not attempt to use TPM (or binary missing)."
     cat tpm_gen.log
     exit 1
 fi
