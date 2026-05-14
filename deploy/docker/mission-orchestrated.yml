@@ -1,0 +1,49 @@
+services:
+  # The Initiator Node (Triggers automated quorum unlock)
+  initiator:
+    build:
+      context: ../../
+      dockerfile: Dockerfile.mission
+    environment:
+      - MAKNOON_AGENT_MODE=1
+    command: sleep 3600
+    networks:
+      - orchestrated-net
+
+  # 3 Guardian nodes holding shards
+  guardian-1:
+    build:
+      context: ../../
+      dockerfile: Dockerfile.mission
+    environment:
+      - MAKNOON_AGENT_MODE=1
+    user: "root"
+    command: sleep 3600
+    networks:
+      - orchestrated-net
+
+  guardian-2:
+    build:
+      context: ../../
+      dockerfile: Dockerfile.mission
+    environment:
+      - MAKNOON_AGENT_MODE=1
+    user: "root"
+    command: sleep 3600
+    networks:
+      - orchestrated-net
+
+  guardian-3:
+    build:
+      context: ../../
+      dockerfile: Dockerfile.mission
+    environment:
+      - MAKNOON_AGENT_MODE=1
+    user: "root"
+    command: sleep 3600
+    networks:
+      - orchestrated-net
+
+networks:
+  orchestrated-net:
+    internal: false

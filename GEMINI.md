@@ -17,8 +17,8 @@ Maknoon is an industrial-grade, post-quantum CLI encryption engine and Model Con
 ## 🛡 Cryptographic Stack
 
 - **Symmetric Cipher**: AES-256-GCM (AEAD) / AES-256-GCM-SIV. XChaCha20-Poly1305 has been purged to ensure 100% industrial compliance.
-- **Asymmetric Encryption (KEM)**: ML-KEM / Kyber1024 (NIST Standard) wrapped in standard **HPKE Seal/Open** (RFC 9180).
-- **Digital Signatures**: ML-DSA-87 / Dilithium (NIST Standard) for forensic integrity; **ECDSA-P384** for ephemeral transport certificates. RSA-2048 has been completely purged.
+- **Asymmetric Encryption (KEM)**: ML-KEM / Kyber1024 (NIST Standard) wrapped in standard **HPKE Seal/Open** (RFC 9180). Supports **Non-Lattice Hedging** via Profile 3 (FrodoKEM-640 + SLH-DSA).
+- **Digital Signatures**: ML-DSA-87 / Dilithium (NIST Standard) for forensic integrity; **ECDSA-P384** for ephemeral transport certificates. Support for **SLH-DSA** in conservative modes. RSA-2048 has been completely purged.
 - **KMS Envelope Encryption**: Enterprise-grade `Wrap`/`Unwrap` primitives using hybrid ML-KEM-768 to secure massive data sets via encapsulated 32-byte Data Encryption Keys (DEKs).
 - **Key Derivation (KDF)**: Argon2id (Industrial Standard: 3 iterations, 64MB memory).
 - **Transport Security**: Mandated TLS 1.3 with native X25519MLKEM768 hybrid key exchange for all networked interfaces.
@@ -60,7 +60,9 @@ Maknoon is an industrial-grade, post-quantum CLI encryption engine and Model Con
 3.  **FIPS Compliance Mode**: The `--fips` flag enforces mandatory NIST `nist` profiles, prohibits unverified TLS tunnels, and **strictly freezes system configuration** (rendering it entirely immutable at runtime).
 4.  **Forensic Integrity**: 
     *   All operations are logged via the `AuditEngine` decorator.
+    *   **Chained Auditing**: Logs are cryptographically linked using SHA-256 hashes (each entry points to the `prev_hash`), ensuring the entire trail is immutable and tamper-evident.
     *   Logs are cryptographically signed using **ML-DSA-87**.
+    *   **Entropy Sentinel**: Implements **CRNGT** (Continuous Random Number Generator Test) to detect hardware entropy failures at runtime, preventing insecure key generation.
     *   Support for **Hardware-Backed Forensic Signing** (binding audit integrity to physical FIDO2 keys).
 
 ## 📋 Engineering & Documentation Standards
@@ -103,8 +105,10 @@ NEVER use `fmt.Print` or `json.Marshal` directly in business logic. Use the `Pre
 ### 🛡 Cryptographic Primitives (`pkg/crypto/`)
 - **`encrypt.go` / `decrypt.go`**: AEAD (AES-GCM) and HPKE (ML-KEM) streaming.
 - **`asymmetric.go`**: ML-KEM/ML-DSA standard wrappers (using CIRCL).
-- **`threshold_sig.go`**: (Phase 6.1) Multi-signature aggregation and verification.
-- **`erasure.go`**: Reed-Solomon encoding/decoding for dispersal.
+- **`entropy.go`**: (Phase 8) Entropy Sentinel and FIPS CRNGT implementation.
+- **`integrity.go`**: Power-On Self-Tests (POST) and algorithm verification.
+- **`storage.go`**: KeyStore and VaultStore abstractions.
+- **`storage_tpm.go`**: (Phase 8) TPM 2.0 hardware-backed KeyStore.
 - **`shares.go`**: Shamir's Secret Sharing (SSS) implementation.
 - **`fido2.go`**: Hardware-backed signing via FIDO2/WebAuthn.
 - **`policy.go`**: The Governance Engine (Human vs. Agent constraints).
@@ -121,14 +125,18 @@ NEVER use `fmt.Print` or `json.Marshal` directly in business logic. Use the `Pre
 - **`call.go`**: Native MCP SSE client for testing.
 
 ## 🏁 Phase Roadmap (v1.x)
-1.  [DONE] **Phase 1-3**: Core CLI, PQC Engine, and Vault CRUD.
-2.  [DONE] **Phase 4**: P2P Networking (libp2p) and Direct Shard Transfer.
-3.  [DONE] **Phase 5**: Model Context Protocol (MCP) and REST API parity.
-4.  [DONE] **Phase 6.1**: PQC Threshold Multi-Sig (M-of-N signing).
-5.  [DONE] **Phase 7**: RAID-for-Privacy (Reed-Solomon dispersal & retrieval).
-6.  [DONE] **Phase 7.4**: Resilient L4 Tunnels (Reed-Solomon lane striping).
-7.  [TODO] **Phase 6.2**: Orchestrated Quorum Unlocking (Consensus-based vaults).
-8.  [TODO] **Phase 8**: Post-Quantum FIPS Certification & Final Hardening.
+1. [DONE] **Phase 1-3**: Core CLI, PQC Engine, and Vault CRUD.
+2. [DONE] **Phase 4**: P2P Networking (libp2p) and Direct Shard Transfer.
+3. [DONE] **Phase 5**: Model Context Protocol (MCP) and REST API parity.
+4. [DONE] **Phase 6.1**: PQC Threshold Multi-Sig (M-of-N signing).
+5. [DONE] **Phase 6.2**: Orchestrated Quorum Unlocking (Consensus-based vaults).
+6. [DONE] **Phase 7**: RAID-for-Privacy (Reed-Solomon dispersal & retrieval).
+7. [DONE] **Phase 7.4**: Resilient L4 Tunnels (Reed-Solomon lane striping).
+8. [IN PROGRESS] **Phase 8**: Post-Quantum FIPS Certification & Final Hardening.
+    - **Entropy Sentinel (CRNGT)**: Real-time entropy health monitoring (FIPS 140-3). [DONE]
+    - **Expanded POST**: ML-KEM, ML-DSA, and Argon2id Known Answer Tests on startup. [DONE]
+    - **Chained Forensic Auditing**: Immutable, hash-linked audit trails. [DONE]
+    - **TPM 2.0 Hardening**: Hardware-backed identity protection for Linux (Pure Go). [DONE]
 
 ## ⚙️ Protocol & Header Specifications
 
@@ -136,7 +144,7 @@ NEVER use `fmt.Print` or `json.Marshal` directly in business logic. Use the `Pre
 `[MAKF(4), Ver(1), Index(1), Data(1), Parity(1), ShardSize(8), ShardData(N), ForensicSig(ML-DSA)]`
 
 ### 🔑 Forensic Audit Log Format
-`[Timestamp(RFC3339), PeerID(B58), Action(string), Status(string), Meta(JSON), Signature(ML-DSA-87)]`
+`[Timestamp(RFC3339), PrevHash(Hex), Action(string), Status(string), Meta(JSON), Signature(ML-DSA-87)]`
 
 ## ⚡ Rapid Reference (Agent Cheat Sheet)
 

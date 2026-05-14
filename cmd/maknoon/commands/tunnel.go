@@ -57,11 +57,7 @@ func tunnelListenCmd() *cobra.Command {
 				}
 
 				if identityName != "" {
-					auditEng, ok := GlobalContext.Engine.(*crypto.AuditEngine)
-					if !ok {
-						return fmt.Errorf("unexpected engine type")
-					}
-					id, err := auditEng.Engine.Identities.LoadIdentity(identityName, nil, "", false)
+					id, err := GlobalContext.Engine.LoadIdentity(nil, identityName, nil, "", false)
 					if err != nil {
 						return err
 					}
@@ -76,6 +72,14 @@ func tunnelListenCmd() *cobra.Command {
 				if err != nil {
 					return err
 				}
+
+				// Register Quorum Handler so this node can participate in consensus
+				if eng, ok := GlobalContext.Engine.(*crypto.AuditEngine); ok {
+					eng.Engine.RegisterQuorumHandler(h)
+				} else if eng, ok := GlobalContext.Engine.(*crypto.Engine); ok {
+					eng.RegisterQuorumHandler(h)
+				}
+
 				fmt.Printf("🚀 P2P Tunnel Server active!\n")
 				fmt.Printf("🆔 Peer ID: %s\n", h.ID())
 				fmt.Println("📍 Multiaddrs:")

@@ -99,42 +99,51 @@ func (e *Engine) RegisterQuorumHandler(h host.Host) {
 
 		// 1. Verify Request Signature (ML-DSA)
 		// We need to resolve the requester's PeerID to their Public Key
+		var sigPub []byte
 		reg := NewIdentityRegistry(e.Config)
-		record, err := reg.Resolve(ectx.Context, "@"+req.Requester) // Handle resolution logic
-		if err != nil {
+		record, err := reg.Resolve(ectx.Context, "@"+req.Requester)
+		if err == nil && record != nil {
+			sigPub = record.SIGPubKey
+		} else {
 			// Fallback: Check if they are in our local contacts
 			if c, err2 := e.Contacts.GetByPeerID(req.Requester); err2 == nil {
-				record = &IdentityRecord{SIGPubKey: c.SIGPubKey}
+				sigPub = c.SIGPubKey
 			}
 		}
 
-		if record != nil && len(record.SIGPubKey) > 0 {
+		if len(sigPub) > 0 {
 			sigData := []byte(fmt.Sprintf("%s:%s:%s:%d", req.Action, req.Resource, req.Requester, req.Timestamp))
-			valid, _ := e.Verify(ectx, sigData, req.Signature, record.SIGPubKey)
+			valid, _ := e.Verify(ectx, sigData, req.Signature, sigPub)
 			if !valid {
+				e.Logger.Warn("Quorum request signature invalid", "requester", req.Requester, "action", req.Action)
 				resp.Reason = "Forensic failure: invalid request signature"
 				EncodeQuorumResponse(stream, resp)
 				return
 			}
 		} else {
+			e.Logger.Warn("Quorum request rejected: requester not found", "requester", req.Requester)
 			resp.Reason = "Forensic failure: requester identity not found in registry or contacts"
 			EncodeQuorumResponse(stream, resp)
 			return
 		}
 
 		// 2. Resource Matching & Consensus Logic
+		e.Logger.Info("Processing quorum request", "action", req.Action, "resource", req.Resource, "requester", req.Requester)
 		switch req.Action {
 		case ActionVaultUnlock:
 			shardPattern := fmt.Sprintf("%s.shard_*.maknf", req.Resource)
 			matches, _ := filepath.Glob(filepath.Join(e.Config.Paths.VaultsDir, shardPattern))
 			if len(matches) == 0 {
+				e.Logger.Warn("Quorum request: no shards found", "pattern", shardPattern, "dir", e.Config.Paths.VaultsDir)
 				resp.Reason = "Resource mismatch: no governance shards found for requested vault"
 			} else {
 				if ectx.Policy.AllowAutoQuorum(req.Requester, string(req.Action)) {
 					shardData, _ := os.ReadFile(matches[0])
 					resp.Approved = true
 					resp.Payload = shardData
+					e.Logger.Info("Quorum request AUTO-APPROVED", "requester", req.Requester)
 				} else {
+					e.Logger.Warn("Quorum request DENIED by policy", "requester", req.Requester)
 					resp.Reason = "Policy restriction: manual approval required or requester not authorized"
 				}
 			}

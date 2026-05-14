@@ -36,6 +36,9 @@ Post-Quantum Cryptography (PQC).`,
 			_ = viper.BindPFlag("trace", cmd.Flags().Lookup("trace"))
 			_ = viper.BindPFlag("fips", cmd.Flags().Lookup("fips"))
 			_ = viper.BindPFlag("policy", cmd.Flags().Lookup("policy"))
+			_ = viper.BindPFlag("tpm", cmd.Flags().Lookup("tpm"))
+			_ = viper.BindPFlag("tpm_device", cmd.Flags().Lookup("tpm-device"))
+			_ = viper.BindPFlag("tpm_pcrs", cmd.Flags().Lookup("tpm-pcrs"))
 
 			if err := commands.InitEngine(); err != nil {
 				return err
@@ -56,6 +59,9 @@ Post-Quantum Cryptography (PQC).`,
 	rootCmd.PersistentFlags().Bool("trace", false, "Enable low-level diagnostic tracing to stderr")
 	rootCmd.PersistentFlags().Bool("fips", false, "Enforce strict FIPS-140 compliant cryptographic standards")
 	rootCmd.PersistentFlags().String("policy", "", "Path to a declarative governance policy file (JSON)")
+	rootCmd.PersistentFlags().Bool("tpm", false, "Enable TPM 2.0 hardware-backed storage for keys")
+	rootCmd.PersistentFlags().String("tpm-device", "/dev/tpmrm0", "Path to the TPM device node")
+	rootCmd.PersistentFlags().IntSlice("tpm-pcrs", []int{}, "List of PCRs to bind keys to (e.g., 7,14)")
 
 	// Define Command Groups
 	coreGroup := &cobra.Group{ID: "core", Title: "Cryptographic Operations:"}

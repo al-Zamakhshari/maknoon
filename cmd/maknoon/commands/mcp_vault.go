@@ -11,6 +11,32 @@ import (
 )
 
 func registerVaultTools(s *server.MCPServer, engine crypto.MaknoonEngine) {
+	s.AddTool(mcp.NewTool("vault_init_institutional", mcp.WithDescription("Initialize a new institutional vault governed by a quorum of peers")),
+		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			args := getArgs(request)
+			name := getString(args, "name", "")
+			threshold := getInt(args, "threshold", 2)
+			shares := getInt(args, "shares", 3)
+			pass := crypto.SecretBytes(getString(args, "passphrase", ""))
+			defer crypto.SafeClear(pass)
+
+			var peers []string
+			if rawPeers, ok := args["peers"].([]any); ok {
+				for _, p := range rawPeers {
+					if str, ok := p.(string); ok {
+						peers = append(peers, str)
+					}
+				}
+			}
+
+			res, err := engine.VaultInitInstitutional(&crypto.EngineContext{Context: ctx}, name, threshold, shares, peers, pass)
+			if err != nil {
+				return crypto.FormatMCPError(err, "vault_init_institutional")
+			}
+			outData, _ := json.Marshal(res)
+			return mcp.NewToolResultText(string(outData)), nil
+		})
+
 	s.AddTool(mcp.NewTool("vault_get", mcp.WithDescription("Retrieve a secret from the vault")),
 		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			args := getArgs(request)

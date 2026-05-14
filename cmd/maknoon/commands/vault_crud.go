@@ -92,10 +92,15 @@ func vaultGetCmd() *cobra.Command {
 			if vaultPassphrase != "" {
 				vPass = []byte(vaultPassphrase)
 			} else {
-				vPass, _, err = getPassphrase("Enter Vault Master Passphrase: ")
-				if err != nil {
-					p.RenderError(err)
-					return err
+				// Don't force passphrase prompt if we're in agent mode and it might be an institutional vault.
+				// The engine will handle the error if it's NOT institutional and passphrase is empty.
+				isAgent := viper.GetString("agent_mode") == "1"
+				if !isAgent {
+					vPass, _, err = getPassphrase("Enter Vault Master Passphrase: ")
+					if err != nil {
+						p.RenderError(err)
+						return err
+					}
 				}
 			}
 			defer crypto.SafeClear(vPass)
@@ -146,10 +151,13 @@ func vaultListCmd() *cobra.Command {
 			if vaultPassphrase != "" {
 				vPass = []byte(vaultPassphrase)
 			} else {
-				vPass, _, err = getPassphrase("Enter Vault Master Passphrase: ")
-				if err != nil {
-					p.RenderError(err)
-					return err
+				isAgent := viper.GetString("agent_mode") == "1"
+				if !isAgent {
+					vPass, _, err = getPassphrase("Enter Vault Master Passphrase: ")
+					if err != nil {
+						p.RenderError(err)
+						return err
+					}
 				}
 			}
 			defer crypto.SafeClear(vPass)

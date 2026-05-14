@@ -109,14 +109,18 @@ Maknoon is built on the principle of **Empirical Rigor**. Every cryptographic tr
 
 ---
 
-## 🏆 Documentation & Wiki
-For detailed technical specifications, refer to:
-*   **[[Architecture]]**: Sequencer model and memory safety.
-*   **[[L4 Gateway]]**: Deep-dive into Resilient Tunnels and Reed-Solomon.
-*   **[[Security Rationale]]**: Why we chose ML-KEM and AES-GCM.
-*   **[[CLI Reference]]**: Full command and flag specification.
+## 🏆 Documentation & Knowledge Base
+For detailed technical specifications and user guides, refer to the [Documentation Hub](./docs/):
+
+*   **[Getting Started](./docs/getting-started/INSTALL.md)**: Installation and Hardware Hardening.
+*   **[Architecture](./docs/architecture/overview.md)**: Sequencer model and memory safety.
+*   **[Resilient Networking](./docs/user-guides/tunnels.md)**: Deep-dive into Tunnels and Reed-Solomon.
+*   **[Security Rationale](./docs/architecture/threat-model.md)**: Choice of Kyber, Dilithium, and AES-GCM.
+*   **[CLI Reference](./docs/integration/cli-reference.md)**: Full command and flag specification.
+*   **[AI Agent Integration](./docs/integration/mcp-server.md)**: Native MCP tool schemas.
 
 ---
+
 
 ## License
 MIT License. Created by [al-Zamakhshari](https://github.com/al-Zamakhshari).

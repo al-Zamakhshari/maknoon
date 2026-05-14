@@ -150,18 +150,21 @@ func (s *FileSystemVaultStore) Open(path string) (Store, error) {
 		rel, err := filepath.Rel(s.BaseDir, clean)
 		isWithinBase := (err == nil && !strings.HasPrefix(rel, ".."))
 
+		// Explicitly allow the contacts database if it's in the standard location relative to BaseDir
+		isContacts := (err == nil && rel == "../contacts.db")
+
 		tmpDir := os.TempDir()
 		relTmp, errTmp := filepath.Rel(tmpDir, clean)
 		isWithinTmp := (errTmp == nil && !strings.HasPrefix(relTmp, ".."))
 
-		if isWithinBase || isWithinTmp || !IsAgentMode() {
+		if isWithinBase || isWithinTmp || isContacts || !IsAgentMode() {
 			fullPath = clean
 		} else {
 			return nil, &ErrPolicyViolation{Reason: "illegal vault path access attempted", Path: path}
 		}
 	} else {
 		// Relative path: ensure no escape and join with BaseDir
-		if strings.HasPrefix(clean, "..") {
+		if strings.HasPrefix(clean, "..") && clean != "../contacts.db" {
 			return nil, &ErrPolicyViolation{Reason: "illegal vault path access attempted", Path: path}
 		}
 		fullPath = filepath.Join(s.BaseDir, clean)

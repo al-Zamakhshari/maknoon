@@ -622,7 +622,19 @@ func InitEngine() error {
 	}
 
 	idMgr := crypto.NewIdentityManager()
+
+	// TPM Hardening (Phase 8)
+	if viper.GetBool("tpm") {
+		device := viper.GetString("tpm_device")
+		pcrs := viper.GetIntSlice("tpm_pcrs")
+		idMgr.Store = crypto.NewTPMKeyStore(idMgr.Store, device, pcrs)
+		if viper.GetBool("trace") {
+			slog.Debug("TPM 2.0 Hardware-Backed Storage Active", "device", device, "pcrs", pcrs)
+		}
+	}
+
 	core, err := crypto.NewEngine(policy, idMgr, conf, nil, engineLogger)
+
 	if err != nil {
 		return err
 	}

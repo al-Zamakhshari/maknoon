@@ -173,6 +173,7 @@ func (e *Engine) TunnelListen(ectx *EngineContext, addr string, mode string, ide
 		if err != nil {
 			return NetworkResult{}, err
 		}
+		e.RegisterQuorumHandler(h)
 		ln := tunnel.StartLibp2pListener(h)
 		srv := tunnel.NewTunnelServer(ln)
 		e.gatewayServer = srv
@@ -357,6 +358,7 @@ func (e *Engine) P2PReceive(ectx *EngineContext, identityName string, code strin
 	if err != nil {
 		return nil, err
 	}
+	e.RegisterQuorumHandler(h)
 
 	// Always register the fragment handler if we have an output directory
 	// This enables us to serve fragments we've already received.

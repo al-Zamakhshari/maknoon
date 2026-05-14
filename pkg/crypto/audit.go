@@ -2,6 +2,7 @@ package crypto
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -50,6 +51,7 @@ func (l *NoopLogger) Close() error                                              
 type JSONFileLogger struct {
 	file       *os.File
 	signingKey []byte
+	lastHash   string
 	mu         sync.Mutex
 }
 
@@ -81,6 +83,7 @@ func (l *JSONFileLogger) LogEvent(action string, metadata map[string]any, err er
 
 	entry := AuditEntry{
 		Timestamp: time.Now().Format(time.RFC3339),
+		PrevHash:  l.lastHash,
 		Action:    action,
 		Metadata:  metadata,
 		Status:    status,
@@ -100,6 +103,10 @@ func (l *JSONFileLogger) LogEvent(action string, metadata map[string]any, err er
 
 	raw, _ := json.Marshal(entry)
 	fmt.Fprintln(l.file, string(raw))
+
+	// Update chain hash for next entry (FIPS 140-3 Forensic Chaining)
+	h := sha256.Sum256(raw)
+	l.lastHash = hex.EncodeToString(h[:])
 }
 
 func (l *JSONFileLogger) Close() error {
@@ -208,6 +215,22 @@ func (e *AuditEngine) ValidateProfile(ectx *EngineContext, p *DynamicProfile) er
 
 func (e *AuditEngine) ValidateWormholeURL(ectx *EngineContext, u string) error {
 	return e.Engine.ValidateWormholeURL(ectx, u)
+}
+
+func (e *AuditEngine) VaultInitInstitutional(ectx *EngineContext, name string, threshold, shares int, peerIDs []string, passphrase []byte) (*VaultResult, error) {
+	start := time.Now()
+	res, err := e.Engine.VaultInitInstitutional(ectx, name, threshold, shares, peerIDs, passphrase)
+	duration := time.Since(start)
+
+	e.Logger.LogEvent("vault_init_institutional", map[string]any{
+		"name":        name,
+		"threshold":   threshold,
+		"shares":      shares,
+		"peer_count":  len(peerIDs),
+		"duration_ms": duration.Milliseconds(),
+	}, err)
+
+	return res, err
 }
 
 func (e *AuditEngine) VaultGet(ectx *EngineContext, vaultPath string, service string, passphrase []byte, pin string) (*VaultEntry, error) {
@@ -461,6 +484,19 @@ func (e *AuditEngine) LoadPrivateKey(ectx *EngineContext, path string, passphras
 	}, err)
 
 	return key, err
+}
+
+func (e *AuditEngine) LoadIdentity(ectx *EngineContext, name string, passphrase []byte, pin string, agent bool) (*Identity, error) {
+	start := time.Now()
+	id, err := e.Engine.LoadIdentity(ectx, name, passphrase, pin, agent)
+	duration := time.Since(start)
+
+	e.Logger.LogEvent("load_identity", map[string]any{
+		"name":        name,
+		"duration_ms": duration.Milliseconds(),
+	}, err)
+
+	return id, err
 }
 
 func (e *AuditEngine) ResolveKeyPath(ectx *EngineContext, path, envVar string) string {

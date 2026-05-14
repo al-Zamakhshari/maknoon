@@ -114,6 +114,7 @@ func runAPIServer() error {
 	mux.HandleFunc("/v1/health", handleHealth)
 	mux.HandleFunc("/v1/vault/get", handleVaultGet)
 	mux.HandleFunc("/v1/vault/set", handleVaultSet)
+	mux.HandleFunc("/v1/vault/init-institutional", handleVaultInitInstitutional)
 	mux.HandleFunc("/v1/vault/rotate", handleVaultRotate)
 	mux.HandleFunc("/v1/vault/check-shards", handleVaultCheckShards)
 	mux.HandleFunc("/v1/identity/sign", handleSign)
@@ -207,6 +208,32 @@ func handleVaultSet(w http.ResponseWriter, r *http.Request) {
 	}
 
 	renderAPISuccess(w, map[string]string{"status": "success"})
+}
+
+func handleVaultInitInstitutional(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var req struct {
+		Name       string   `json:"name"`
+		Threshold  int      `json:"threshold"`
+		Shares     int      `json:"shares"`
+		Peers      []string `json:"peers"`
+		Passphrase string   `json:"passphrase"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	res, err := GlobalContext.Engine.VaultInitInstitutional(nil, req.Name, req.Threshold, req.Shares, req.Peers, []byte(req.Passphrase))
+	if err != nil {
+		renderAPIError(w, err)
+		return
+	}
+
+	renderAPISuccess(w, res)
 }
 
 func handleSign(w http.ResponseWriter, r *http.Request) {

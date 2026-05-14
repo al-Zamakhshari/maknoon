@@ -6,6 +6,7 @@ require (
 	github.com/awnumar/memguard v0.23.0
 	github.com/cloudflare/circl v1.6.3
 	github.com/dgraph-io/badger/v4 v4.9.1
+	github.com/google/go-tpm v0.9.8
 	github.com/hashicorp/yamux v0.1.2
 	github.com/klauspost/compress v1.18.6
 	github.com/klauspost/reedsolomon v1.14.0

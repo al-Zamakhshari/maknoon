@@ -45,7 +45,7 @@ Adherence to high-assurance software delivery standards.
 
 ### Hardware Security Module (HSM) Integration
 *   **PKCS#11 Implementation**: Offloading KEM and signature operations to external hardware tokens (e.g., YubiKey, Nitrokey).
-*   **TPM Sealing**: Binding vault access material to Platform Configuration Registers (PCRs) to detect and prevent unauthorized boot-level tampering.
+*   **TPM Sealing**: Binding vault access material to Platform Configuration Registers (PCRs) to detect and prevent unauthorized boot-level tampering. [DONE]
 
 ### Expanded Algorithm Diversity
 While lattice-based cryptography is the current NIST standard, Maknoon maintains a roadmap for diverse primitive support.

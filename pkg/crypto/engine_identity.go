@@ -73,6 +73,14 @@ func (e *Engine) LoadPrivateKey(ectx *EngineContext, path string, passphrase []b
 	return e.Identities.LoadPrivateKey(path, passphrase, pin, agent)
 }
 
+func (e *Engine) LoadIdentity(ectx *EngineContext, name string, passphrase []byte, pin string, agent bool) (*Identity, error) {
+	ectx = e.context(ectx)
+	if err := e.enforce(ectx, CapIdentity); err != nil {
+		return nil, err
+	}
+	return e.Identities.LoadIdentity(name, passphrase, pin, agent)
+}
+
 func (e *Engine) ResolveKeyPath(ectx *EngineContext, path, envVar string) string {
 	return e.Identities.ResolveKeyPath(path, envVar)
 }

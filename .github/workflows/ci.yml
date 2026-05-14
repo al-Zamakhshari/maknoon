@@ -78,7 +78,13 @@ jobs:
           chmod +x scripts/smoke-api.sh
           ./scripts/smoke-api.sh
 
+      - name: Run TPM Hardening Smoke Test
+        run: |
+          chmod +x scripts/smoke-tpm.go.sh
+          ./scripts/smoke-tpm.go.sh
+
   docker:
+
     name: Registry Distribution (GHCR)
     needs: quality
     runs-on: ubuntu-latest
@@ -152,21 +158,6 @@ jobs:
           WITH_V: true
           DEFAULT_BUMP: patch
           DRY_RUN: true
-
-      - name: Sync GitHub Wiki
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        run: |
-          echo "Syncing Wiki..."
-          rm -rf wiki_repo
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git config --global url."https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/".insteadOf "https://github.com/"
-          git clone https://github.com/${{ github.repository }}.wiki.git wiki_repo
-          cp wiki/*.md wiki_repo/
-          cd wiki_repo
-          git add .
-          git commit -m "docs: automated sync from main [skip ci]" || echo "No wiki changes"
-          git push origin master || git git push origin main
 
       - name: Bump version and push tag
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'

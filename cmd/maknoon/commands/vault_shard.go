@@ -7,6 +7,64 @@ import (
 	"github.com/spf13/cobra"
 )
 
+func vaultInitInstitutionalCmd() *cobra.Command {
+	var threshold, shares int
+	var peers []string
+	cmd := &cobra.Command{
+		Use:   "init-institutional [name]",
+		Short: "Initialize a new institutional vault governed by a quorum of peers",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			p := GlobalContext.UI.GetPresenter()
+			name := args[0]
+
+			if len(peers) < threshold {
+				err := fmt.Errorf("number of authorized peers (%d) must be at least the threshold (%d)", len(peers), threshold)
+				p.RenderError(err)
+				return err
+			}
+
+			var pass []byte
+			var err error
+			if vaultPassphrase != "" {
+				pass = []byte(vaultPassphrase)
+			} else {
+				pass, _, err = getPassphrase("Enter NEW Vault Master Passphrase: ")
+				if err != nil {
+					p.RenderError(err)
+					return err
+				}
+				confirm, _, err := getPassphrase("Confirm NEW Vault Master Passphrase: ")
+				if err != nil {
+					p.RenderError(err)
+					return err
+				}
+				if string(pass) != string(confirm) {
+					crypto.SafeClear(confirm)
+					err := fmt.Errorf("passphrases do not match")
+					p.RenderError(err)
+					return err
+				}
+				crypto.SafeClear(confirm)
+			}
+			defer crypto.SafeClear(pass)
+
+			res, err := GlobalContext.Engine.VaultInitInstitutional(nil, name, threshold, shares, peers, pass)
+			if err != nil {
+				p.RenderError(err)
+				return err
+			}
+
+			p.RenderSuccess(res)
+			return nil
+		},
+	}
+	cmd.Flags().IntVarP(&threshold, "threshold", "m", 2, "Minimum number of approvals required to unlock")
+	cmd.Flags().IntVarP(&shares, "shares", "n", 3, "Total number of shards to generate")
+	cmd.Flags().StringSliceVarP(&peers, "peers", "p", []string{}, "Authorized PeerIDs or aliases for quorum (comma-separated)")
+	return cmd
+}
+
 func vaultSplitCmd() *cobra.Command {
 	var threshold, shares int
 	cmd := &cobra.Command{

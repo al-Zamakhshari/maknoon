@@ -275,6 +275,7 @@ type NetStatusResult struct {
 // AuditEntry represents a recorded cryptographic operation.
 type AuditEntry struct {
 	Timestamp string         `json:"timestamp"`
+	PrevHash  string         `json:"prev_hash,omitempty"`
 	Action    string         `json:"action"`
 	Metadata  map[string]any `json:"metadata"`
 	Status    string         `json:"status"`

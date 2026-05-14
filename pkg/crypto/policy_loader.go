@@ -161,7 +161,15 @@ func (p *FilePolicy) IsAgent() bool {
 }
 
 func (p *FilePolicy) AllowAutoQuorum(id, action string) bool {
-	// File policies default to false for safety unless we add a specific rule type later
+	for _, r := range p.Rules {
+		if r.Type == "quorum" && r.Action == action {
+			for _, v := range r.Values {
+				if v == "auto-approve" || v == "auto-approve:"+id {
+					return true
+				}
+			}
+		}
+	}
 	return false
 }
 

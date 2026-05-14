@@ -154,8 +154,9 @@ Maknoon is fully self-describing. AI Agents can query the current tool registry 
 
 ```bash
 # Generate human-readable tool documentation from schema
-maknoon schema --format markdown > wiki/Tool-Reference.md
+maknoon schema --format markdown > docs/integration/TOOL-REFERENCE.md
 ```
+
 
 | Tool Name | Mission Role | Description |
 | :--- | :--- | :--- |
