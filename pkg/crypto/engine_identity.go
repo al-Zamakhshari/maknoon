@@ -1,7 +1,5 @@
 package crypto
 
-import ()
-
 func (e *Engine) IdentityActive(ectx *EngineContext) ([]string, error) {
 	ectx = e.context(ectx)
 	if err := e.enforce(ectx, CapIdentity); err != nil {

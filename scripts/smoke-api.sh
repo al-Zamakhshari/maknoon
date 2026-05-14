@@ -22,7 +22,7 @@ echo "🚀 Starting Maknoon PQC API Server (BadgerDB)..."
 API_PID=$!
 
 # Cleanup on exit
-trap "kill $API_PID || true; rm -rf $CERT_DIR api.log" EXIT
+trap "kill $API_PID 2>/dev/null || true; rm -rf $CERT_DIR api.log" EXIT
 
 # Wait for server to be ready
 echo "⏳ Waiting for API to become active..."
@@ -144,7 +144,12 @@ else
     exit 1
 fi
 
-# 9. Verify Badger Storage Persistence (via CLI)
+# 9. Stop server before CLI verification (Avoid Badger lock)
+echo "🛑 Stopping API Server for local persistence check..."
+kill $API_PID || true
+wait $API_PID 2>/dev/null || true
+
+# 10. Verify Badger Storage Persistence (via CLI)
 echo "📂 Verifying Badger Persistence via CLI..."
 # We need to point to the same vaults directory. 
 # By default it's ~/.maknoon/vaults. 

@@ -14,6 +14,11 @@ trap 'rm -rf "$TEST_DIR"' EXIT
 
 echo "🏗️  Starting TPM Hardening Smoke Test..."
 
+if [ ! -f "./maknoon" ]; then
+    echo "❌ CRITICAL: ./maknoon binary not found in current directory."
+    exit 1
+fi
+
 # 1. Identity Generation with TPM flag (should fail without device, but verify flag path)
 echo "🛡️  Scenario 1: Identity Generation with TPM flag"
 set +e
@@ -24,7 +29,7 @@ set -e
 if grep -i "TPM seal" tpm_gen.log > /dev/null; then
     echo "✅ TPM Path verified: Engine attempted to use TPM."
 else
-    echo "❌ TPM Path FAILED: Engine did not attempt to use TPM (or binary missing)."
+    echo "❌ TPM Path FAILED: Engine did not attempt to use TPM (or binary failed to run)."
     cat tpm_gen.log
     exit 1
 fi
@@ -36,10 +41,11 @@ set +e
 ./maknoon keygen -o pcr-identity --tpm --tpm-pcrs 7,14 --tpm-device /dev/nonexistent --trace > pcr_trace.log 2>&1
 set -e
 
-if grep -q "pcrs=\[7 14\]" pcr_trace.log || grep -q "pcrs=\"\[7 14\]\"" pcr_trace.log || grep -q "pcrs=\[7,14\]" pcr_trace.log; then
+# Match patterns: pcrs=[7 14] or pcrs="[7 14]" or pcrs=[7,14]
+if grep -qE "pcrs=\"?\[7[ ,]14\]\"?" pcr_trace.log; then
     echo "✅ PCR Parsing verified."
 else
-    echo "❌ PCR Parsing FAILED."
+    echo "❌ PCR Parsing FAILED (Trace output mismatch)."
     cat pcr_trace.log
     exit 1
 fi

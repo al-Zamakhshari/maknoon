@@ -97,11 +97,29 @@ mcp_call_node() {
 
 echo "🏗️  Provisioning PQC DMZ..."
 docker compose -p maknoon -f deploy/docker/mcp.yml up -d --build
-sleep 15
+
+# Wait for containers to be healthy/running
+echo "⏳ Waiting for PQC nodes to initialize..."
+for i in {1..20}; do
+    if [ "$(docker compose -p maknoon -f deploy/docker/mcp.yml ps --filter "status=running" -q | wc -l)" -eq 2 ]; then
+        echo "✅ Nodes are running."
+        break
+    fi
+    [ $i -eq 20 ] && echo "❌ Nodes failed to start." && exit 1
+    sleep 2
+done
 
 echo "🔑 Provisioning PQC Identities..."
-docker compose -p maknoon -f deploy/docker/mcp.yml exec -T sender /usr/local/bin/maknoon keygen -o default --no-password --profile nist
-docker compose -p maknoon -f deploy/docker/mcp.yml exec -T receiver /usr/local/bin/maknoon keygen -o default --no-password --profile nist
+# Retry logic for exec in case nodes are still starting internal services
+for i in {1..5}; do
+    if docker compose -p maknoon -f deploy/docker/mcp.yml exec -T sender /usr/local/bin/maknoon keygen -o default --no-password --profile nist > /dev/null 2>&1; then
+        docker compose -p maknoon -f deploy/docker/mcp.yml exec -T receiver /usr/local/bin/maknoon keygen -o default --no-password --profile nist > /dev/null 2>&1
+        echo "✅ Identities provisioned."
+        break
+    fi
+    [ $i -eq 5 ] && echo "❌ Identity provisioning failed." && exit 1
+    sleep 2
+done
 
 echo "📡 Establishing MCP sessions..."
 S_DATA=$(get_session 8080)
