@@ -4,9 +4,7 @@
 package crypto
 
 import (
-	"crypto/rand"
 	"fmt"
-	"io"
 
 	"github.com/google/go-tpm/tpm2"
 	"github.com/google/go-tpm/tpm2/transport/linuxtpm"
