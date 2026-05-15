@@ -640,7 +640,11 @@ func InitEngine() error {
 	}
 
 	// Setup Audit Logging
-	var auditLogger crypto.AuditLogger = &crypto.ConsoleAuditLogger{Writer: GlobalContext.UI.Stderr}
+	var auditWriter io.Writer = GlobalContext.UI.Stderr
+	if viper.GetBool("json") || viper.GetBool("quiet") {
+		auditWriter = io.Discard
+	}
+	var auditLogger crypto.AuditLogger = &crypto.ConsoleAuditLogger{Writer: auditWriter}
 	if !viper.GetBool("verbose") && core.Config.Audit.Enabled {
 		// Use file logger if enabled and not in verbose console mode
 		l, err := crypto.NewJSONFileLogger(core.Config.Audit.LogFile)
