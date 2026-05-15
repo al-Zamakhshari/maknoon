@@ -2,6 +2,7 @@ package commands
 
 import (
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"io"
 	"os"
@@ -20,7 +21,13 @@ func registerNetworkTools(s *server.MCPServer, engine crypto.MaknoonEngine) {
 		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			args := getArgs(request)
 			remote := getString(args, "remote", "")
-			portVal := args["port"]
+
+			// Handle 'local_proxy_port' first (matching struct tag), then fallback to 'port', then default to 0 (dynamic)
+			portVal := args["local_proxy_port"]
+			if portVal == nil {
+				portVal = args["port"]
+			}
+
 			var port int
 			switch v := portVal.(type) {
 			case float64:
@@ -30,7 +37,7 @@ func registerNetworkTools(s *server.MCPServer, engine crypto.MaknoonEngine) {
 			case int:
 				port = v
 			default:
-				port = 1080
+				port = 0 // Default to dynamic port to prevent agent collisions
 			}
 
 			useYamux, _ := args["use_yamux"].(bool)
@@ -112,27 +119,62 @@ func registerNetworkTools(s *server.MCPServer, engine crypto.MaknoonEngine) {
 			var name string
 			if text != "" {
 				r = strings.NewReader(text)
-				name = "text-message"
+				name = filepath.Join(os.TempDir(), "text-message")
 			} else {
 				f, _ := os.Open(path)
 				r = f
 				name = filepath.Base(path)
 			}
+			to := getString(args, "to", "")
+			var pubKey []byte
+			if pk := getString(args, "public_key", ""); pk != "" {
+				if b, err := hex.DecodeString(pk); err == nil {
+					pubKey = b
+				}
+			}
+
+			if len(pubKey) == 0 && to != "" {
+				peerID := to
+				// Extract PeerID if multiaddr
+				if strings.Contains(to, "/p2p/") {
+					parts := strings.Split(to, "/p2p/")
+					peerID = parts[len(parts)-1]
+				}
+				res, err := engine.ResolvePublicKey(&crypto.EngineContext{Context: ctx}, peerID, false)
+				if err == nil && res != nil {
+					pubKey = res
+				}
+			}
+
 			opts := crypto.P2PSendOptions{
 				Passphrase: []byte(viper.GetString("passphrase")),
+				PublicKey:  pubKey,
 				P2PMode:    true,
-				To:         getString(args, "to", ""),
+				To:         to,
 			}
 			if s, ok := args["stealth"].(bool); ok {
 				opts.Stealth = crypto.BoolPtr(s)
 			}
 
 			identity := getString(args, "identity", "")
-			code, _, err := engine.P2PSend(&crypto.EngineContext{Context: ctx}, identity, name, r, opts)
+			code, statusChan, err := engine.P2PSend(&crypto.EngineContext{Context: ctx}, identity, name, r, opts)
 			if err != nil {
 				return crypto.FormatMCPError(err, "p2p_send")
 			}
-			res := crypto.P2PResult{Status: "established", PeerID: code}
+
+			var lastStatus crypto.P2PStatus
+			for s := range statusChan {
+				lastStatus = s
+				if s.Phase == "success" || s.Phase == "error" {
+					break
+				}
+			}
+
+			if lastStatus.Error != nil {
+				return crypto.FormatMCPError(lastStatus.Error, "p2p_send")
+			}
+
+			res := crypto.P2PResult{Status: "success", PeerID: code}
 			outData, _ := json.Marshal(res)
 			return mcp.NewToolResultText(string(outData)), nil
 		})
@@ -154,24 +196,25 @@ func registerNetworkTools(s *server.MCPServer, engine crypto.MaknoonEngine) {
 
 			identity := getString(args, "identity", "")
 
-			statusChan, err := engine.P2PReceive(&crypto.EngineContext{Context: ctx}, identity, peerID, opts)
+			// Use context.Background() because the transfer runs asynchronously and the tool ctx will be cancelled upon return
+			bgCtx := context.Background()
+			statusChan, err := engine.P2PReceive(&crypto.EngineContext{Context: bgCtx}, identity, peerID, opts)
 			if err != nil {
 				return crypto.FormatMCPError(err, "p2p_receive")
 			}
 
-			var lastStatus crypto.P2PStatus
-			for s := range statusChan {
-				lastStatus = s
-				if s.Phase == "success" || s.Phase == "error" {
-					break
-				}
+			// Wait for the initial "connecting" state to get the addresses
+			s := <-statusChan
+			if s.Phase == "error" {
+				return crypto.FormatMCPError(s.Error, "p2p_receive")
 			}
 
-			if lastStatus.Error != nil {
-				return crypto.FormatMCPError(lastStatus.Error, "p2p_receive")
+			// Return immediately so the orchestrator can use the addresses. The transfer runs in the background.
+			res := crypto.P2PResult{
+				Status: "listening",
+				PeerID: s.Code,
+				Addrs:  s.Addrs,
 			}
-
-			res := crypto.P2PResult{Status: "success", Path: lastStatus.FileName}
 			outData, _ := json.Marshal(res)
 			return mcp.NewToolResultText(string(outData)), nil
 		})

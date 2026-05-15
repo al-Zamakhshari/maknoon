@@ -196,9 +196,19 @@ func (e *Engine) TunnelListen(ectx *EngineContext, addr string, mode string, ide
 			Status: "listening",
 			PeerID: h.ID().String(),
 		}
+		var canonical string
 		for _, a := range h.Addrs() {
-			res.Addrs = append(res.Addrs, fmt.Sprintf("%s/p2p/%s", a, h.ID()))
+			ma := fmt.Sprintf("%s/p2p/%s", a, h.ID())
+			res.Addrs = append(res.Addrs, ma)
+			// Prefer loopback IPv4 as the canonical local test address if none is set yet
+			if canonical == "" && strings.Contains(ma, "/127.0.0.1/") && strings.Contains(ma, "/tcp/") {
+				canonical = ma
+			}
 		}
+		if canonical == "" && len(res.Addrs) > 0 {
+			canonical = res.Addrs[0]
+		}
+		res.CanonicalAddr = canonical
 		return res, nil
 	}
 
@@ -318,7 +328,7 @@ func (e *Engine) P2PSend(ectx *EngineContext, identityName string, inputName str
 		idName = "default"
 	}
 
-	id, err := e.Identities.LoadIdentity(idName, nil, "", false)
+	id, err := e.Identities.LoadIdentity(idName, opts.Passphrase, "", false)
 	if err != nil {
 		return "", nil, err
 	}
@@ -355,7 +365,7 @@ func (e *Engine) P2PReceive(ectx *EngineContext, identityName string, code strin
 		idName = "default"
 	}
 
-	id, err := e.Identities.LoadIdentity(idName, nil, "", false)
+	id, err := e.Identities.LoadIdentity(idName, opts.Passphrase, "", false)
 	if err != nil {
 		return nil, err
 	}

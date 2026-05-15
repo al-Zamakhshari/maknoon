@@ -57,13 +57,14 @@ func (e *Engine) runLibp2pReceive(ectx *EngineContext, h host.Host, opts P2PRece
 
 		status <- P2PStatus{Phase: "decrypting"}
 
-		finalOut := opts.OutputDir
-		if finalOut == "" {
-			finalOut = strings.TrimSuffix(filepath.Base(header.Name), ".makn")
+		finalOut := strings.TrimSuffix(filepath.Base(header.Name), ".makn")
+		if opts.OutputDir != "" {
+			finalOut = filepath.Join(opts.OutputDir, finalOut)
 		}
 
 		_, err = e.P2PUnpackMessage(ectx, tmpFile, nil, finalOut, opts)
 		if err != nil {
+			e.Logger.Error("P2PUnpackMessage failed", "err", err)
 			status <- P2PStatus{Phase: "error", Error: err}
 			return
 		}

@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+
+	"github.com/spf13/viper"
 )
 
 const (
@@ -48,6 +50,13 @@ func (e *Engine) P2PUnpackMessage(ectx *EngineContext, r io.Reader, w io.Writer,
 		LocalPrivateKey: opts.PrivateKey,
 		Stealth:         opts.Stealth,
 		Concurrency:     IntPtr(e.Config.AgentLimits.MaxWorkers),
+	}
+
+	if len(unprotectOpts.Passphrase) == 0 {
+		// Fallback to engine-level passphrase if not provided explicitly in tool args
+		if env := viper.GetString("passphrase"); env != "" {
+			unprotectOpts.Passphrase = []byte(env)
+		}
 	}
 
 	return e.Unprotect(ectx, r, w, outputDir, unprotectOpts)

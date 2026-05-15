@@ -237,7 +237,7 @@ func (e *Engine) unprotectInternal(ectx *EngineContext, r io.Reader, w io.Writer
 	go func() {
 		defer pw.Close()
 		var dErr error
-		if magic == MagicHeaderAsym || (opts.LocalPrivateKey != nil || opts.PublicKey != nil) {
+		if magic == MagicHeaderAsym {
 			_, _, dErr = DecryptStreamWithPrivateKeyAndEvents(fullIn, pw, opts.LocalPrivateKey, opts.PublicKey, concurrency, stealth, ectx)
 		} else {
 			_, _, dErr = DecryptStreamWithEvents(fullIn, pw, opts.Passphrase, concurrency, stealth, ectx)
