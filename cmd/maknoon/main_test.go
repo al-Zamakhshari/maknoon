@@ -830,7 +830,13 @@ func TestIntegrationVerbose(t *testing.T) {
 
 	// Run with --verbose and check for audit output
 	viper.Set("verbose", true)
-	defer viper.Set("verbose", false)
+	viper.Set("json", false) // Ensure JSON mode is disabled
+	viper.Set("quiet", false)
+	defer func() {
+		viper.Set("verbose", false)
+		viper.Set("json", false)
+		viper.Set("quiet", false)
+	}()
 
 	output := runRootCmd("encrypt", inputFile, "-o", encryptedFile, "-s", "pass", "--verbose")
 

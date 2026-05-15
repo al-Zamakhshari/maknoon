@@ -75,7 +75,7 @@ for j in {1..3}; do
 
     # Start the P2P listeners on Guardians in the background and redirect output to a log file
     docker compose -f $COMPOSE_FILE exec -d guardian-$j sh -c \
-        "maknoon tunnel listen --p2p --address 0.0.0.0:4000 --identity g$j --policy /home/maknoon/policy.json > /home/maknoon/maknoon.log 2>&1"
+        "MAKNOON_DEFAULT_IDENTITY=g$j maknoon tunnel listen --p2p --address 0.0.0.0:4000 --identity g$j --policy /home/maknoon/policy.json"
 done
 rm policy.json initiator.kem.pub initiator.sig.pub
 
@@ -96,10 +96,7 @@ else
     echo "❌ FAILED: Automated recovery failed."
     echo "Initiator Output: $GET_OUT"
     # Dump logs from Guardians
-    for j in {1..3}; do
-        echo "--- Guardian-$j Logs ---"
-        docker compose -f $COMPOSE_FILE exec guardian-$j cat /home/maknoon/maknoon.log || echo "Could not read logs"
-    done
+    docker compose -f $COMPOSE_FILE logs
     exit 1
 fi
 
