@@ -115,7 +115,7 @@ func registerVaultTools(s *server.MCPServer, engine crypto.MaknoonEngine) {
 			return mcp.NewToolResultText(string(outData)), nil
 		})
 
-	s.AddTool(mcp.NewTool("vault_blob_set", mcp.WithDescription("Store arbitrary encrypted data (memory) for the agent")),
+	s.AddTool(mcp.NewTool("vault_set_blob", mcp.WithDescription("Store arbitrary encrypted data (memory) for the agent")),
 		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			args := getArgs(request)
 			entry := &crypto.VaultEntry{
@@ -131,14 +131,14 @@ func registerVaultTools(s *server.MCPServer, engine crypto.MaknoonEngine) {
 			err := engine.VaultSet(nil, vault, entry, pass, "", overwrite)
 			crypto.SafeClear(entry.Blob)
 			if err != nil {
-				return crypto.FormatMCPError(err, "vault_blob_set")
+				return crypto.FormatMCPError(err, "vault_set_blob")
 			}
 			res := crypto.VaultResult{Status: "success", Service: entry.Service, Vault: vault}
 			outData, _ := json.Marshal(res)
 			return mcp.NewToolResultText(string(outData)), nil
 		})
 
-	s.AddTool(mcp.NewTool("vault_blob_get", mcp.WithDescription("Retrieve arbitrary encrypted data (memory) for the agent")),
+	s.AddTool(mcp.NewTool("vault_get_blob", mcp.WithDescription("Retrieve arbitrary encrypted data (memory) for the agent")),
 		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			args := getArgs(request)
 			key := getString(args, "key", "")
@@ -147,7 +147,7 @@ func registerVaultTools(s *server.MCPServer, engine crypto.MaknoonEngine) {
 
 			entry, err := engine.VaultGet(nil, vault, key, pass, "")
 			if err != nil {
-				return crypto.FormatMCPError(err, "vault_blob_get")
+				return crypto.FormatMCPError(err, "vault_get_blob")
 			}
 			if entry == nil {
 				return mcp.NewToolResultError(`{"error":"not found"}`), nil
