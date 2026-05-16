@@ -97,7 +97,10 @@ func (e *Engine) Unwrap(ectx *EngineContext, wrappedKey []byte, privKey []byte) 
 func (e *Engine) RegisterProfile(ectx *EngineContext, name string, dp *DynamicProfile) error {
 	ectx = e.context(ectx)
 	if !ectx.Policy.AllowConfigModification() {
-		return &ErrPolicyViolation{Reason: "profile registration is prohibited under the active policy"}
+		return &ErrPolicyViolation{
+			Reason:     "profile registration is prohibited under the active policy",
+			PolicyName: ectx.Policy.Name(),
+		}
 	}
 	if e.Config.Profiles == nil {
 		e.Config.Profiles = make(map[string]*DynamicProfile)
@@ -110,7 +113,10 @@ func (e *Engine) RegisterProfile(ectx *EngineContext, name string, dp *DynamicPr
 func (e *Engine) RemoveProfile(ectx *EngineContext, name string) error {
 	ectx = e.context(ectx)
 	if !ectx.Policy.AllowConfigModification() {
-		return &ErrPolicyViolation{Reason: "profile removal is prohibited under the active policy"}
+		return &ErrPolicyViolation{
+			Reason:     "profile removal is prohibited under the active policy",
+			PolicyName: ectx.Policy.Name(),
+		}
 	}
 	if _, ok := e.Config.Profiles[name]; !ok {
 		return fmt.Errorf("profile '%s' not found", name)

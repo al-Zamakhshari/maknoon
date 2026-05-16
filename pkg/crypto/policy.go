@@ -130,13 +130,17 @@ func (p *AgentPolicy) ValidateWormholeURL(u string, allowed []string) error {
 		}
 	}
 	return &ErrPolicyViolation{
-		Reason: fmt.Sprintf("unauthorized network endpoint '%s' is prohibited in agent mode", u),
+		Reason:     fmt.Sprintf("unauthorized network endpoint '%s' is prohibited in agent mode", u),
+		PolicyName: p.Name(),
 	}
 }
 
 func (p *AgentPolicy) ValidateTunnel(insecure bool) error {
 	if insecure {
-		return &ErrPolicyViolation{Reason: "unverified/insecure tunnels are prohibited in agent mode"}
+		return &ErrPolicyViolation{
+			Reason:     "unverified/insecure tunnels are prohibited in agent mode",
+			PolicyName: p.Name(),
+		}
 	}
 	return nil
 }
@@ -330,11 +334,11 @@ func (p *CompositePolicy) IsAgent() bool {
 
 func (p *CompositePolicy) AllowAutoQuorum(id, action string) bool {
 	for _, sub := range p.Policies {
-		if !sub.AllowAutoQuorum(id, action) {
-			return false
+		if sub.AllowAutoQuorum(id, action) {
+			return true
 		}
 	}
-	return true
+	return false
 }
 
 func (p *CompositePolicy) QuorumRequirement(action string) (int, []string) {
@@ -372,14 +376,20 @@ func (p *FIPSPolicy) ValidateWormholeURL(u string, a []string) error { return ni
 
 func (p *FIPSPolicy) ValidateTunnel(insecure bool) error {
 	if insecure {
-		return &ErrPolicyViolation{Reason: "FIPS-140 compliance prohibits unverified/insecure tunnels"}
+		return &ErrPolicyViolation{
+			Reason:     "FIPS-140 compliance prohibits unverified/insecure tunnels",
+			PolicyName: p.Name(),
+		}
 	}
 	return nil
 }
 
 func (p *FIPSPolicy) ValidateProfile(id byte) error {
 	if id != 1 {
-		return &ErrPolicyViolation{Reason: fmt.Sprintf("FIPS-140 compliance mandates Profile 1 (NIST); profile %d is prohibited", id)}
+		return &ErrPolicyViolation{
+			Reason:     fmt.Sprintf("FIPS-140 compliance mandates Profile 1 (NIST); profile %d is prohibited", id),
+			PolicyName: p.Name(),
+		}
 	}
 	return nil
 }
@@ -393,7 +403,10 @@ func (p *FIPSPolicy) ClampProfileGeneration(t, m uint32, th uint8) (uint32, uint
 
 func (p *FIPSPolicy) ValidateProfileResource(m, t uint32, th uint8, l AgentLimitsConfig) error {
 	if t < 3 || m < 64*1024 {
-		return &ErrPolicyViolation{Reason: "FIPS-140 compliance prohibits sub-standard KDF parameters"}
+		return &ErrPolicyViolation{
+			Reason:     "FIPS-140 compliance prohibits sub-standard KDF parameters",
+			PolicyName: p.Name(),
+		}
 	}
 	return nil
 }

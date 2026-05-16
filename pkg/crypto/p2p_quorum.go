@@ -88,8 +88,11 @@ func (e *Engine) RegisterQuorumHandler(h host.Host) {
 
 		req, err := DecodeQuorumRequest(stream)
 		if err != nil {
+			e.Logger.Warn("Quorum handler failed to decode request", "err", err)
 			return
 		}
+
+		e.Logger.Debug("Processing quorum request", "requester", req.Requester, "action", req.Action)
 
 		ectx := e.context(nil)
 		resp := QuorumResponse{
@@ -106,16 +109,18 @@ func (e *Engine) RegisterQuorumHandler(h host.Host) {
 			sigPub = record.SIGPubKey
 		} else {
 			// Fallback: Check if they are in our local contacts
-			if c, err2 := e.Contacts.GetByPeerID(req.Requester); err2 == nil {
-				sigPub = c.SIGPubKey
+			if err := e.ensureContacts(); err == nil {
+				if c, err2 := e.Contacts.GetByPeerID(req.Requester); err2 == nil {
+					sigPub = c.SIGPubKey
+				}
 			}
 		}
 
 		if len(sigPub) > 0 {
 			sigData := []byte(fmt.Sprintf("%s:%s:%s:%d", req.Action, req.Resource, req.Requester, req.Timestamp))
-			valid, _ := e.Verify(ectx, sigData, req.Signature, sigPub)
+			valid, err := e.Verify(ectx, sigData, req.Signature, sigPub)
 			if !valid {
-				e.Logger.Warn("Quorum request signature invalid", "requester", req.Requester, "action", req.Action)
+				e.Logger.Warn("Quorum request signature invalid", "requester", req.Requester, "action", req.Action, "err", err)
 				resp.Reason = "Forensic failure: invalid request signature"
 				EncodeQuorumResponse(stream, resp)
 				return
@@ -131,7 +136,7 @@ func (e *Engine) RegisterQuorumHandler(h host.Host) {
 		e.Logger.Info("Processing quorum request", "action", req.Action, "resource", req.Resource, "requester", req.Requester)
 		switch req.Action {
 		case ActionVaultUnlock:
-			shardPattern := fmt.Sprintf("%s.shard_*.maknf", req.Resource)
+			shardPattern := fmt.Sprintf("%s.shard_*.maknf", filepath.Base(req.Resource))
 			matches, _ := filepath.Glob(filepath.Join(e.Config.Paths.VaultsDir, shardPattern))
 			if len(matches) == 0 {
 				e.Logger.Warn("Quorum request: no shards found", "pattern", shardPattern, "dir", e.Config.Paths.VaultsDir)
@@ -232,6 +237,7 @@ func (e *Engine) QuorumRequest(ectx *EngineContext, identityName string, targets
 			defer wg.Done()
 			stream, err := e.connectToPeer(ectx, h, target, P2PQuorumProtocol)
 			if err != nil {
+				e.Logger.Warn("QuorumRequest failed to connect to peer", "target", target, "err", err)
 				return
 			}
 			defer stream.Close()

@@ -38,15 +38,27 @@ type MaknoonError interface {
 
 // ErrPolicyViolation occurs when a restricted sandbox policy is breached.
 type ErrPolicyViolation struct {
-	Reason string
-	Path   string
+	Reason     string
+	Path       string
+	Capability string
+	PolicyName string
 }
 
 func (e *ErrPolicyViolation) Error() string {
-	if e.Path != "" {
-		return fmt.Sprintf("security policy violation: %s at '%s'", e.Reason, e.Path)
+	msg := "security policy violation"
+	if e.PolicyName != "" {
+		msg = fmt.Sprintf("security policy '%s' violation", e.PolicyName)
 	}
-	return fmt.Sprintf("security policy violation: %s", e.Reason)
+	if e.Capability != "" {
+		msg = fmt.Sprintf("%s: capability '%s' is prohibited", msg, e.Capability)
+	} else if e.Reason != "" {
+		msg = fmt.Sprintf("%s: %s", msg, e.Reason)
+	}
+
+	if e.Path != "" {
+		msg = fmt.Sprintf("%s at '%s'", msg, e.Path)
+	}
+	return msg
 }
 
 func (e *ErrPolicyViolation) IsSecurityViolation() bool { return true }

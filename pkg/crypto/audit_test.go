@@ -2,7 +2,11 @@ package crypto
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -37,8 +41,8 @@ func TestAuditEngineDecorator(t *testing.T) {
 
 	mockLogger := &MockAuditLogger{}
 	ae := &AuditEngine{
-		Engine: core,
-		Logger: mockLogger,
+		BaseEngine: BaseEngine{Engine: core},
+		Logger:     mockLogger,
 	}
 
 	t.Run("ProtectLogging", func(t *testing.T) {
@@ -68,8 +72,7 @@ func TestAuditEngineDecorator(t *testing.T) {
 	})
 
 	t.Run("JSONFileLogger", func(t *testing.T) {
-		tmpLog := "test_audit_perm.log"
-		defer os.Remove(tmpLog)
+		tmpLog := filepath.Join(t.TempDir(), "test_audit_perm.log")
 
 		logger, err := NewJSONFileLogger(tmpLog)
 		if err != nil {
@@ -78,6 +81,7 @@ func TestAuditEngineDecorator(t *testing.T) {
 
 		ae.Logger = logger
 		ae.VaultGet(nil, "test.vault", "myservice", []byte("pass"), "")
+		ae.VaultList(nil, "test.vault", []byte("pass"))
 		logger.Close()
 
 		data, err := os.ReadFile(tmpLog)
@@ -85,8 +89,26 @@ func TestAuditEngineDecorator(t *testing.T) {
 			t.Fatalf("failed to read log: %v", err)
 		}
 
-		if !bytes.Contains(data, []byte("\"action\":\"vault_get\"")) {
-			t.Errorf("log doesn't contain vault_get action")
+		lines := bytes.Split(bytes.TrimSpace(data), []byte("\n"))
+		if len(lines) < 2 {
+			t.Fatalf("expected at least 2 log lines, got %d", len(lines))
+		}
+
+		var entry1, entry2 AuditEntry
+		json.Unmarshal(lines[0], &entry1)
+		json.Unmarshal(lines[1], &entry2)
+
+		if entry2.PrevHash == "" {
+			t.Errorf("second entry has empty PrevHash")
+		}
+
+		// Calculate expected hash of first entry
+		h := sha256.New()
+		h.Write(lines[0])
+		expectedHash := hex.EncodeToString(h.Sum(nil))
+
+		if entry2.PrevHash != expectedHash {
+			t.Errorf("hash mismatch: expected %s, got %s", expectedHash, entry2.PrevHash)
 		}
 	})
 }

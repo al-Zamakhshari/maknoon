@@ -19,8 +19,8 @@ fail_trap() {
                 p_flag="-p $project_name"
             fi
             docker compose $p_flag -f "$compose_file" logs --tail 200
-            echo "🧹 Tearing down failed mission infrastructure..."
-            docker compose $p_flag -f "$compose_file" down
+            echo "🧹 Tearing down failed mission infrastructure (DISABLED FOR DEBUGGING)..."
+            # docker compose $p_flag -f "$compose_file" down
         fi
         exit $exit_code
     fi
@@ -36,6 +36,17 @@ generate_test_certs() {
         chmod 644 "$dir/server.key" "$dir/server.crt"
     fi
 }
+
+# setup_mission_logs prepares a shared directory for container logs
+setup_mission_logs() {
+    local dir="mission_logs"
+    mkdir -p "$dir"
+    chmod 777 "$dir"
+    # Clean up old logs from previous runs
+    rm -f "$dir"/*.log
+    echo "📂 Mission logs directory prepared: $PWD/$dir"
+}
+
 # wait_for_port waits for a specific port to be open in a container
 wait_for_port() {
     local container=$1

@@ -41,4 +41,27 @@ func TestTypedErrors(t *testing.T) {
 			t.Fatal("failed to assert wrapped ErrCrypto")
 		}
 	})
+
+	t.Run("PolicyViolationVerbose", func(t *testing.T) {
+		err := &ErrPolicyViolation{
+			PolicyName: "restricted-agent",
+			Capability: "identity",
+		}
+		expected := "security policy 'restricted-agent' violation: capability 'identity' is prohibited"
+		if err.Error() != expected {
+			t.Errorf("expected '%s', got '%s'", expected, err.Error())
+		}
+	})
+
+	t.Run("PolicyViolationWithPath", func(t *testing.T) {
+		err := &ErrPolicyViolation{
+			PolicyName: "file-policy",
+			Reason:     "access denied",
+			Path:       "/etc/passwd",
+		}
+		expected := "security policy 'file-policy' violation: access denied at '/etc/passwd'"
+		if err.Error() != expected {
+			t.Errorf("expected '%s', got '%s'", expected, err.Error())
+		}
+	})
 }

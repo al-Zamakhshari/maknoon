@@ -30,8 +30,8 @@ func TestAuditExport(t *testing.T) {
 	defer logger.Close()
 
 	ae := &AuditEngine{
-		Engine: core,
-		Logger: logger,
+		BaseEngine: BaseEngine{Engine: core},
+		Logger:     logger,
 	}
 
 	ctx := context.Background()

@@ -474,6 +474,11 @@ func ResetGlobalContext() {
 
 // InitEngine initializes the GlobalContext's Engine with the appropriate policy and audit logging.
 func InitEngine() error {
+	// Emit heartbeat for observability
+	fmt.Fprintf(os.Stderr, "🚀 Maknoon Engine Starting (Agent=%v, JSON=%v)\n",
+		viper.GetString("agent_mode") == "1",
+		viper.GetBool("json"))
+
 	// Enable memguard crash protection (wipe on interrupt)
 	memguard.CatchInterrupt()
 
@@ -684,8 +689,8 @@ func InitEngine() error {
 	}
 
 	GlobalContext.Engine = &crypto.AuditEngine{
-		Engine: core,
-		Logger: auditLogger,
+		BaseEngine: crypto.BaseEngine{Engine: core},
+		Logger:     auditLogger,
 	}
 
 	return nil

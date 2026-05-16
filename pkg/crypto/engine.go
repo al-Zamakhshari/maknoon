@@ -8,6 +8,8 @@ import (
 	"sync"
 )
 
+var _ MaknoonEngine = (*Engine)(nil)
+
 // Engine is the central stateful service for Maknoon operations.
 type Engine struct {
 	Policy     SecurityPolicy
@@ -34,7 +36,10 @@ func (e *Engine) GetConfig() *Config        { return e.Config }
 func (e *Engine) UpdateConfig(ectx *EngineContext, newConf *Config) error {
 	ectx = e.context(ectx)
 	if !ectx.Policy.AllowConfigModification() {
-		return &ErrPolicyViolation{Reason: "configuration modification is prohibited under the active policy"}
+		return &ErrPolicyViolation{
+			Reason:     "configuration modification is prohibited under the active policy",
+			PolicyName: ectx.Policy.Name(),
+		}
 	}
 
 	// Phase 6.3: Threshold-bound Policy Enforcement
@@ -44,7 +49,10 @@ func (e *Engine) UpdateConfig(ectx *EngineContext, newConf *Config) error {
 			peers = e.Config.Governance.AdminPeers
 		}
 		if len(peers) == 0 {
-			return &ErrPolicyViolation{Reason: "administrative quorum required but no authorized peers configured"}
+			return &ErrPolicyViolation{
+				Reason:     "administrative quorum required but no authorized peers configured",
+				PolicyName: ectx.Policy.Name(),
+			}
 		}
 
 		e.Logger.Info("Administrative quorum required for config update", "threshold", threshold, "peers", len(peers))
@@ -65,7 +73,8 @@ func (e *Engine) UpdateConfig(ectx *EngineContext, newConf *Config) error {
 
 		if approvals < threshold {
 			return &ErrPolicyViolation{
-				Reason: fmt.Sprintf("administrative quorum failed: received %d approvals, required %d", approvals, threshold),
+				Reason:     fmt.Sprintf("administrative quorum failed: received %d approvals, required %d", approvals, threshold),
+				PolicyName: ectx.Policy.Name(),
 			}
 		}
 		e.Logger.Info("Administrative quorum achieved", "approvals", approvals)
@@ -137,7 +146,10 @@ func (e *Engine) context(ectx *EngineContext) *EngineContext {
 
 func (e *Engine) enforce(ectx *EngineContext, cap Capability) error {
 	if !ectx.Policy.HasCapability(cap) {
-		return &ErrPolicyViolation{Reason: fmt.Sprintf("capability '%s' is prohibited under the active policy", cap)}
+		return &ErrPolicyViolation{
+			Capability: string(cap),
+			PolicyName: ectx.Policy.Name(),
+		}
 	}
 	return nil
 }

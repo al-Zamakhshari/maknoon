@@ -66,7 +66,11 @@ func (p *FilePolicy) ValidatePath(path string) error {
 				match, _ := regexp.MatchString(pattern, path)
 				if match {
 					if r.Action == "deny" {
-						return &ErrPolicyViolation{Reason: "path access explicitly denied by policy", Path: path}
+						return &ErrPolicyViolation{
+							Reason:     "path access explicitly denied by policy",
+							Path:       path,
+							PolicyName: p.PolicyName,
+						}
 					}
 				}
 			}
@@ -82,7 +86,10 @@ func (p *FilePolicy) ValidateWormholeURL(u string, allowed []string) error {
 				match, _ := regexp.MatchString(pattern, u)
 				if match {
 					if r.Action == "deny" {
-						return &ErrPolicyViolation{Reason: "URL access explicitly denied by policy"}
+						return &ErrPolicyViolation{
+							Reason:     "URL access explicitly denied by policy",
+							PolicyName: p.PolicyName,
+						}
 					}
 				}
 			}
@@ -94,7 +101,10 @@ func (p *FilePolicy) ValidateWormholeURL(u string, allowed []string) error {
 func (p *FilePolicy) ValidateTunnel(insecure bool) error {
 	if insecure {
 		// File policies default to prohibiting insecure tunnels for safety
-		return &ErrPolicyViolation{Reason: "unverified/insecure tunnels are prohibited by file policy"}
+		return &ErrPolicyViolation{
+			Reason:     "unverified/insecure tunnels are prohibited by file policy",
+			PolicyName: p.PolicyName,
+		}
 	}
 	return nil
 }

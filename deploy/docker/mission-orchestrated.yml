@@ -9,6 +9,8 @@ services:
     command: sleep 3600
     networks:
       - orchestrated-net
+    volumes:
+      - ../../mission_logs:/home/maknoon/logs
 
   # 3 Guardian nodes holding shards
   guardian-1:
@@ -21,6 +23,8 @@ services:
     command: sleep 3600
     networks:
       - orchestrated-net
+    volumes:
+      - ../../mission_logs:/home/maknoon/logs
 
   guardian-2:
     build:
@@ -32,6 +36,8 @@ services:
     command: sleep 3600
     networks:
       - orchestrated-net
+    volumes:
+      - ../../mission_logs:/home/maknoon/logs
 
   guardian-3:
     build:
@@ -43,6 +49,8 @@ services:
     command: sleep 3600
     networks:
       - orchestrated-net
+    volumes:
+      - ../../mission_logs:/home/maknoon/logs
 
 networks:
   orchestrated-net:

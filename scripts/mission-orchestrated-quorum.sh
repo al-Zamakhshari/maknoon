@@ -7,6 +7,7 @@ set -e
 source "$(dirname "$0")/common.sh"
 COMPOSE_FILE="deploy/docker/mission-orchestrated.yml"
 
+setup_mission_logs
 trap 'fail_trap "Orchestrated Quorum" "$COMPOSE_FILE"' EXIT
 
 echo "🏗️  Provisioning Orchestrated Quorum Mesh..."
@@ -45,15 +46,15 @@ SHARD3=$(echo "$INIT_RES" | jq -r '.shares[2]')
 echo "📤 Distributing shards and auto-approval policies..."
 
 # Pre-extract initiator's public keys to host for distribution
-docker compose -f $COMPOSE_FILE cp initiator:/home/maknoon/.maknoon/keys/default.kem.pub ./initiator.kem.pub
-docker compose -f $COMPOSE_FILE cp initiator:/home/maknoon/.maknoon/keys/default.sig.pub ./initiator.sig.pub
+docker compose -f $COMPOSE_FILE cp initiator:/home/maknoon/.maknoon/keys/default.kem.pub initiator.kem.pub
+docker compose -f $COMPOSE_FILE cp initiator:/home/maknoon/.maknoon/keys/default.sig.pub initiator.sig.pub
 
 cat > policy.json <<EOF
 {
   "name": "auto-approval",
   "rules": [
     { "type": "quorum", "action": "vault_unlock", "values": ["auto-approve:$INITIATOR_ID"] },
-    { "type": "capability", "action": "allow", "values": ["p2p", "audit"] }
+    { "type": "capability", "action": "allow", "values": ["p2p", "audit", "identity", "crypto"] }
   ]
 }
 EOF
@@ -65,7 +66,7 @@ for j in {1..3}; do
     docker compose -f $COMPOSE_FILE cp initiator.sig.pub guardian-$j:/home/maknoon/initiator.sig.pub
 
     docker compose -f $COMPOSE_FILE exec guardian-$j mkdir -p /home/maknoon/.maknoon/vaults
-    docker compose -f $COMPOSE_FILE exec guardian-$j sh -c "echo '${!SHARD_VAR}' > /home/maknoon/.maknoon/vaults/mission-vault.shard_0.maknf"
+    docker compose -f $COMPOSE_FILE exec guardian-$j sh -c "echo '${!SHARD_VAR}' > /home/maknoon/.maknoon/vaults/mission-vault.vault.shard_0.maknf"
 
     # Add Initiator to Guardian's contacts for signature verification
     docker compose -f $COMPOSE_FILE exec guardian-$j maknoon contact add initiator \
@@ -75,7 +76,7 @@ for j in {1..3}; do
 
     # Start the P2P listeners on Guardians in the background and redirect output to a log file
     docker compose -f $COMPOSE_FILE exec -d guardian-$j sh -c \
-        "MAKNOON_DEFAULT_IDENTITY=g$j maknoon tunnel listen --p2p --address 0.0.0.0:4000 --identity g$j --policy /home/maknoon/policy.json"
+        "maknoon tunnel listen --p2p --address :4000 --identity g$j --policy /home/maknoon/policy.json > /home/maknoon/logs/guardian-$j.log 2>&1"
 done
 rm policy.json initiator.kem.pub initiator.sig.pub
 
@@ -96,9 +97,13 @@ else
     echo "❌ FAILED: Automated recovery failed."
     echo "Initiator Output: $GET_OUT"
     # Dump logs from Guardians
+    for j in {1..3}; do
+        echo "--- Guardian-$j Logs ---"
+        cat mission_logs/guardian-$j.log || echo "Could not read logs"
+    done
     docker compose -f $COMPOSE_FILE logs
     exit 1
 fi
 
 echo "🧹 Tearing down Orchestrated Mission..."
-docker compose -f $COMPOSE_FILE down
+#docker compose -f $COMPOSE_FILE down

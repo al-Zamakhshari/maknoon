@@ -116,6 +116,8 @@ func (l *JSONFileLogger) Close() error {
 	return nil
 }
 
+var _ MaknoonEngine = (*AuditEngine)(nil)
+
 // ConsoleAuditLogger prints audit events to a writer (e.g., Stderr).
 type ConsoleAuditLogger struct {
 	Writer io.Writer
@@ -136,7 +138,7 @@ func (l *ConsoleAuditLogger) Close() error { return nil }
 
 // AuditEngine wraps the core Engine to provide transparent auditing.
 type AuditEngine struct {
-	Engine *Engine
+	BaseEngine
 	Logger AuditLogger
 }
 
@@ -295,7 +297,17 @@ func (e *AuditEngine) VaultDelete(ectx *EngineContext, name string) error {
 }
 
 func (e *AuditEngine) VaultList(ectx *EngineContext, vaultPath string, passphrase []byte) ([]VaultListEntry, error) {
-	return e.Engine.VaultList(ectx, vaultPath, passphrase)
+	start := time.Now()
+	res, err := e.Engine.VaultList(ectx, vaultPath, passphrase)
+	duration := time.Since(start)
+
+	e.Logger.LogEvent("vault_list", map[string]any{
+		"vault":       e.sanitizePath(vaultPath),
+		"duration_ms": duration.Milliseconds(),
+		"count":       len(res),
+	}, err)
+
+	return res, err
 }
 
 func (e *AuditEngine) VaultSplit(ectx *EngineContext, vaultPath string, threshold, shares int, passphrase string) ([]string, error) {
@@ -529,11 +541,11 @@ func (e *AuditEngine) SecureDelete(path string) error {
 }
 
 func (e *AuditEngine) GetPolicy() SecurityPolicy {
-	return e.Engine.Policy
+	return e.Engine.GetPolicy()
 }
 
 func (e *AuditEngine) GetConfig() *Config {
-	return e.Engine.Config
+	return e.Engine.GetConfig()
 }
 
 func (e *AuditEngine) UpdateConfig(ectx *EngineContext, newConf *Config) error {
@@ -777,7 +789,7 @@ func (e *AuditEngine) VaultRotate(ectx *EngineContext, vaultPath string, oldPass
 	duration := time.Since(start)
 
 	e.Logger.LogEvent("vault_rotate", map[string]any{
-		"vault":       vaultPath,
+		"vault":       e.sanitizePath(vaultPath),
 		"duration_ms": duration.Milliseconds(),
 	}, err)
 
@@ -795,6 +807,29 @@ func (e *AuditEngine) VaultCheckShards(ectx *EngineContext, mnemonics []string) 
 	}, err)
 
 	return res, err
+}
+
+func (e *AuditEngine) QuorumRequest(ectx *EngineContext, identityName string, targets []string, action QuorumAction, resource, purpose string) ([]QuorumResponse, error) {
+	start := time.Now()
+	resps, err := e.Engine.QuorumRequest(ectx, identityName, targets, action, resource, purpose)
+	duration := time.Since(start)
+
+	approved := 0
+	for _, r := range resps {
+		if r.Approved {
+			approved++
+		}
+	}
+
+	e.Logger.LogEvent("quorum_request_init", map[string]any{
+		"action":       action,
+		"resource":     resource,
+		"target_count": len(targets),
+		"approved":     approved,
+		"duration_ms":  duration.Milliseconds(),
+	}, err)
+
+	return resps, err
 }
 
 func (e *AuditEngine) Close() error {

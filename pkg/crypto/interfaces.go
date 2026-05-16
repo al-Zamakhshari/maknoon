@@ -6,6 +6,7 @@ import (
 	"log/slog"
 
 	"github.com/al-Zamakhshari/maknoon/pkg/tunnel"
+	"github.com/libp2p/go-libp2p/core/host"
 )
 
 // EngineEvent is the base interface for all telemetry events.
@@ -114,6 +115,8 @@ type P2PService interface {
 	P2PReceive(ectx *EngineContext, identityName string, code string, opts P2PReceiveOptions) (<-chan P2PStatus, error)
 	ChatStart(ectx *EngineContext, identityName string, target string) (*P2PChatSession, error)
 	ValidateWormholeURL(ectx *EngineContext, u string) error
+	RegisterQuorumHandler(h host.Host)
+	QuorumRequest(ectx *EngineContext, identityName string, targets []string, action QuorumAction, resource, purpose string) ([]QuorumResponse, error)
 }
 
 // Utils provides secure generation helpers.
