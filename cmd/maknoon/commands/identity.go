@@ -116,31 +116,33 @@ func identityReconstructCmd() *cobra.Command {
 
 func identityPublishCmd() *cobra.Command {
 	var useDNS bool
-	var useDesec bool
 	var useNostr bool
+	var useDesec bool
+	var useBEP44 bool
 	var useLocal bool
 	var desecToken string
 	var multiaddrs []string
 
 	cmd := &cobra.Command{
 		Use:   "publish [handle]",
-		Short: "Anchor your active identity to a global registry (Nostr/DNS/dPKI)",
+		Short: "Anchor your active identity to a global registry (libp2p DHT / Nostr / DNS)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			p := GlobalContext.UI.GetPresenter()
 			handle := args[0]
 			if !strings.HasPrefix(handle, "@") {
-				return fmt.Errorf("handle must start with @ (e.g., @alice.com or @nostr:<pubkey>)")
+				return fmt.Errorf("handle must start with @ (e.g., @alice)")
 			}
 
 			opts := crypto.IdentityPublishOptions{
 				Name:       identityName,
 				Passphrase: passphrase,
 				Local:      useLocal,
+				Nostr:      useNostr,
 				DNS:        useDNS,
 				Desec:      useDesec,
 				DesecToken: desecToken,
-				Nostr:      useNostr,
+				BEP44:      useBEP44,
 				Multiaddrs: multiaddrs,
 			}
 
@@ -162,8 +164,9 @@ func identityPublishCmd() *cobra.Command {
 	}
 
 	cmd.Flags().BoolVar(&useDNS, "dns", false, "Generate a DNS TXT record for decentralized discovery")
+	cmd.Flags().BoolVar(&useNostr, "nostr", false, "Publish to Nostr relays (secp256k1 key derived ephemerally)")
 	cmd.Flags().BoolVar(&useDesec, "desec", false, "Automatically publish to deSEC.io (requires --desec-token or DESEC_TOKEN)")
-	cmd.Flags().BoolVar(&useNostr, "nostr", false, "Automatically publish to Nostr relays (Default)")
+	cmd.Flags().BoolVar(&useBEP44, "bep44", false, "Publish peer-discovery mini-record to BitTorrent BEP-44 DHT (requires peer online for resolution)")
 	cmd.Flags().BoolVar(&useLocal, "local", false, "Pin identity to local contacts only")
 	cmd.Flags().StringVar(&desecToken, "desec-token", "", "deSEC.io API token")
 	cmd.Flags().StringSliceVar(&multiaddrs, "multiaddr", nil, "Explicit Multiaddrs to broadcast (overrides auto-capture)")
@@ -273,9 +276,6 @@ func identityInfoCmd() *cobra.Command {
 				}
 				if res.SIGPub != "" {
 					msg += fmt.Sprintf("  - SIG Public Key: %s\n", res.SIGPub)
-				}
-				if res.NostrPub != "" {
-					msg += fmt.Sprintf("  - Nostr Public Key: %s\n", res.NostrPub)
 				}
 				if res.PeerID != "" {
 					msg += fmt.Sprintf("  - Peer ID:        %s\n", res.PeerID)

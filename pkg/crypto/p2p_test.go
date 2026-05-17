@@ -97,7 +97,7 @@ func TestP2PTextTransfer(t *testing.T) {
 }
 
 func TestP2PAsymmetric(t *testing.T) {
-	kemPub, kemPriv, _, _, _, _, _ := GeneratePQKeyPair(0)
+	kemPub, kemPriv, _, _, _ := GeneratePQKeyPair(0)
 	payload := "asymmetric-p2p-payload"
 	var encrypted bytes.Buffer
 

@@ -6,13 +6,12 @@ import (
 )
 
 func TestPublicKeyDerivation(t *testing.T) {
-	kpub, kpriv, spub, spriv, _, npriv, err := GeneratePQKeyPair(1)
+	kpub, kpriv, spub, spriv, err := GeneratePQKeyPair(1)
 	if err != nil {
 		t.Fatalf("GeneratePQKeyPair failed: %v", err)
 	}
 	defer SafeClear(kpriv)
 	defer SafeClear(spriv)
-	defer SafeClear(npriv)
 
 	t.Run("DeriveKEMPublic", func(t *testing.T) {
 		derived, err := DeriveKEMPublic(kpriv)

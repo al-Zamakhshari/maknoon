@@ -42,7 +42,7 @@ fi
 # Rotate to new passphrase
 echo "🔄 Rotating vault passphrase..."
 unset MAKNOON_PASSPHRASE
-./maknoon vault rotate --vault "safety-test" --passphrase "test-pass" --new-passphrase "new-secret"
+./maknoon vault rotate --vault "safety-test" --passphrase "old-secret" --new-passphrase "new-secret"
 
 # Verify we can get it with NEW passphrase
 echo "🔍 Verifying with NEW passphrase..."

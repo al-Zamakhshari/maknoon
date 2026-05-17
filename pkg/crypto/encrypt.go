@@ -80,19 +80,38 @@ func EncryptStreamWithEvents(r io.Reader, w io.Writer, password []byte, flags by
 
 // EncryptStreamNoHeader performs symmetric encryption without writing a magic header (Stealth mode core).
 func EncryptStreamNoHeader(r io.Reader, w io.Writer, password []byte, flags byte, concurrency int, profileID byte, ectx *EngineContext) error {
-	profile, _ := GetProfile(profileID, nil)
+	profile, err := GetProfile(profileID, nil)
+	if err != nil {
+		return &ErrFormat{Reason: fmt.Sprintf("failed to get profile %d: %v", profileID, err)}
+	}
+
 	salt := make([]byte, profile.SaltSize())
-	_, _ = io.ReadFull(rand.Reader, salt)
+	if _, err := io.ReadFull(rand.Reader, salt); err != nil {
+		return &ErrIO{Path: "stream", Reason: fmt.Sprintf("failed to read random salt: %v", err)}
+	}
+
 	key := profile.DeriveKey(password, salt)
 	defer SafeClear(key)
 
-	aead, _ := profile.NewAEAD(key)
-	baseNonce := make([]byte, aead.NonceSize())
-	_, _ = io.ReadFull(rand.Reader, baseNonce)
+	aead, err := profile.NewAEAD(key)
+	if err != nil {
+		return &ErrCrypto{Reason: fmt.Sprintf("failed to setup AEAD: %v", err)}
+	}
 
-	_, _ = w.Write([]byte{profile.ID(), flags})
-	_, _ = w.Write(salt)
-	_, _ = w.Write(baseNonce)
+	baseNonce := make([]byte, aead.NonceSize())
+	if _, err := io.ReadFull(rand.Reader, baseNonce); err != nil {
+		return &ErrIO{Path: "stream", Reason: fmt.Sprintf("failed to read base nonce: %v", err)}
+	}
+
+	if _, err := w.Write([]byte{profile.ID(), flags}); err != nil {
+		return &ErrIO{Path: "output", Reason: err.Error()}
+	}
+	if _, err := w.Write(salt); err != nil {
+		return &ErrIO{Path: "output", Reason: err.Error()}
+	}
+	if _, err := w.Write(baseNonce); err != nil {
+		return &ErrIO{Path: "output", Reason: err.Error()}
+	}
 
 	return streamEncrypt(r, w, aead, baseNonce, concurrency, ectx)
 }

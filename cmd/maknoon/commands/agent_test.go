@@ -9,6 +9,9 @@ import (
 )
 
 func TestAgentIdentityFlow(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
 	tmpDir := t.TempDir()
 	oldHome := os.Getenv("HOME")
 	os.Setenv("HOME", tmpDir)
@@ -132,8 +135,8 @@ func TestAgentShardingFlow(t *testing.T) {
 	}
 
 	// 4. Verify recovered keys exist
-	recoveredPub := filepath.Join(tmpDir, ".maknoon", "keys", "recovered_id.nostr.pub")
-	if _, err := os.Stat(recoveredPub); err != nil {
-		t.Errorf("Recovered Nostr pubkey missing: %v", err)
+	recoveredKEMPub := filepath.Join(tmpDir, ".maknoon", "keys", "recovered_id.kem.pub")
+	if _, err := os.Stat(recoveredKEMPub); err != nil {
+		t.Errorf("Recovered KEM pubkey missing: %v", err)
 	}
 }

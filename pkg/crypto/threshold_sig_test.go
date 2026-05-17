@@ -17,10 +17,10 @@ func TestThresholdSignatures(t *testing.T) {
 	data := []byte("Mission Critical Data: Alpha-9-Zeta")
 
 	// 1. Generate 3 Identities
-	// kemPub, kemPriv, sigPub, sigPriv, nostrPub, nostrPriv, err
-	_, _, kp1_sigPub, kp1_sigPriv, _, _, _ := GeneratePQKeyPair(1)
-	_, _, kp2_sigPub, kp2_sigPriv, _, _, _ := GeneratePQKeyPair(1)
-	_, _, kp3_sigPub, kp3_sigPriv, _, _, _ := GeneratePQKeyPair(1)
+
+	_, _, kp1_sigPub, kp1_sigPriv, _ := GeneratePQKeyPair(1)
+	_, _, kp2_sigPub, kp2_sigPriv, _ := GeneratePQKeyPair(1)
+	_, _, kp3_sigPub, kp3_sigPriv, _ := GeneratePQKeyPair(1)
 
 	// 2. Sign with each
 	sig1, err := e.Sign(ectx, data, kp1_sigPriv)
@@ -82,7 +82,7 @@ func TestThresholdSignatures(t *testing.T) {
 	})
 
 	t.Run("Unauthorized_Key", func(t *testing.T) {
-		_, _, kp4_sigPub, _, _, _, _ := GeneratePQKeyPair(1)
+		_, _, kp4_sigPub, _, _ := GeneratePQKeyPair(1)
 		valid, _ := e.VerifyThreshold(ectx, data, agg, [][]byte{kp4_sigPub}, 1)
 		if valid {
 			t.Error("Expected verification with unauthorized key to fail")

@@ -49,7 +49,7 @@ func TestErasureIntegrity(t *testing.T) {
 	tmpDir := t.TempDir()
 	data := []byte("Forensic Integrity Test: Every block is signed.")
 
-	_, _, sigPub, sigPriv, _, _, _ := GeneratePQKeyPair(1)
+	_, _, sigPub, sigPriv, _ := GeneratePQKeyPair(1)
 
 	// 1. Fragment with signing
 	fOpts := FragmentOptions{

@@ -23,13 +23,11 @@ func (e *Engine) TunnelStart(ectx *EngineContext, opts tunnel.TunnelOptions) (tu
 		return tunnel.TunnelStatus{}, err
 	}
 
-	e.tunnelMu.Lock()
-	defer e.tunnelMu.Unlock()
+	e.tunnel.mu.Lock()
+	defer e.tunnel.mu.Unlock()
 
-	if e.activeTunnel != nil {
-		if at, ok := e.activeTunnel.(*tunnel.TunnelStatus); ok && at.Active {
-			return *at, fmt.Errorf("a tunnel is already active")
-		}
+	if e.tunnel.active != nil && e.tunnel.active.Active {
+		return *e.tunnel.active, fmt.Errorf("a tunnel is already active")
 	}
 
 	targetAddr := opts.P2PAddr
@@ -115,41 +113,36 @@ func (e *Engine) TunnelStart(ectx *EngineContext, opts tunnel.TunnelOptions) (tu
 		status.HealthyLanes = opts.DataLanes + opts.ParityLanes
 	}
 
-	e.activeTunnel = status
-	e.gateway = gw
+	e.tunnel.active = status
+	e.tunnel.gateway = gw
 
 	return *status, nil
 }
 
 func (e *Engine) TunnelStop(ectx *EngineContext) error {
-	e.tunnelMu.Lock()
-	defer e.tunnelMu.Unlock()
+	e.tunnel.mu.Lock()
+	defer e.tunnel.mu.Unlock()
 
-	if e.gateway != nil {
-		if gw, ok := e.gateway.(*tunnel.TunnelGateway); ok {
-			gw.Stop()
-			if gw.Session != nil {
-				gw.Session.Close()
-			}
+	if e.tunnel.gateway != nil {
+		e.tunnel.gateway.Stop()
+		if e.tunnel.gateway.Session != nil {
+			e.tunnel.gateway.Session.Close()
 		}
 	}
 
-	e.activeTunnel = nil
-	e.gateway = nil
+	e.tunnel.active = nil
+	e.tunnel.gateway = nil
 	return nil
 }
 
 func (e *Engine) TunnelStatus(ectx *EngineContext) (tunnel.TunnelStatus, error) {
-	e.tunnelMu.RLock()
-	defer e.tunnelMu.RUnlock()
+	e.tunnel.mu.RLock()
+	defer e.tunnel.mu.RUnlock()
 
-	if e.activeTunnel == nil {
+	if e.tunnel.active == nil {
 		return tunnel.TunnelStatus{Active: false}, nil
 	}
-	if at, ok := e.activeTunnel.(*tunnel.TunnelStatus); ok {
-		return *at, nil
-	}
-	return tunnel.TunnelStatus{Active: false}, nil
+	return *e.tunnel.active, nil
 }
 
 func (e *Engine) TunnelListen(ectx *EngineContext, addr string, mode string, identity string) (NetworkResult, error) {
@@ -189,7 +182,7 @@ func (e *Engine) TunnelListen(ectx *EngineContext, addr string, mode string, ide
 		e.RegisterQuorumHandler(h)
 		ln := tunnel.StartLibp2pListener(h)
 		srv := tunnel.NewTunnelServer(ln)
-		e.gatewayServer = srv
+		e.tunnel.server = srv
 		go srv.Start()
 
 		res := NetworkResult{
@@ -219,7 +212,7 @@ func (e *Engine) TunnelListen(ectx *EngineContext, addr string, mode string, ide
 	}
 
 	srv := tunnel.NewTunnelServer(ln)
-	e.gatewayServer = srv
+	e.tunnel.server = srv
 	go srv.Start()
 
 	actualAddr := ln.Addr().String()
@@ -263,7 +256,7 @@ func (e *Engine) ChatStart(ectx *EngineContext, identityName string, target stri
 			if err := e.ensureContacts(); err != nil {
 				return nil, err
 			}
-			c, err := e.Contacts.Get(target)
+			c, err := e.contacts.manager.Get(target)
 			if err != nil {
 				return nil, err
 			}

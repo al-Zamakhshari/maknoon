@@ -14,8 +14,8 @@ To safeguard against potential mathematical weaknesses in nascent lattice-based 
 | Component | Primitive | Security Basis |
 | :--- | :--- | :--- |
 | **Classical Layer** | X25519 (Curve25519) | Discrete Logarithm Problem (Elliptic Curve). |
-| **Quantum Layer** | ML-KEM-1024 (Kyber) | Module Learning With Errors (Lattice-Based). |
-| **Integration** | HPKE (RFC 9180) | Standardized hybrid encapsulation framework. |
+| **Quantum Layer** | ML-KEM-768 (Kyber) | Module Learning With Errors (Lattice-Based). |
+| **Integration** | X-Wing hybrid KEM (IETF draft-connolly-cfrg-xwing-kem) via Go's `crypto/hpke` | Combines X25519 and ML-KEM-768 shared secrets with domain separation. |
 
 ---
 

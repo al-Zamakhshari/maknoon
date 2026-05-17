@@ -36,8 +36,8 @@ LONDON_PEER_ID=$($L_EXEC maknoon identity info london-id --json | jq -r '.peer_i
 LONDON_MA="/ip4/172.30.0.10/tcp/4001/p2p/$LONDON_PEER_ID"
 echo "📍 London Multiaddr: $LONDON_MA"
 
-# Publish the identity
-$L_EXEC maknoon identity publish @london-gateway --name london-id --multiaddr "$LONDON_MA"
+# Publish identity to Nostr relay (this mission tests Nostr-based discovery)
+$L_EXEC maknoon identity publish @london-gateway --name london-id --nostr --multiaddr "$LONDON_MA"
 sleep 5
 
 # Extract the Nostr Hex

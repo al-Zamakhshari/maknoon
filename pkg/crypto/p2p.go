@@ -52,6 +52,7 @@ type P2PReceiveOptions struct {
 	From         string // Comma-separated list of PeerIDs/@petnames for fragments
 	IsFragmented bool
 	FragmentName string // The base name of the file being retrieved via fragments
+	SenderSIGPub []byte // Sender's ML-DSA public key for fragment integrity verification
 }
 
 // P2PSend initiates a libp2p P2P transfer.

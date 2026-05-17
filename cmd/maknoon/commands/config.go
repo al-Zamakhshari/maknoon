@@ -51,9 +51,6 @@ func configListCmd() *cobra.Command {
 				fmt.Printf("    Max Time:         %d\n", conf.AgentLimits.MaxTime)
 				fmt.Printf("    Max Workers:      %d\n", conf.AgentLimits.MaxWorkers)
 				fmt.Printf("    Allowed URLs:     %s\n", strings.Join(conf.AgentLimits.AllowedURLs, ", "))
-				fmt.Println("  Nostr:")
-				fmt.Printf("    Relays:           %s\n", strings.Join(conf.Nostr.Relays, ", "))
-				fmt.Printf("    Publish Metadata: %v\n", conf.Nostr.PublishMetadata)
 				fmt.Println("  Audit:")
 				fmt.Printf("    Enabled:          %v\n", conf.Audit.Enabled)
 				fmt.Printf("    Log File:         %s\n", conf.Audit.LogFile)
@@ -81,8 +78,6 @@ Keys:
   agent.max_memory   - Agent RAM limit (KB)
   agent.max_workers  - Agent CPU worker limit
   agent.allowed_urls - Comma-separated list of permitted servers
-  nostr.relays       - Comma-separated list of Nostr relays
-  nostr.metadata     - Toggle publishing Maknoon info in about field (true/false)
   audit.enabled      - Toggle forensic auditing (true/false)
   audit.logfile      - Path to structured JSON audit log
   paths.keys         - Custom keys directory
@@ -129,13 +124,6 @@ Keys:
 				for i := range conf.AgentLimits.AllowedURLs {
 					conf.AgentLimits.AllowedURLs[i] = strings.TrimSpace(conf.AgentLimits.AllowedURLs[i])
 				}
-			case "nostr.relays":
-				conf.Nostr.Relays = strings.Split(val, ",")
-				for i := range conf.Nostr.Relays {
-					conf.Nostr.Relays[i] = strings.TrimSpace(conf.Nostr.Relays[i])
-				}
-			case "nostr.metadata":
-				conf.Nostr.PublishMetadata = (val == "true")
 			case "audit.enabled":
 				conf.Audit.Enabled = (val == "true")
 			case "audit.logfile":

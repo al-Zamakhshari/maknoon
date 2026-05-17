@@ -31,15 +31,13 @@ func IsAgentMode() bool {
 	return viper.GetString("agent_mode") == "1"
 }
 
-// Identity represents a full PQC keypair (KEM + SIG) + DHT metadata.
+// Identity represents a full PQC keypair (KEM + SIG).
 type Identity struct {
-	Name      string
-	KEMPub    []byte
-	KEMPriv   SecretBytes
-	SIGPub    []byte
-	SIGPriv   SecretBytes
-	NostrPub  []byte
-	NostrPriv SecretBytes
+	Name    string
+	KEMPub  []byte
+	KEMPriv SecretBytes
+	SIGPub  []byte
+	SIGPriv SecretBytes
 }
 
 // IdentityManager handles local key storage and resolution.
@@ -116,7 +114,7 @@ func (m *IdentityManager) ResolveKeyPath(path, envVar string) string {
 }
 
 // SaveIdentity persists an identity's keys to disk, optionally encrypted.
-func (m *IdentityManager) SaveIdentity(basePath, baseName string, kemPub, kemPriv, sigPub, sigPriv, nostrPub, nostrPriv, passphrase []byte, profileID byte) error {
+func (m *IdentityManager) SaveIdentity(basePath, baseName string, kemPub, kemPriv, sigPub, sigPriv, passphrase []byte, profileID byte) error {
 	writeKey := func(path string, data []byte, isPrivate bool) error {
 		if len(data) == 0 {
 			return nil
@@ -148,11 +146,11 @@ func (m *IdentityManager) SaveIdentity(basePath, baseName string, kemPub, kemPri
 	if err := writeKey(basePath+".sig.pub", sigPub, false); err != nil {
 		return err
 	}
-	if err := writeKey(basePath+".nostr.key", nostrPriv, true); err != nil {
-		return err
-	}
-	if err := writeKey(basePath+".nostr.pub", nostrPub, false); err != nil {
-		return err
+	// Derive and persist the Nostr transport public key (secp256k1, no private key stored).
+	if nostrPriv, err := DeriveNostrKeypair(sigPriv); err == nil {
+		if nostrPubHex, err := nostrPrivKeyToHexPub(nostrPriv); err == nil {
+			_ = writeKey(basePath+".nostr.pub", []byte(nostrPubHex), false)
+		}
 	}
 	return nil
 }
@@ -170,7 +168,7 @@ func (m *IdentityManager) CreateIdentity(name string, passphrase []byte, pin str
 		return nil, err
 	}
 
-	kemPub, kemPriv, sigPub, sigPriv, nostrPub, nostrPriv, err := GeneratePQKeyPair(profileID)
+	kemPub, kemPriv, sigPub, sigPriv, err := GeneratePQKeyPair(profileID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate keypairs: %w", err)
 	}
@@ -178,7 +176,6 @@ func (m *IdentityManager) CreateIdentity(name string, passphrase []byte, pin str
 	defer func() {
 		SafeClear(kemPriv)
 		SafeClear(sigPriv)
-		SafeClear(nostrPriv)
 	}()
 
 	basePath, baseName, err := m.ResolveBaseKeyPath(name)
@@ -186,7 +183,7 @@ func (m *IdentityManager) CreateIdentity(name string, passphrase []byte, pin str
 		return nil, err
 	}
 
-	if err := m.SaveIdentity(basePath, baseName, kemPub, kemPriv, sigPub, sigPriv, nostrPub, nostrPriv, passphrase, profileID); err != nil {
+	if err := m.SaveIdentity(basePath, baseName, kemPub, kemPriv, sigPub, sigPriv, passphrase, profileID); err != nil {
 		return nil, err
 	}
 
@@ -235,8 +232,6 @@ func (m *IdentityManager) LoadIdentity(name string, passphrase []byte, pin strin
 	// Load Public Keys
 	id.KEMPub, _ = m.Store.ReadKey(basePath + ".kem.pub")
 	id.SIGPub, _ = m.Store.ReadKey(basePath + ".sig.pub")
-	id.NostrPub, _ = m.Store.ReadKey(basePath + ".nostr.pub")
-
 	// Load and Unlock KEM Private Key
 	id.KEMPriv, err = m.LoadPrivateKey(basePath+".kem.key", passphrase, pin, isStdin)
 	if err != nil {
@@ -247,11 +242,6 @@ func (m *IdentityManager) LoadIdentity(name string, passphrase []byte, pin strin
 	id.SIGPriv, err = m.LoadPrivateKey(basePath+".sig.key", passphrase, pin, isStdin)
 	if err != nil {
 		return nil, err
-	}
-
-	// Load and Unlock Nostr Private Key if exists
-	if m.Store.Exists(basePath + ".nostr.key") {
-		id.NostrPriv, _ = m.LoadPrivateKey(basePath+".nostr.key", passphrase, pin, isStdin)
 	}
 
 	return id, nil
@@ -324,29 +314,28 @@ func (m *IdentityManager) UnlockPrivateKeyWithFIDOOrPass(password []byte, pin st
 func (m *IdentityManager) ResolvePublicKey(input string, tofu bool) ([]byte, error) {
 	// 1. Handle Petnames (@handle)
 	if strings.HasPrefix(input, "@") {
-		if m.Contacts == nil {
-			return nil, fmt.Errorf("contact manager not initialized")
-		}
-		c, err := m.Contacts.Get(input)
-		if err == nil {
-			return c.KEMPubKey, nil
-		}
-		// 2. DHT/DNS Discovery
-		reg := NewIdentityRegistry(nil)
-		record, DiscoveryErr := reg.Resolve(context.Background(), input)
-		if DiscoveryErr == nil {
-			if tofu {
-				_ = m.Contacts.Add(&Contact{
-					Petname:   input,
-					KEMPubKey: record.KEMPubKey,
-					SIGPubKey: record.SIGPubKey,
-					AddedAt:   time.Now(),
-					Notes:     "Automatically added via discovery (TOFU)",
-				})
+		// Check local contacts first (skip if contacts not initialized).
+		if m.Contacts != nil {
+			if c, err := m.Contacts.Get(input); err == nil {
+				return c.KEMPubKey, nil
 			}
-			return record.KEMPubKey, nil
 		}
-		return nil, fmt.Errorf("petname resolution failed: %w (discovery error: %v)", err, DiscoveryErr)
+		// 2. DHT/DNS/Nostr Discovery
+		reg := NewIdentityRegistry(nil)
+		record, err := reg.Resolve(context.Background(), input)
+		if err != nil {
+			return nil, fmt.Errorf("identity not found: %w", err)
+		}
+		if tofu && m.Contacts != nil {
+			_ = m.Contacts.Add(&Contact{
+				Petname:   input,
+				KEMPubKey: record.KEMPubKey,
+				SIGPubKey: record.SIGPubKey,
+				AddedAt:   time.Now(),
+				Notes:     "Automatically added via discovery (TOFU)",
+			})
+		}
+		return record.KEMPubKey, nil
 	}
 
 	// 3. Handle Local Paths or Managed Keys
@@ -422,9 +411,8 @@ func (m *IdentityManager) GetIdentityInfo(name string) (*IdentityInfoResult, err
 		}
 	}
 	if b, err := os.ReadFile(basePath + ".nostr.pub"); err == nil {
-		res.NostrPub = hex.EncodeToString(b)
+		res.NostrPub = strings.TrimSpace(string(b))
 	}
-
 	return res, nil
 }
 
@@ -438,7 +426,7 @@ func (m *IdentityManager) RenameIdentity(oldName, newName string) error {
 		return err
 	}
 
-	suffixes := []string{".kem.key", ".kem.pub", ".sig.key", ".sig.pub", ".nostr.key", ".nostr.pub", ".fido2"}
+	suffixes := []string{".kem.key", ".kem.pub", ".sig.key", ".sig.pub", ".nostr.pub", ".fido2"}
 	for _, s := range suffixes {
 		_ = os.Rename(oldBase+s, newBase+s)
 	}
@@ -465,7 +453,6 @@ func EnsureMaknoonDirs() error {
 func (id *Identity) Wipe() {
 	SafeClear(id.KEMPriv)
 	SafeClear(id.SIGPriv)
-	SafeClear(id.NostrPriv)
 }
 
 // AsLibp2pKey converts the Maknoon signing key to a libp2p private key.

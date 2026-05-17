@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"os"
 	"strings"
 
 	"github.com/nbd-wtf/go-nostr"
@@ -110,18 +109,15 @@ func (r *NostrRegistry) Resolve(ctx context.Context, handle string) (*IdentityRe
 	for _, url := range r.Relays {
 		relay, err := nostr.RelayConnect(ctx, url)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "DEBUG: Failed to connect to relay %s: %v\n", url, err)
 			continue
 		}
 
 		events, err := relay.QuerySync(ctx, filter)
 		relay.Close()
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "DEBUG: Query failed on relay %s: %v\n", url, err)
 			continue
 		}
 		if len(events) == 0 {
-			fmt.Fprintf(os.Stderr, "DEBUG: No events found on relay %s for pubkey %s\n", url, pubkey)
 			continue
 		}
 

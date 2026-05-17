@@ -13,10 +13,12 @@ type IdentityPublishOptions struct {
 	Name       string   // Local identity name
 	Passphrase string   // Passphrase to unlock local identity
 	Local      bool     // Add to local contacts
+	LibP2P     bool     // Publish to libp2p DHT (default when no registry flag is set)
+	Nostr      bool     // Publish to Nostr relays
 	DNS        bool     // Publish to DNS (via DHT)
 	Desec      bool     // Publish to deSEC
 	DesecToken string   // deSEC API token
-	Nostr      bool     // Publish to Nostr
+	BEP44      bool     // Publish mini-record to BitTorrent BEP-44 DHT (opt-in peer discovery)
 	Multiaddrs []string // Optional Multiaddrs to broadcast
 }
 
@@ -53,7 +55,6 @@ func (m *IdentityManager) IdentityPublish(ctx context.Context, handle string, op
 			// Wait a bit for libp2p to detect addresses
 			time.Sleep(2 * time.Second)
 			record.Multiaddrs = sess.Multiaddrs()
-			fmt.Fprintf(os.Stderr, "DEBUG: Captured Multiaddrs: %v\n", record.Multiaddrs)
 			sess.Close()
 		}
 	}
@@ -92,14 +93,29 @@ func (m *IdentityManager) IdentityPublish(ctx context.Context, handle string, op
 		}
 	}
 
-	// Default to Nostr
-	if opts.Nostr || (!opts.DNS && !opts.Desec) {
-		nostrReg := NewNostrRegistry(m.Config)
-		if len(id.NostrPriv) == 0 {
-			return fmt.Errorf("nostr private key not found")
+	// Default to libp2p DHT when no specific registry is selected.
+	if opts.LibP2P || (!opts.DNS && !opts.Desec && !opts.BEP44 && !opts.Nostr && !opts.Local) {
+		libp2pReg := NewLibP2PDHTRegistry(m.Config)
+		if err := libp2pReg.Publish(ctx, record); err != nil {
+			return fmt.Errorf("libp2p DHT publish failed: %w", err)
 		}
-		if err := nostrReg.PublishWithKey(ctx, record, id.NostrPriv); err != nil {
-			return err
+	}
+
+	if opts.Nostr {
+		nostrPriv, err := DeriveNostrKeypair(id.SIGPriv)
+		if err != nil {
+			return fmt.Errorf("nostr key derivation failed: %w", err)
+		}
+		nostrReg := NewNostrRegistry(m.Config)
+		if err := nostrReg.PublishWithKey(ctx, record, nostrPriv); err != nil {
+			return fmt.Errorf("nostr publish failed: %w", err)
+		}
+	}
+
+	if opts.BEP44 {
+		bep44Reg := NewBEP44Registry(m.Config)
+		if err := bep44Reg.PublishWithSIGKey(ctx, record, id.SIGPriv); err != nil {
+			return fmt.Errorf("bep44 publish failed: %w", err)
 		}
 	}
 

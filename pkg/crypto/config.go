@@ -26,6 +26,8 @@ type Config struct {
 	Security           SecurityConfig             `json:"security" mapstructure:"security"`
 	Performance        PerformanceConfig          `json:"performance" mapstructure:"performance"`
 	AgentLimits        AgentLimitsConfig          `json:"agent_limits" mapstructure:"agent_limits"`
+	LibP2P             LibP2PRegistryConfig       `json:"libp2p" mapstructure:"libp2p"`
+	BEP44              BEP44Config                `json:"bep44" mapstructure:"bep44"`
 	Nostr              NostrConfig                `json:"nostr" mapstructure:"nostr"`
 	Tunnel             tunnel.TunnelConfig        `json:"tunnel" mapstructure:"tunnel"`
 	Paths              PathConfig                 `json:"paths" mapstructure:"paths"`
@@ -70,6 +72,11 @@ type PerformanceConfig struct {
 	DefaultProfile   byte `json:"default_profile" mapstructure:"default_profile"`
 }
 
+// BEP44Config holds BitTorrent BEP-44 DHT registry configuration.
+// The standard BitTorrent bootstrap nodes are used automatically; no configuration is required.
+type BEP44Config struct{}
+
+// NostrConfig holds Nostr relay registry configuration.
 type NostrConfig struct {
 	Relays          []string `json:"relays" mapstructure:"relays"`
 	BootstrapRelays []string `json:"bootstrap_relays" mapstructure:"bootstrap_relays"`
@@ -106,7 +113,7 @@ func DefaultConfig() *Config {
 	home := GetUserHomeDir()
 	return &Config{
 		DefaultIdentity:    "default",
-		IdentityRegistries: []string{"dns", "nostr"},
+		IdentityRegistries: []string{"libp2p", "nostr", "dns"},
 		Audit: AuditConfig{
 			Enabled: false,
 			LogFile: filepath.Join(home, MaknoonDir, "audit.log"),

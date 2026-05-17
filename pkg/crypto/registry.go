@@ -142,7 +142,7 @@ func NewIdentityRegistry(conf *Config) IdentityRegistry {
 	}
 	active := conf.IdentityRegistries
 	if len(active) == 0 {
-		active = []string{"dns", "nostr"} // Default fallback
+		active = []string{"libp2p", "nostr", "dns"} // Default fallback
 	}
 
 	mr := &MultiRegistry{}

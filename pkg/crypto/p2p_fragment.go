@@ -194,12 +194,6 @@ func (e *Engine) runLibp2pFragmentReceive(ectx *EngineContext, baseName string, 
 		finalOut = strings.TrimSuffix(filepath.Base(baseName), ".makn")
 	}
 
-	// Reassemble
-	// We need the signing key if we want to verify.
-	// For now, let's assume we use the identity's SIGPub.
-	var authorizedKey []byte
-	// TODO: Get authorizedKey from somewhere (e.g. sender's public key)
-
 	outF, err := os.Create(finalOut)
 	if err != nil {
 		status <- P2PStatus{Phase: "error", Error: err}
@@ -207,7 +201,7 @@ func (e *Engine) runLibp2pFragmentReceive(ectx *EngineContext, baseName string, 
 	}
 	defer outF.Close()
 
-	if err := ReassembleFragments(tmpDir, outF, authorizedKey); err != nil {
+	if err := ReassembleFragments(tmpDir, outF, opts.SenderSIGPub); err != nil {
 		status <- P2PStatus{Phase: "error", Error: err}
 		return
 	}
@@ -260,7 +254,7 @@ func (e *Engine) connectToPeer(ectx *EngineContext, h host.Host, target string, 
 	// Try resolving @petname
 	if strings.HasPrefix(target, "@") {
 		if err := e.ensureContacts(); err == nil {
-			if c, err2 := e.Contacts.Get(target); err2 == nil {
+			if c, err2 := e.contacts.manager.Get(target); err2 == nil {
 				target = c.PeerID
 			}
 		}

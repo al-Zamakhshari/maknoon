@@ -6,21 +6,21 @@ import (
 )
 
 func (e *Engine) ensureContacts() error {
-	e.contactsMu.Lock()
-	defer e.contactsMu.Unlock()
+	e.contacts.mu.Lock()
+	defer e.contacts.mu.Unlock()
 
-	if e.Contacts != nil {
+	if e.contacts.manager != nil {
 		return nil
 	}
 
-	store, err := e.Vaults.Open(e.contactsPath)
+	store, err := e.Vaults.Open(e.contacts.path)
 	if err != nil {
 		return fmt.Errorf("failed to open contacts store: %w", err)
 	}
 
-	e.Contacts = NewContactManager(store)
+	e.contacts.manager = NewContactManager(store)
 	if e.Identities != nil {
-		e.Identities.Contacts = e.Contacts
+		e.Identities.Contacts = e.contacts.manager
 	}
 
 	return nil
@@ -58,14 +58,14 @@ func (e *Engine) ContactAdd(ectx *EngineContext, petname, kemPub, sigPub, note s
 		Notes:     note,
 	}
 
-	return e.Contacts.Add(contact)
+	return e.contacts.manager.Add(contact)
 }
 
 func (e *Engine) ContactList(ectx *EngineContext) ([]*Contact, error) {
 	if err := e.ensureContacts(); err != nil {
 		return nil, err
 	}
-	return e.Contacts.List()
+	return e.contacts.manager.List()
 }
 
 func (e *Engine) ContactDelete(ectx *EngineContext, petname string) error {
@@ -76,5 +76,5 @@ func (e *Engine) ContactDelete(ectx *EngineContext, petname string) error {
 	if err := e.ensureContacts(); err != nil {
 		return err
 	}
-	return e.Contacts.Delete(petname)
+	return e.contacts.manager.Delete(petname)
 }

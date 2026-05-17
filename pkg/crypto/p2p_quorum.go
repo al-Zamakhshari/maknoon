@@ -110,7 +110,7 @@ func (e *Engine) RegisterQuorumHandler(h host.Host) {
 		} else {
 			// Fallback: Check if they are in our local contacts
 			if err := e.ensureContacts(); err == nil {
-				if c, err2 := e.Contacts.GetByPeerID(req.Requester); err2 == nil {
+				if c, err2 := e.contacts.manager.GetByPeerID(req.Requester); err2 == nil {
 					sigPub = c.SIGPubKey
 				}
 			}

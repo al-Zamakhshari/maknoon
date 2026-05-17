@@ -96,8 +96,8 @@ type IdentityInfoResult struct {
 	Name     string `json:"name"`
 	KEMPub   string `json:"kem_pub,omitempty"`
 	SIGPub   string `json:"sig_pub,omitempty"`
-	NostrPub string `json:"nostr_pub,omitempty"`
 	PeerID   string `json:"peer_id,omitempty"`
+	NostrPub string `json:"nostr_pub,omitempty"`
 }
 
 // VaultResult is the standard JSON output for vault operations.
