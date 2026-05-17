@@ -314,29 +314,28 @@ func (m *IdentityManager) UnlockPrivateKeyWithFIDOOrPass(password []byte, pin st
 func (m *IdentityManager) ResolvePublicKey(input string, tofu bool) ([]byte, error) {
 	// 1. Handle Petnames (@handle)
 	if strings.HasPrefix(input, "@") {
-		if m.Contacts == nil {
-			return nil, fmt.Errorf("contact manager not initialized")
-		}
-		c, err := m.Contacts.Get(input)
-		if err == nil {
-			return c.KEMPubKey, nil
-		}
-		// 2. DHT/DNS Discovery
-		reg := NewIdentityRegistry(nil)
-		record, DiscoveryErr := reg.Resolve(context.Background(), input)
-		if DiscoveryErr == nil {
-			if tofu {
-				_ = m.Contacts.Add(&Contact{
-					Petname:   input,
-					KEMPubKey: record.KEMPubKey,
-					SIGPubKey: record.SIGPubKey,
-					AddedAt:   time.Now(),
-					Notes:     "Automatically added via discovery (TOFU)",
-				})
+		// Check local contacts first (skip if contacts not initialized).
+		if m.Contacts != nil {
+			if c, err := m.Contacts.Get(input); err == nil {
+				return c.KEMPubKey, nil
 			}
-			return record.KEMPubKey, nil
 		}
-		return nil, fmt.Errorf("petname resolution failed: %w (discovery error: %v)", err, DiscoveryErr)
+		// 2. DHT/DNS/Nostr Discovery
+		reg := NewIdentityRegistry(nil)
+		record, err := reg.Resolve(context.Background(), input)
+		if err != nil {
+			return nil, fmt.Errorf("identity not found: %w", err)
+		}
+		if tofu && m.Contacts != nil {
+			_ = m.Contacts.Add(&Contact{
+				Petname:   input,
+				KEMPubKey: record.KEMPubKey,
+				SIGPubKey: record.SIGPubKey,
+				AddedAt:   time.Now(),
+				Notes:     "Automatically added via discovery (TOFU)",
+			})
+		}
+		return record.KEMPubKey, nil
 	}
 
 	// 3. Handle Local Paths or Managed Keys

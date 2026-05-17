@@ -160,13 +160,17 @@ func (r *LibP2PDHTRegistry) Publish(ctx context.Context, record *IdentityRecord)
 }
 
 func (r *LibP2PDHTRegistry) Resolve(ctx context.Context, handle string) (*IdentityRecord, error) {
-	kdht, cleanup, err := r.newDHTClient(ctx)
+	// Cap the resolve attempt so the MultiRegistry can fall through to Nostr/DNS promptly.
+	resolveCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	kdht, cleanup, err := r.newDHTClient(resolveCtx)
 	if err != nil {
 		return nil, err
 	}
 	defer cleanup()
 
-	value, err := kdht.GetValue(ctx, dhtKey(handle))
+	value, err := kdht.GetValue(resolveCtx, dhtKey(handle))
 	if err != nil {
 		return nil, fmt.Errorf("identity not found in libp2p DHT for %s: %w", handle, err)
 	}
