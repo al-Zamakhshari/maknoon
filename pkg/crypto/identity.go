@@ -444,6 +444,27 @@ func (m *IdentityManager) RenameIdentity(oldName, newName string) error {
 	return nil
 }
 
+// DeleteIdentity removes all key files for a named identity.
+// Callers should use Engine.IdentityDelete which securely shreds private key files.
+// This lower-level method performs plain removal; secure shredding is done by the engine layer.
+func (m *IdentityManager) DeleteIdentity(name string) error {
+	basePath, _, err := m.ResolveBaseKeyPath(name)
+	if err != nil {
+		return err
+	}
+
+	allFiles := []string{".kem.key", ".kem.pub", ".sig.key", ".sig.pub", ".nostr.pub", ".fido2"}
+	var firstErr error
+	for _, s := range allFiles {
+		if removeErr := os.Remove(basePath + s); removeErr != nil && !os.IsNotExist(removeErr) {
+			if firstErr == nil {
+				firstErr = removeErr
+			}
+		}
+	}
+	return firstErr
+}
+
 // EnsureMaknoonDirs creates the standard directory structure.
 func EnsureMaknoonDirs() error {
 	home := GetUserHomeDir()

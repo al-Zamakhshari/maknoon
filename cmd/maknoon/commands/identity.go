@@ -30,6 +30,7 @@ func IdentityCmd() *cobra.Command {
 	cmd.AddCommand(identityReconstructCmd())
 	cmd.AddCommand(identityInfoCmd())
 	cmd.AddCommand(identityRenameCmd())
+	cmd.AddCommand(identityDeleteCmd())
 
 	return cmd
 }
@@ -312,6 +313,39 @@ func identityActiveCmd() *cobra.Command {
 			return nil
 		},
 	}
+}
+
+func identityDeleteCmd() *cobra.Command {
+	var force bool
+	cmd := &cobra.Command{
+		Use:               "delete [name]",
+		Short:             "Permanently delete a local identity (securely shreds private keys)",
+		Args:              cobra.ExactArgs(1),
+		ValidArgsFunction: completeIdentities,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			p := GlobalContext.UI.GetPresenter()
+			name := args[0]
+
+			if !force && !GlobalContext.UI.JSON {
+				p.RenderMessage(fmt.Sprintf("⚠️  This will permanently shred all key files for identity '%s'. Use --force to confirm.", name))
+				return fmt.Errorf("use --force to confirm deletion")
+			}
+
+			if err := GlobalContext.Engine.IdentityDelete(nil, name); err != nil {
+				p.RenderError(err)
+				return err
+			}
+
+			if GlobalContext.UI.JSON {
+				p.RenderSuccess(crypto.IdentityResult{Status: "success", Identity: name})
+			} else {
+				p.RenderMessage(fmt.Sprintf("🗑️  Identity '%s' permanently deleted.", name))
+			}
+			return nil
+		},
+	}
+	cmd.Flags().BoolVar(&force, "force", false, "Confirm permanent deletion without interactive prompt")
+	return cmd
 }
 
 func identityRenameCmd() *cobra.Command {

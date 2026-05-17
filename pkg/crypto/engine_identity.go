@@ -1,5 +1,7 @@
 package crypto
 
+import "os"
+
 // --- Engine Wrappers ---
 
 func (e *Engine) IdentityActive(ectx *EngineContext) ([]string, error) {
@@ -61,6 +63,10 @@ func (e *Engine) GeneratePassphrase(ectx *EngineContext, words int, separator st
 func (e *Engine) SecureDelete(path string) error {
 	e.Logger.Debug("securely deleting path", "path", path)
 	return e.SecureDeleteStream(path)
+}
+
+func (e *Engine) IdentityDelete(ectx *EngineContext, name string) error {
+	return e.Identity.Delete(ectx, name)
 }
 
 // --- IdentityService Implementation ---
@@ -150,4 +156,23 @@ func (s *IdentityService) ResolveKeyPath(ectx *EngineContext, path, envVar strin
 
 func (s *IdentityService) ResolveBaseKeyPath(ectx *EngineContext, name string) (string, string, error) {
 	return s.Mgr.ResolveBaseKeyPath(name)
+}
+
+func (s *IdentityService) Delete(ectx *EngineContext, name string) error {
+	ectx = s.engine.context(ectx)
+	if err := s.engine.enforce(ectx, CapIdentity); err != nil {
+		return err
+	}
+	// Securely shred private key files before plain-removing the rest.
+	basePath, _, err := s.Mgr.ResolveBaseKeyPath(name)
+	if err != nil {
+		return err
+	}
+	for _, suffix := range []string{".kem.key", ".sig.key"} {
+		path := basePath + suffix
+		if _, statErr := os.Stat(path); statErr == nil {
+			_ = s.engine.SecureDeleteStream(path)
+		}
+	}
+	return s.Mgr.DeleteIdentity(name)
 }

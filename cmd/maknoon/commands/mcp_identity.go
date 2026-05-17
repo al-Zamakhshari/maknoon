@@ -64,6 +64,19 @@ func registerIdentityTools(s *server.MCPServer, engine crypto.MaknoonEngine) {
 			return mcp.NewToolResultText(string(outData)), nil
 		})
 
+	s.AddTool(mcp.NewTool("identity_delete", mcp.WithDescription("Permanently delete a local identity and securely shred its private keys")),
+		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			args := getArgs(request)
+			name := getString(args, "name", "")
+			err := engine.IdentityDelete(&crypto.EngineContext{Context: ctx}, name)
+			if err != nil {
+				return crypto.FormatMCPError(err, "identity_delete")
+			}
+			res := crypto.IdentityResult{Status: "success", Identity: name}
+			outData, _ := json.Marshal(res)
+			return mcp.NewToolResultText(string(outData)), nil
+		})
+
 	s.AddTool(mcp.NewTool("identity_split", mcp.WithDescription("Split an identity into mnemonic shards (Shamir's Secret Sharing)")),
 		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			args := getArgs(request)

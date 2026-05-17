@@ -78,6 +78,7 @@ type Protector interface {
 type IdentityCapabilities interface {
 	IdentityActive(ectx *EngineContext) ([]string, error)
 	IdentityInfo(ectx *EngineContext, name string) (*IdentityInfoResult, error)
+	IdentityDelete(ectx *EngineContext, name string) error
 	IdentityRename(ectx *EngineContext, oldName, newName string) error
 	IdentitySplit(ectx *EngineContext, name string, threshold, shares int, passphrase string) ([]string, error)
 	IdentityCombine(ectx *EngineContext, mnemonics []string, output string, passphrase string, noPassword bool) (string, error)

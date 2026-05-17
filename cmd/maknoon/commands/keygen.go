@@ -170,6 +170,34 @@ func KeygenCmd() *cobra.Command {
 	cmd.Flags().Uint32Var(&argonMem, "argon-mem", 64*1024, "Argon2id memory in KB")
 	cmd.Flags().Uint8Var(&argonThrd, "argon-threads", 4, "Argon2id parallel threads")
 
+	// Rotation flag
+	var rotateFrom string
+	cmd.Flags().StringVar(&rotateFrom, "rotate", "", "Rotate: securely shred old identity [name] and replace with newly generated keys")
+
+	cmd.PreRunE = func(cmd *cobra.Command, args []string) error {
+		if rotateFrom != "" && output == "" {
+			output = rotateFrom
+		}
+		return nil
+	}
+
+	// Wrap RunE to handle rotation post-generation.
+	originalRunE := cmd.RunE
+	cmd.RunE = func(cmd *cobra.Command, args []string) error {
+		if err := originalRunE(cmd, args); err != nil {
+			return err
+		}
+		if rotateFrom != "" && rotateFrom != output {
+			// Shred the old identity if it had a different name.
+			if err := GlobalContext.Engine.IdentityDelete(nil, rotateFrom); err != nil {
+				fmt.Printf("⚠️  New keys generated, but could not shred old identity '%s': %v\n", rotateFrom, err)
+			} else if !quiet {
+				fmt.Printf("🔄 Old identity '%s' securely shredded.\n", rotateFrom)
+			}
+		}
+		return nil
+	}
+
 	return cmd
 }
 

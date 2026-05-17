@@ -35,6 +35,20 @@ jobs:
         run: go install honnef.co/go/tools/cmd/staticcheck@latest
       - name: Run Staticcheck
         run: $(go env GOPATH)/bin/staticcheck ./...
+      - name: Install govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+      - name: Check Vulnerabilities
+        run: |
+          # Allow known unfixable vulns (GO-2024-3218: libp2p-kad-dht content
+          # censorship, no upstream fix). All others fail the build.
+          VULN_OUT=$($(go env GOPATH)/bin/govulncheck -json ./... 2>&1) || true
+          NEW=$(echo "$VULN_OUT" | grep -o '"id": *"GO-[0-9-]*"' | grep -oE 'GO-[0-9-]+' | sort -u | grep -vF "GO-2024-3218")
+          if [ -n "$NEW" ]; then
+            echo "$VULN_OUT"
+            echo "❌ govulncheck: new vulnerabilities detected: $NEW"
+            exit 1
+          fi
+          echo "✅ govulncheck: no new vulnerabilities (accepted: GO-2024-3218)"
 
   docs:
     name: Documentation

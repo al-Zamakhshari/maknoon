@@ -40,6 +40,9 @@ func (e *BaseEngine) IdentityActive(ectx *EngineContext) ([]string, error) {
 func (e *BaseEngine) IdentityInfo(ectx *EngineContext, name string) (*IdentityInfoResult, error) {
 	return e.Engine.IdentityInfo(ectx, name)
 }
+func (e *BaseEngine) IdentityDelete(ectx *EngineContext, name string) error {
+	return e.Engine.IdentityDelete(ectx, name)
+}
 func (e *BaseEngine) IdentityRename(ectx *EngineContext, oldName, newName string) error {
 	return e.Engine.IdentityRename(ectx, oldName, newName)
 }

@@ -1,7 +1,9 @@
 package commands
 
 import (
+	"encoding/json"
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 
@@ -18,6 +20,9 @@ func ConfigCmd() *cobra.Command {
 	cmd.AddCommand(configListCmd())
 	cmd.AddCommand(configSetCmd())
 	cmd.AddCommand(configInitCmd())
+	cmd.AddCommand(configValidateCmd())
+	cmd.AddCommand(configExportCmd())
+	cmd.AddCommand(configImportCmd())
 
 	return cmd
 }
@@ -144,6 +149,102 @@ Keys:
 				printJSON(map[string]string{"status": "success", "key": key, "value": val})
 			} else {
 				fmt.Printf("✅ Config updated: %s = %s\n", key, val)
+			}
+			return nil
+		},
+	}
+}
+
+func configValidateCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "validate",
+		Short: "Validate the active configuration for correctness",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			checkJSONMode(cmd)
+			conf, err := crypto.LoadConfig()
+			if err != nil {
+				return fmt.Errorf("failed to load config: %w", err)
+			}
+			if err := conf.Validate(); err != nil {
+				if JSONOutput {
+					printJSON(map[string]string{"status": "error", "error": err.Error()})
+				} else {
+					fmt.Printf("❌ Config validation failed: %v\n", err)
+				}
+				return err
+			}
+			if JSONOutput {
+				printJSON(map[string]string{"status": "success", "message": "configuration is valid"})
+			} else {
+				fmt.Println("✅ Configuration is valid.")
+			}
+			return nil
+		},
+	}
+}
+
+func configExportCmd() *cobra.Command {
+	var output string
+	cmd := &cobra.Command{
+		Use:   "export",
+		Short: "Export the active configuration to a JSON file (secrets redacted)",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			checkJSONMode(cmd)
+			conf, err := crypto.LoadConfig()
+			if err != nil {
+				return fmt.Errorf("failed to load config: %w", err)
+			}
+			// Redact sensitive fields before export.
+			exported := *conf
+			exported.Audit.SigningKey = ""
+			b, err := json.MarshalIndent(exported, "", "  ")
+			if err != nil {
+				return fmt.Errorf("failed to marshal config: %w", err)
+			}
+			if output == "" || output == "-" {
+				fmt.Println(string(b))
+				return nil
+			}
+			if err := os.WriteFile(output, b, 0600); err != nil {
+				return fmt.Errorf("failed to write config export: %w", err)
+			}
+			if JSONOutput {
+				printJSON(map[string]string{"status": "success", "file": output})
+			} else {
+				fmt.Printf("✅ Configuration exported to %s\n", output)
+			}
+			return nil
+		},
+	}
+	cmd.Flags().StringVarP(&output, "output", "o", "", "Output file path (default: stdout)")
+	return cmd
+}
+
+func configImportCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "import [file]",
+		Short: "Import configuration from a JSON file",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			checkJSONMode(cmd)
+			b, err := os.ReadFile(args[0])
+			if err != nil {
+				return fmt.Errorf("failed to read config file: %w", err)
+			}
+			var conf crypto.Config
+			if err := json.Unmarshal(b, &conf); err != nil {
+				return fmt.Errorf("failed to parse config file: %w", err)
+			}
+			if err := conf.Validate(); err != nil {
+				return fmt.Errorf("imported config is invalid: %w", err)
+			}
+			if err := GlobalContext.Engine.UpdateConfig(nil, &conf); err != nil {
+				return err
+			}
+			if JSONOutput {
+				printJSON(map[string]string{"status": "success", "message": "config imported"})
+			} else {
+				fmt.Println("✅ Configuration imported and saved.")
 			}
 			return nil
 		},

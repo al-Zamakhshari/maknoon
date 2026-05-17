@@ -386,6 +386,19 @@ func (e *AuditEngine) IdentityInfo(ectx *EngineContext, name string) (*IdentityI
 	return res, err
 }
 
+func (e *AuditEngine) IdentityDelete(ectx *EngineContext, name string) error {
+	start := time.Now()
+	err := e.Engine.IdentityDelete(ectx, name)
+	duration := time.Since(start)
+
+	e.Logger.LogEvent("identity_delete", map[string]any{
+		"name":        e.sanitizePath(name),
+		"duration_ms": duration.Milliseconds(),
+	}, err)
+
+	return err
+}
+
 func (e *AuditEngine) IdentityRename(ectx *EngineContext, oldName, newName string) error {
 	start := time.Now()
 	err := e.Engine.IdentityRename(ectx, oldName, newName)

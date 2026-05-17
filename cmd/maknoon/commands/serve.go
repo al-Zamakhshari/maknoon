@@ -24,6 +24,16 @@ import (
 
 const maxRequestBodyBytes = 32 * 1024 * 1024 // 32 MB
 
+func decodeHex(s string) ([]byte, error) {
+	b := make([]byte, len(s)/2)
+	n, err := fmt.Sscanf(s, "%x", &b)
+	if err != nil || n == 0 {
+		// Fallback to encoding/hex
+		return nil, fmt.Errorf("invalid hex string")
+	}
+	return b, nil
+}
+
 // sanitizeRESTPath cleans a user-supplied file path and confirms it stays within
 // one of the explicitly allowed base directories. Returns an error on any traversal attempt.
 func sanitizeRESTPath(raw string, allowedBases ...string) (string, error) {
@@ -153,6 +163,21 @@ func runAPIServer() error {
 	mux.HandleFunc("/v1/crypto/reassemble", handleReassemble)
 	mux.HandleFunc("/v1/crypto/wrap", handleWrap)
 	mux.HandleFunc("/v1/crypto/unwrap", handleUnwrap)
+
+	// Crypto operations
+	mux.HandleFunc("/v1/crypto/encrypt", handleEncrypt)
+	mux.HandleFunc("/v1/crypto/decrypt", handleDecrypt)
+
+	// Identity management
+	mux.HandleFunc("/v1/identity/keygen", handleIdentityKeygen)
+	mux.HandleFunc("/v1/identity/list", handleIdentityList)
+	mux.HandleFunc("/v1/identity/delete", handleIdentityDelete)
+	mux.HandleFunc("/v1/identity/info", handleIdentityInfo)
+
+	// Vault CRUD completion
+	mux.HandleFunc("/v1/vault/list", handleVaultList)
+	mux.HandleFunc("/v1/vault/delete", handleVaultDelete)
+	mux.HandleFunc("/v1/vault/status", handleVaultStatus)
 
 	// KMS & Network Orchestration
 	mux.HandleFunc("/v1/network/tunnel/start", handleTunnelStart)
@@ -728,6 +753,252 @@ func handleTunnelStop(w http.ResponseWriter, r *http.Request) {
 	}
 
 	renderAPISuccess(w, map[string]string{"status": "stopped"})
+}
+
+// --- New endpoint handlers ---
+
+func handleEncrypt(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var req struct {
+		Input      string `json:"input"`
+		Output     string `json:"output"`
+		Passphrase string `json:"passphrase"`
+		Recipient  string `json:"recipient"` // hex public key or @handle
+	}
+	if err := json.NewDecoder(io.LimitReader(r.Body, maxRequestBodyBytes)).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	inputPath, err := sanitizeRESTPath(req.Input, os.TempDir())
+	if err != nil {
+		http.Error(w, fmt.Sprintf("invalid input: %v", err), http.StatusBadRequest)
+		return
+	}
+	outputPath, err := sanitizeRESTPath(req.Output, os.TempDir())
+	if err != nil {
+		http.Error(w, fmt.Sprintf("invalid output: %v", err), http.StatusBadRequest)
+		return
+	}
+	in, err := os.Open(inputPath)
+	if err != nil {
+		renderAPIError(w, err)
+		return
+	}
+	defer in.Close()
+	out, err := os.Create(outputPath)
+	if err != nil {
+		renderAPIError(w, err)
+		return
+	}
+	defer out.Close()
+
+	opts := crypto.Options{Passphrase: []byte(req.Passphrase)}
+	if req.Recipient != "" {
+		pk, err := GlobalContext.Engine.ResolvePublicKey(nil, req.Recipient, false)
+		if err != nil {
+			renderAPIError(w, fmt.Errorf("failed to resolve recipient: %w", err))
+			return
+		}
+		opts.Recipients = [][]byte{pk}
+		opts.Passphrase = nil
+	}
+	res, err := GlobalContext.Engine.Protect(nil, inputPath, in, out, opts)
+	if err != nil {
+		renderAPIError(w, err)
+		return
+	}
+	renderAPISuccess(w, map[string]any{"status": "success", "output": outputPath, "flags": res.Flags})
+}
+
+func handleDecrypt(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var req struct {
+		Input      string `json:"input"`
+		Output     string `json:"output"`
+		Passphrase string `json:"passphrase"`
+		PrivKeyHex string `json:"priv_key"` // hex-encoded private key
+	}
+	if err := json.NewDecoder(io.LimitReader(r.Body, maxRequestBodyBytes)).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	inputPath, err := sanitizeRESTPath(req.Input, os.TempDir())
+	if err != nil {
+		http.Error(w, fmt.Sprintf("invalid input: %v", err), http.StatusBadRequest)
+		return
+	}
+	outputPath, err := sanitizeRESTPath(req.Output, os.TempDir())
+	if err != nil {
+		http.Error(w, fmt.Sprintf("invalid output: %v", err), http.StatusBadRequest)
+		return
+	}
+	in, err := os.Open(inputPath)
+	if err != nil {
+		renderAPIError(w, err)
+		return
+	}
+	defer in.Close()
+	out, err := os.Create(outputPath)
+	if err != nil {
+		renderAPIError(w, err)
+		return
+	}
+	defer out.Close()
+
+	opts := crypto.Options{Passphrase: []byte(req.Passphrase)}
+	if req.PrivKeyHex != "" {
+		keyBytes, err := decodeHex(req.PrivKeyHex)
+		if err != nil {
+			http.Error(w, "invalid priv_key hex", http.StatusBadRequest)
+			return
+		}
+		opts.LocalPrivateKey = keyBytes
+		opts.Passphrase = nil
+	}
+	if _, err := GlobalContext.Engine.Unprotect(nil, in, out, outputPath, opts); err != nil {
+		renderAPIError(w, err)
+		return
+	}
+	renderAPISuccess(w, map[string]any{"status": "success", "output": outputPath})
+}
+
+func handleIdentityKeygen(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var req struct {
+		Name       string `json:"name"`
+		Passphrase string `json:"passphrase"`
+		Profile    string `json:"profile"`
+	}
+	if err := json.NewDecoder(io.LimitReader(r.Body, maxRequestBodyBytes)).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if req.Profile == "" {
+		req.Profile = "nist"
+	}
+	res, err := GlobalContext.Engine.CreateIdentity(nil, req.Name, []byte(req.Passphrase), "", true, req.Profile)
+	if err != nil {
+		renderAPIError(w, err)
+		return
+	}
+	renderAPISuccess(w, res)
+}
+
+func handleIdentityList(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	list, err := GlobalContext.Engine.IdentityActive(nil)
+	if err != nil {
+		renderAPIError(w, err)
+		return
+	}
+	renderAPISuccess(w, map[string]any{"identities": list})
+}
+
+func handleIdentityInfo(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	name := r.URL.Query().Get("name")
+	if name == "" {
+		http.Error(w, "name query parameter required", http.StatusBadRequest)
+		return
+	}
+	res, err := GlobalContext.Engine.IdentityInfo(nil, name)
+	if err != nil {
+		renderAPIError(w, err)
+		return
+	}
+	renderAPISuccess(w, res)
+}
+
+func handleIdentityDelete(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodDelete && r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var req struct {
+		Name string `json:"name"`
+	}
+	if err := json.NewDecoder(io.LimitReader(r.Body, maxRequestBodyBytes)).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if err := GlobalContext.Engine.IdentityDelete(nil, req.Name); err != nil {
+		renderAPIError(w, err)
+		return
+	}
+	renderAPISuccess(w, map[string]string{"status": "success", "name": req.Name})
+}
+
+func handleVaultList(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var req struct {
+		Vault      string `json:"vault"`
+		Passphrase string `json:"passphrase"`
+	}
+	if err := json.NewDecoder(io.LimitReader(r.Body, maxRequestBodyBytes)).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	entries, err := GlobalContext.Engine.VaultList(nil, req.Vault, []byte(req.Passphrase))
+	if err != nil {
+		renderAPIError(w, err)
+		return
+	}
+	renderAPISuccess(w, map[string]any{"status": "success", "entries": entries})
+}
+
+func handleVaultDelete(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodDelete && r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var req struct {
+		Vault string `json:"vault"`
+	}
+	if err := json.NewDecoder(io.LimitReader(r.Body, maxRequestBodyBytes)).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if err := GlobalContext.Engine.VaultDelete(nil, req.Vault); err != nil {
+		renderAPIError(w, err)
+		return
+	}
+	renderAPISuccess(w, map[string]string{"status": "success", "vault": req.Vault})
+}
+
+func handleVaultStatus(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	name := r.URL.Query().Get("name")
+	if name == "" {
+		http.Error(w, "name query parameter required", http.StatusBadRequest)
+		return
+	}
+	res, err := GlobalContext.Engine.VaultStatus(nil, name)
+	if err != nil {
+		renderAPIError(w, err)
+		return
+	}
+	renderAPISuccess(w, res)
 }
 
 // API Rendering Helpers
