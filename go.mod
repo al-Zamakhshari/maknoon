@@ -15,11 +15,11 @@ require (
 	github.com/libp2p/go-libp2p v0.48.0
 	github.com/libp2p/go-libp2p-kad-dht v0.39.2
 	github.com/libp2p/go-libp2p-record v0.3.1
-	github.com/mark3labs/mcp-go v0.52.0
+	github.com/mark3labs/mcp-go v0.54.0
 	github.com/mohammadv184/go-fido2 v0.1.1
 	github.com/multiformats/go-multiaddr v0.16.1
 	github.com/nbd-wtf/go-nostr v0.52.3
-	github.com/quic-go/quic-go v0.59.0
+	github.com/quic-go/quic-go v0.59.1
 	github.com/secure-io/siv-go v0.0.0-20180922214919-5ff40651e2c4
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
