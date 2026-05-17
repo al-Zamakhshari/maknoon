@@ -84,6 +84,9 @@ func (e *BaseEngine) ResolveBaseKeyPath(ectx *EngineContext, name string) (strin
 func (e *BaseEngine) VaultInitInstitutional(ectx *EngineContext, name string, threshold, shares int, peerIDs []string, passphrase []byte) (*VaultResult, error) {
 	return e.Engine.VaultInitInstitutional(ectx, name, threshold, shares, peerIDs, passphrase)
 }
+func (e *BaseEngine) VaultStatus(ectx *EngineContext, name string) (*VaultResult, error) {
+	return e.Engine.VaultStatus(ectx, name)
+}
 func (e *BaseEngine) VaultGet(ectx *EngineContext, vaultPath string, service string, passphrase []byte, pin string) (*VaultEntry, error) {
 	return e.Engine.VaultGet(ectx, vaultPath, service, passphrase, pin)
 }

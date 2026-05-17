@@ -98,6 +98,7 @@ type IdentityCapabilities interface {
 // VaultManager handles secure credential storage.
 type VaultManager interface {
 	VaultInitInstitutional(ectx *EngineContext, name string, threshold, shares int, peerIDs []string, passphrase []byte) (*VaultResult, error)
+	VaultStatus(ectx *EngineContext, name string) (*VaultResult, error)
 	VaultGet(ectx *EngineContext, vaultPath string, service string, passphrase []byte, pin string) (*VaultEntry, error)
 	VaultSet(ectx *EngineContext, vaultPath string, entry *VaultEntry, passphrase []byte, pin string, overwrite bool) error
 	VaultRename(ectx *EngineContext, oldName, newName string) error

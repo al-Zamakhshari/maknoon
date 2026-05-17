@@ -10,6 +10,8 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -19,6 +21,29 @@ import (
 	"github.com/spf13/viper"
 	"golang.org/x/time/rate"
 )
+
+const maxRequestBodyBytes = 32 * 1024 * 1024 // 32 MB
+
+// sanitizeRESTPath cleans a user-supplied file path and confirms it stays within
+// one of the explicitly allowed base directories. Returns an error on any traversal attempt.
+func sanitizeRESTPath(raw string, allowedBases ...string) (string, error) {
+	if raw == "" {
+		return "", fmt.Errorf("path must not be empty")
+	}
+	clean := filepath.Clean(raw)
+	// Reject absolute paths that don't match any allowed base, and all relative escape attempts.
+	for _, base := range allowedBases {
+		base = filepath.Clean(base)
+		if strings.HasPrefix(clean, base+string(filepath.Separator)) || clean == base {
+			return clean, nil
+		}
+	}
+	// If no allowed bases given, reject absolute paths but allow relative names in cwd.
+	if len(allowedBases) == 0 && !filepath.IsAbs(clean) && !strings.HasPrefix(clean, "..") {
+		return clean, nil
+	}
+	return "", fmt.Errorf("path %q is outside permitted directories", raw)
+}
 
 // Rate limiting settings (5 requests/sec with burst of 10)
 var globalLimiter = rate.NewLimiter(rate.Every(200*time.Millisecond), 10)
@@ -139,6 +164,7 @@ func runAPIServer() error {
 		Handler:           rateLimitMiddleware(mux),
 		TLSConfig:         GetTLSConfig(),
 		ReadHeaderTimeout: 10 * time.Second,
+		MaxHeaderBytes:    1 << 20, // 1 MB header limit
 	}
 
 	fmt.Printf("🚀 Starting Maknoon PQC API Server on %s\n", addr)
@@ -383,10 +409,18 @@ func handleFragment(w http.ResponseWriter, r *http.Request) {
 		SignWith     string `json:"sign_with"`
 		Passphrase   string `json:"passphrase"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := json.NewDecoder(io.LimitReader(r.Body, maxRequestBodyBytes)).Decode(&req); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+
+	// Sanitize paths — confine to temp dir to prevent traversal.
+	inputPath, err := sanitizeRESTPath(req.Input, os.TempDir())
+	if err != nil {
+		http.Error(w, fmt.Sprintf("invalid input path: %v", err), http.StatusBadRequest)
+		return
+	}
+	req.Input = inputPath
 
 	if req.DataShards == 0 {
 		req.DataShards = 5
@@ -397,6 +431,12 @@ func handleFragment(w http.ResponseWriter, r *http.Request) {
 	if req.Output == "" {
 		req.Output = req.Input + "_fragments"
 	}
+	outputPath, err := sanitizeRESTPath(req.Output, os.TempDir())
+	if err != nil {
+		http.Error(w, fmt.Sprintf("invalid output path: %v", err), http.StatusBadRequest)
+		return
+	}
+	req.Output = outputPath
 
 	fi, err := os.Stat(req.Input)
 	if err != nil {
@@ -458,14 +498,28 @@ func handleReassemble(w http.ResponseWriter, r *http.Request) {
 		Output        string `json:"output"`
 		AuthorizedKey []byte `json:"authorized_key"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := json.NewDecoder(io.LimitReader(r.Body, maxRequestBodyBytes)).Decode(&req); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
+	// Sanitize paths — confine to temp dir to prevent traversal.
+	inputDir, err := sanitizeRESTPath(req.InputDir, os.TempDir())
+	if err != nil {
+		http.Error(w, fmt.Sprintf("invalid input_dir: %v", err), http.StatusBadRequest)
+		return
+	}
+	req.InputDir = inputDir
+
 	if req.Output == "" {
 		req.Output = "restored.data"
 	}
+	outputPath, err := sanitizeRESTPath(req.Output, os.TempDir())
+	if err != nil {
+		http.Error(w, fmt.Sprintf("invalid output path: %v", err), http.StatusBadRequest)
+		return
+	}
+	req.Output = outputPath
 
 	f, err := os.Create(req.Output)
 	if err != nil {

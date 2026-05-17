@@ -63,7 +63,11 @@ func (e *Engine) runLibp2pSend(ectx *EngineContext, inputName string, r io.Reade
 		return
 	}
 
-	fi, _ := tmpEnc.Stat()
+	fi, err := tmpEnc.Stat()
+	if err != nil {
+		status <- P2PStatus{Phase: "error", Error: fmt.Errorf("failed to stat encrypted temp file: %w", err)}
+		return
+	}
 	totalBytes := fi.Size()
 	if _, err := tmpEnc.Seek(0, 0); err != nil {
 		status <- P2PStatus{Phase: "error", Error: err}

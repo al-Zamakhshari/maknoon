@@ -235,6 +235,10 @@ func (e *AuditEngine) VaultInitInstitutional(ectx *EngineContext, name string, t
 	return res, err
 }
 
+func (e *AuditEngine) VaultStatus(ectx *EngineContext, name string) (*VaultResult, error) {
+	return e.Engine.VaultStatus(ectx, name)
+}
+
 func (e *AuditEngine) VaultGet(ectx *EngineContext, vaultPath string, service string, passphrase []byte, pin string) (*VaultEntry, error) {
 	start := time.Now()
 	entry, err := e.Engine.VaultGet(ectx, vaultPath, service, passphrase, pin)

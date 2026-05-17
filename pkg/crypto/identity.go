@@ -158,10 +158,21 @@ func (m *IdentityManager) SaveIdentity(basePath, baseName string, kemPub, kemPri
 // CreateIdentity generates and saves a new Post-Quantum identity.
 func (m *IdentityManager) CreateIdentity(name string, passphrase []byte, pin string, isStdin bool, profile string) (*IdentityResult, error) {
 	profileID := byte(1)
-	if profile == "aes" {
-		profileID = 2
-	} else if profile == "conservative" {
+	switch profile {
+	case "", "nist", "pq":
+		profileID = 1
+	case "conservative", "legacy":
 		profileID = 3
+	case "aes":
+		return nil, fmt.Errorf("profile 'aes' (ID 2) is not a registered built-in; use 'nist' (ID 1) or 'conservative' (ID 3)")
+	default:
+		// Allow numeric custom profile IDs passed through from the CLI resolver.
+		var customID int
+		if _, err := fmt.Sscanf(profile, "%d", &customID); err == nil && customID > 0 && customID < 256 {
+			profileID = byte(customID)
+		} else {
+			return nil, fmt.Errorf("unknown profile %q; valid built-ins: nist (1), conservative (3)", profile)
+		}
 	}
 
 	if err := EnsureMaknoonDirs(); err != nil {

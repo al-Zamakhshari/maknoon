@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"strings"
 
@@ -249,27 +250,49 @@ func (r *NostrRegistry) Revoke(ctx context.Context, handle string, proof []byte)
 	return fmt.Errorf("nostr revocation not implemented in POC")
 }
 
-// isValidDomain ensures the domain is a legitimate public domain and not a local/internal address.
+// isValidDomain ensures the domain resolves to a legitimate public address, not a local or
+// internal one. Defends against SSRF by blocking RFC1918, loopback, link-local, ULA,
+// multicast, and unspecified ranges for both IPv4 and IPv6.
 func isValidDomain(domain string) bool {
 	if domain == "" || len(domain) > 255 {
 		return false
 	}
-	low := strings.ToLower(domain)
-	if low == "localhost" || low == "127.0.0.1" || low == "::1" {
+	// Reject syntactically suspicious values before DNS resolution.
+	if strings.ContainsAny(domain, " /\\?#@") {
 		return false
 	}
-	// Basic check for RFC1918 and other internal ranges
-	if strings.HasPrefix(low, "10.") || strings.HasPrefix(low, "192.168.") || strings.HasPrefix(low, "172.") {
-		// Note: 172.16.0.0/12 check is simplified here
-		if strings.HasPrefix(low, "172.") {
-			parts := strings.Split(low, ".")
-			if len(parts) >= 2 {
-				if second, err := fmt.Sscanf(parts[1], "%d", new(int)); err == nil && second >= 16 && second <= 31 {
-					return false
-				}
-			}
+	// Must contain a dot (rules out bare "localhost" and single-label names).
+	if !strings.Contains(domain, ".") {
+		return false
+	}
+
+	// If the domain is a bare IP literal, validate it directly.
+	if ip := net.ParseIP(domain); ip != nil {
+		return isPublicIP(ip)
+	}
+
+	// Resolve the domain and check all returned addresses.
+	addrs, err := net.LookupHost(domain)
+	if err != nil {
+		// If resolution fails we cannot confirm it is safe — reject.
+		return false
+	}
+	for _, addr := range addrs {
+		ip := net.ParseIP(addr)
+		if ip == nil || !isPublicIP(ip) {
+			return false
 		}
 	}
-	// Ensure it contains a dot and no spaces or dangerous characters
-	return strings.Contains(domain, ".") && !strings.ContainsAny(domain, " /\\?#@")
+	return len(addrs) > 0
+}
+
+// isPublicIP returns true only for globally routable unicast addresses,
+// blocking loopback, private (RFC1918/RFC4193), link-local, multicast, and unspecified.
+func isPublicIP(ip net.IP) bool {
+	return !ip.IsLoopback() &&
+		!ip.IsPrivate() &&
+		!ip.IsLinkLocalUnicast() &&
+		!ip.IsLinkLocalMulticast() &&
+		!ip.IsMulticast() &&
+		!ip.IsUnspecified()
 }
