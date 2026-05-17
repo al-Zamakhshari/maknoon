@@ -6,9 +6,26 @@ import (
 	"log/slog"
 	"path/filepath"
 	"sync"
+
+	"github.com/al-Zamakhshari/maknoon/pkg/tunnel"
 )
 
 var _ MaknoonEngine = (*Engine)(nil)
+
+// tunnelState holds all mutable tunnel lifecycle state under a single typed lock.
+type tunnelState struct {
+	active  *tunnel.TunnelStatus
+	gateway *tunnel.TunnelGateway
+	server  *tunnel.TunnelServer
+	mu      sync.RWMutex
+}
+
+// contactsState holds the lazily-initialised contacts manager and its lock.
+type contactsState struct {
+	manager *ContactManager
+	path    string
+	mu      sync.Mutex
+}
 
 // Engine is the central stateful service for Maknoon operations.
 type Engine struct {
@@ -16,18 +33,10 @@ type Engine struct {
 	Config     *Config
 	Identities *IdentityManager
 	Vaults     VaultStore
-	Contacts   *ContactManager
 	Logger     *slog.Logger
 
-	// Contacts State
-	contactsMu   sync.Mutex
-	contactsPath string
-
-	// Tunnel State
-	activeTunnel  interface{}
-	gateway       interface{}
-	gatewayServer interface{}
-	tunnelMu      sync.RWMutex
+	contacts contactsState
+	tunnel   tunnelState
 }
 
 func (e *Engine) GetPolicy() SecurityPolicy { return e.Policy }
@@ -116,12 +125,14 @@ func NewEngine(policy SecurityPolicy, idMgr *IdentityManager, conf *Config, vaul
 	}
 
 	e := &Engine{
-		Policy:       policy,
-		Config:       conf,
-		Identities:   idMgr,
-		Vaults:       vaultStore,
-		Logger:       logger,
-		contactsPath: filepath.Join(conf.Paths.VaultsDir, "..", "contacts.db"),
+		Policy:     policy,
+		Config:     conf,
+		Identities: idMgr,
+		Vaults:     vaultStore,
+		Logger:     logger,
+		contacts: contactsState{
+			path: filepath.Join(conf.Paths.VaultsDir, "..", "contacts.db"),
+		},
 	}
 
 	e.Identities.P2P = e
@@ -155,8 +166,8 @@ func (e *Engine) enforce(ectx *EngineContext, cap Capability) error {
 }
 
 func (e *Engine) Close() error {
-	if e.Contacts != nil {
-		return e.Contacts.Close()
+	if e.contacts.manager != nil {
+		return e.contacts.manager.Close()
 	}
 	return nil
 }

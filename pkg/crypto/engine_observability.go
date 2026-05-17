@@ -17,20 +17,18 @@ func (e *Engine) NetworkStatus(ectx *EngineContext) (NetStatusResult, error) {
 	res := NetStatusResult{}
 
 	// 1. Check active tunnel
-	e.tunnelMu.RLock()
-	if e.activeTunnel != nil {
-		// Use type assertion since e.activeTunnel is interface{} in the new engine.go
-		if at, ok := e.activeTunnel.(*tunnel.TunnelStatus); ok {
-			res.Tunnel.Active = true
-			res.Tunnel.LocalAddress = at.LocalAddress
-			res.Tunnel.RemoteEndpoint = at.RemoteEndpoint
-			res.Tunnel.HandshakeTime = at.HandshakeTime
-			res.Tunnel.DataLanes = at.DataLanes
-			res.Tunnel.ParityLanes = at.ParityLanes
-			res.Tunnel.HealthyLanes = at.HealthyLanes
-		}
+	e.tunnel.mu.RLock()
+	if e.tunnel.active != nil {
+		at := e.tunnel.active
+		res.Tunnel.Active = true
+		res.Tunnel.LocalAddress = at.LocalAddress
+		res.Tunnel.RemoteEndpoint = at.RemoteEndpoint
+		res.Tunnel.HandshakeTime = at.HandshakeTime
+		res.Tunnel.DataLanes = at.DataLanes
+		res.Tunnel.ParityLanes = at.ParityLanes
+		res.Tunnel.HealthyLanes = at.HealthyLanes
 	}
-	e.tunnelMu.RUnlock()
+	e.tunnel.mu.RUnlock()
 
 	// 2. Create a temporary host to check P2P environment (if no persistent host)
 	h, err := tunnel.NewLibp2pHost()

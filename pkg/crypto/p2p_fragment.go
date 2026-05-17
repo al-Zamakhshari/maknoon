@@ -260,7 +260,7 @@ func (e *Engine) connectToPeer(ectx *EngineContext, h host.Host, target string, 
 	// Try resolving @petname
 	if strings.HasPrefix(target, "@") {
 		if err := e.ensureContacts(); err == nil {
-			if c, err2 := e.Contacts.Get(target); err2 == nil {
+			if c, err2 := e.contacts.manager.Get(target); err2 == nil {
 				target = c.PeerID
 			}
 		}
