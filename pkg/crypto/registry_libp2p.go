@@ -20,7 +20,9 @@ func init() {
 	})
 }
 
-const libp2pDHTNamespace = "/maknoon/id/"
+// libp2pDHTNamespace is the key prefix used in the /maknoon custom DHT overlay.
+// The "id" segment must match the NamespacedValidator key passed to dht.New.
+const libp2pDHTNamespace = "/id/"
 
 // libp2pIDValidator verifies IdentityRecord values stored in the DHT.
 type libp2pIDValidator struct{}
@@ -105,10 +107,13 @@ func (r *LibP2PDHTRegistry) newDHTClient(ctx context.Context) (*dht.IpfsDHT, fun
 		cancel()
 	}
 
+	// Use a custom protocol prefix so we operate on our own DHT overlay
+	// (not the IPFS DHT, which enforces exactly /pk and /ipns validators).
 	kdht, err := dht.New(ctx, h,
 		dht.Mode(dht.ModeClient),
+		dht.ProtocolPrefix("/maknoon"),
 		dht.BootstrapPeers(r.bootstrapPeers...),
-		dht.NamespacedValidator("maknoon", libp2pIDValidator{}),
+		dht.NamespacedValidator("id", libp2pIDValidator{}),
 	)
 	if err != nil {
 		cleanup()

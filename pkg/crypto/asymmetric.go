@@ -11,6 +11,7 @@ import (
 	"io"
 
 	"github.com/cloudflare/circl/sign/mldsa/mldsa87"
+	"github.com/nbd-wtf/go-nostr"
 	"golang.org/x/crypto/hkdf"
 )
 
@@ -93,6 +94,17 @@ func DeriveNostrKeypair(sigPriv []byte) ([]byte, error) {
 		return nil, fmt.Errorf("HKDF derivation failed: %w", err)
 	}
 	return key, nil
+}
+
+// nostrPrivKeyToHexPub returns the secp256k1 x-only public key hex (Nostr format)
+// for the given 32-byte raw private key.
+func nostrPrivKeyToHexPub(privBytes []byte) (string, error) {
+	privHex := fmt.Sprintf("%x", privBytes)
+	pubHex, err := nostr.GetPublicKey(privHex)
+	if err != nil {
+		return "", fmt.Errorf("failed to derive nostr public key: %w", err)
+	}
+	return pubHex, nil
 }
 
 // DeriveKEMPublic derives the public key from a Hybrid KEM private key.

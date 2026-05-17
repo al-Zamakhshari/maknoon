@@ -146,6 +146,12 @@ func (m *IdentityManager) SaveIdentity(basePath, baseName string, kemPub, kemPri
 	if err := writeKey(basePath+".sig.pub", sigPub, false); err != nil {
 		return err
 	}
+	// Derive and persist the Nostr transport public key (secp256k1, no private key stored).
+	if nostrPriv, err := DeriveNostrKeypair(sigPriv); err == nil {
+		if nostrPubHex, err := nostrPrivKeyToHexPub(nostrPriv); err == nil {
+			_ = writeKey(basePath+".nostr.pub", []byte(nostrPubHex), false)
+		}
+	}
 	return nil
 }
 
@@ -405,6 +411,9 @@ func (m *IdentityManager) GetIdentityInfo(name string) (*IdentityInfoResult, err
 			res.PeerID = pid
 		}
 	}
+	if b, err := os.ReadFile(basePath + ".nostr.pub"); err == nil {
+		res.NostrPub = strings.TrimSpace(string(b))
+	}
 	return res, nil
 }
 
@@ -418,7 +427,7 @@ func (m *IdentityManager) RenameIdentity(oldName, newName string) error {
 		return err
 	}
 
-	suffixes := []string{".kem.key", ".kem.pub", ".sig.key", ".sig.pub", ".fido2"}
+	suffixes := []string{".kem.key", ".kem.pub", ".sig.key", ".sig.pub", ".nostr.pub", ".fido2"}
 	for _, s := range suffixes {
 		_ = os.Rename(oldBase+s, newBase+s)
 	}
