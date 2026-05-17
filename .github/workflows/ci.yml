@@ -7,6 +7,9 @@ on:
       - 'v*'
   pull_request:
     branches: [ "main" ]
+  schedule:
+    - cron: '0 2 * * *'   # 02:00 UTC nightly
+  workflow_dispatch:
 
 jobs:
   quality:
@@ -90,20 +93,28 @@ jobs:
       - name: Build Binary
         run: go build -o maknoon ./cmd/maknoon/main.go
 
-      - name: Run P2P MCP Smoke Test
-        run: |
-          chmod +x scripts/smoke-p2p-mcp.sh
-          ./scripts/smoke-p2p-mcp.sh
+      - name: Run Go Mission Tests (in-process, no Docker)
+        run: make mission-tests
 
-      - name: Run REST API Smoke Test
+      - name: Run CI Smoke Tests
         run: |
-          chmod +x scripts/smoke-api.sh
-          ./scripts/smoke-api.sh
-
-      - name: Run TPM Hardening Smoke Test
-        run: |
-          chmod +x scripts/smoke-tpm.go.sh
-          ./scripts/smoke-tpm.go.sh
+          chmod +x \
+            scripts/smoke-p2p-mcp.sh \
+            scripts/smoke-api.sh \
+            scripts/smoke-tpm.go.sh \
+            scripts/smoke-audit.sh \
+            scripts/smoke-resilience.sh \
+            scripts/smoke-vault-safety.sh \
+            scripts/smoke-governance.sh \
+            scripts/smoke-threshold-sig.sh \
+            scripts/smoke-fragment-dispersal.sh
+          for s in \
+            smoke-p2p-mcp smoke-api smoke-tpm.go \
+            smoke-audit smoke-resilience smoke-vault-safety \
+            smoke-governance smoke-threshold-sig smoke-fragment-dispersal; do
+            echo "--- $s ---"
+            ./scripts/${s}.sh
+          done
 
       - name: Build-Tag Matrix
         run: make build-matrix
@@ -205,3 +216,32 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GORELEASER_TOKEN }}
+
+  missions:
+    name: Mission Tests (Docker)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    needs: quality
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: 'go.mod'
+          cache: true
+
+      - name: Build
+        run: go build -o maknoon ./cmd/maknoon/main.go
+
+      - name: Run All Missions
+        run: make missions
+        timeout-minutes: 30
+
+      - name: Upload Mission Reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mission-reports-${{ github.run_id }}
+          path: mission-reports/
