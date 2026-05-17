@@ -5,7 +5,7 @@ Maknoon is an industrial-grade, post-quantum CLI encryption engine and Model Con
 ## 🏗 Project Architecture (v1.x Series - Industrial PQC Backbone)
 
 - **`Unified Binary`**: A single statically linked binary hosts the CLI, the native MCP server, and the new **Service-Grade REST API**. Mode of operation is determined by the command: `keygen`, `mcp`, or `serve`.
-- **`Pure Engine (DI)`**: The central Engine is fully decoupled from the environment via **Dependency Injection**. It follows a **Modular SRP Structure** where the monolithic core is split into specialized logic files (`engine_crypto.go`, `engine_vault.go`, `engine_p2p.go`, etc.) to improve context efficiency and maintainability.
+- **`Pure Engine (DI)`**: The central Engine is fully decoupled via **Dependency Injection** and decomposed into five typed **Service Structs** (`VaultService`, `IdentityService`, `NetworkService`, `CryptoService`, `WorkspaceService`). Engine methods are thin one-liner wrappers; all logic lives in the service struct for single-responsibility and AI context efficiency.
 - **`Modular CLI Commands`**: CLI command logic is decomposed into scoped files (e.g., `vault.go`, `vault_crud.go`, `vault_shard.go`) to prevent file bloating and facilitate targeted feature updates.
 - **`Domain-Specific Test Suites`**: Integration tests are organized into domain-specific suites (`commands_crypto_test.go`, `commands_vault_test.go`) for faster execution and clearer failure attribution.
 - **`Service-Grade Storage`**: In addition to standard `bbolt`, we now support **BadgerDB v4** as a high-concurrency, server-optimized LSM-tree backend for high-volume API workloads.
@@ -29,8 +29,11 @@ Maknoon is an industrial-grade, post-quantum CLI encryption engine and Model Con
 - **Identity Collision**: Never use `libp2p.FallbackDefaults` when providing a custom identity. This triggers a "cannot specify multiple identities" error.
 - **Explicit Identity**: All P2P operations (`send`, `receive`, `chat`, `tunnel`) support explicit identity selection via the `--identity` flag.
 - **Transport Agnosticism**: The Maknoon P2P Wire Protocol (defined in `p2p_message.go`) is isolated from the `libp2p` transport.
-- **MCP-over-SSE**: Tool responses are pushed through the long-lived SSE stream (`/sse`), not the POST body. Requires explicit certificate loading (`SetActiveCertificate`) to avoid internal handshake errors.
-- **Identity Discovery Service**: The REST API now exposes decentralized **Nostr/DNS resolution** as a service, allowing external apps to discover PQC public keys via a simple GET request.
+- **MCP-over-SSE**: Tool responses are pushed through the long-lived SSE stream (`/sse`), not the POST body. Requires explicit certificate loading (`SetActiveCertificate`) to avoid internal handshake errors. All `mcp --transport sse` deployments **require** `--tls-cert` and `--tls-key` (plain HTTP is rejected by design).
+- **Identity Registry Stack**: Three-tier decentralised discovery — (1) **libp2p Kademlia DHT** on `/maknoon` protocol prefix (primary, stores full ML-DSA-87 record, works offline); (2) **Nostr relays** (fallback, secp256k1 key derived ephemerally via HKDF from SIG private key — **never stored on disk**); (3) **DNS** (authoritative, requires domain). BEP-44 BitTorrent DHT is opt-in (`--bep44`) and only stores peer multiaddrs (requires peer online for full-record fetch).
+- **Nostr Publish**: Use `identity publish @handle --nostr` to explicitly target Nostr relays. Default `identity publish` targets the libp2p DHT. The `nostr_pub` hex is exposed in `identity info --json` (derived at keygen, stored in `.nostr.pub`).
+- **libp2p DHT Protocol Prefix**: Use `dht.ProtocolPrefix("/maknoon")` + `dht.NamespacedValidator("id", ...)`. Do NOT add a custom validator to the default `/ipfs` prefix — it enforces exactly `/pk` and `/ipns` validators.
+- **libp2p DHT Resolve Timeout**: Cap `Resolve()` at 10s via `context.WithTimeout` so `MultiRegistry` falls through to Nostr/DNS promptly when no `/maknoon/kad` peers are in the routing table.
 
 ## 🏗 Mission & Docker Infrastructure Lessons
 
@@ -94,13 +97,20 @@ NEVER use `fmt.Print` or `json.Marshal` directly in business logic. Use the `Pre
 ## 🗺 Codebase Architectural Map
 
 ### 🧠 The Engine Core (`pkg/crypto/`)
-- **`engine.go`**: Core initialization and capability enforcement.
-- **`engine_crypto.go`**: High-level encryption/decryption/signing orchestration.
-- **`engine_vault.go`**: Vault lifecycle, CRUD, and passphrase management.
-- **`engine_p2p.go`**: P2P protocol coordination (libp2p lifecycle).
-- **`engine_identity.go`**: ML-DSA/Ed25519 identity generation and registry ops.
-- **`engine_observability.go`**: Audit logging and telemetry hooks.
-- **`engine_dispersal.go`**: (Phase 7) Fragment dispersal and RAID-for-Privacy logic.
+- **`engine.go`**: Core init, capability enforcement, `newShimEngine()` for pipeline shims.
+- **`engine_services.go`**: Service struct definitions (`VaultService`, `IdentityService`, `NetworkService`, `CryptoService`, `WorkspaceService`).
+- **`engine_crypto.go`**: Engine wrappers + `CryptoService` implementation (encrypt/decrypt/sign).
+- **`engine_vault.go`**: Engine wrappers + `VaultService` implementation (vault lifecycle, CRUD).
+- **`engine_p2p.go`**: Engine wrappers + `NetworkService` implementation (tunnels, P2P, chat).
+- **`engine_identity.go`**: Engine wrappers + `IdentityService` implementation (keygen, registry, sharding).
+- **`engine_contacts.go`**: Engine wrappers + `IdentityService` contact methods.
+- **`engine_observability.go`**: Engine wrappers + `NetworkService.NetworkStatus`, `Diagnostic`, `AuditExport`.
+- **`engine_workspace.go`**: Engine wrappers + `WorkspaceService` (ephemeral /dev/shm sandboxes).
+- **`engine_dispersal.go`**: Engine wrapper + `CryptoService.ReassembleFragments`.
+- **`registry_libp2p.go`**: libp2p Kademlia DHT registry (`/maknoon` protocol prefix).
+- **`registry_nostr.go`**: Nostr relay registry (secp256k1 key derived ephemerally via HKDF).
+- **`registry_bep44.go`**: BEP-44 BitTorrent DHT registry (opt-in peer-discovery only).
+- **`p2p_identity_serve.go`**: `/maknoon/id/1.0.0` stream handler for full identity record fetch.
 
 ### 🛡 Cryptographic Primitives (`pkg/crypto/`)
 - **`encrypt.go` / `decrypt.go`**: AEAD (AES-GCM) and HPKE (ML-KEM) streaming.
@@ -132,11 +142,17 @@ NEVER use `fmt.Print` or `json.Marshal` directly in business logic. Use the `Pre
 5. [DONE] **Phase 6.2**: Orchestrated Quorum Unlocking (Consensus-based vaults).
 6. [DONE] **Phase 7**: RAID-for-Privacy (Reed-Solomon dispersal & retrieval).
 7. [DONE] **Phase 7.4**: Resilient L4 Tunnels (Reed-Solomon lane striping).
-8. [IN PROGRESS] **Phase 8**: Post-Quantum FIPS Certification & Final Hardening.
+8. [DONE] **Phase 8**: Post-Quantum FIPS Certification & Final Hardening.
     - **Entropy Sentinel (CRNGT)**: Real-time entropy health monitoring (FIPS 140-3). [DONE]
     - **Expanded POST**: ML-KEM, ML-DSA, and Argon2id Known Answer Tests on startup. [DONE]
     - **Chained Forensic Auditing**: Immutable, hash-linked audit trails. [DONE]
     - **TPM 2.0 Hardening**: Hardware-backed identity protection for Linux (Pure Go). [DONE]
+9. [DONE] **Phase 8.1**: Architectural Hardening & Observability (Gemini CLI + Claude Code sessions, 2026-05-17/18).
+    - **Observability**: Self-documenting policy errors, shared mission logs, startup heartbeat. [DONE]
+    - **Engine Decomposition**: Service structs (VaultService/IdentityService/NetworkService/CryptoService/WorkspaceService), BaseEngine pattern, interface compliance checks. [DONE]
+    - **CI Hardening**: Race detector (`-short`), build-tag matrix (linux/darwin/windows), version injection. [DONE]
+    - **Identity Registry**: libp2p DHT (primary) + Nostr (fallback, ephemeral key) + DNS. Nostr secp256k1 key derived via HKDF — never stored. [DONE]
+    - **Mission Suite**: All 9 missions pass (agility TLS fix, quorum passphrase, global Nostr discovery). [DONE]
 
 ## ⚙️ Protocol & Header Specifications
 
