@@ -89,7 +89,7 @@ docker compose -f $COMPOSE_FILE exec recovery-node sh -c \
 # Step 7: Verify Secret
 echo "🧪 Verifying recovered secret integrity..."
 # Use the new vault
-FINAL_SECRET=$(docker compose -f $COMPOSE_FILE exec recovery-node maknoon vault get MASTER_SECRET -v recovered --json | jq -r '.password')
+FINAL_SECRET=$(docker compose -f $COMPOSE_FILE exec recovery-node maknoon vault get MASTER_SECRET -v recovered -s quorum-pass --json | jq -r '.password')
 
 
 if [ "$FINAL_SECRET" == "SuperSecret123" ]; then

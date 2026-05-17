@@ -33,7 +33,7 @@ services:
       - -c
       - |
         maknoon keygen --no-password -o transformer-id
-        maknoon mcp --transport sse --address 0.0.0.0:8080 &
+        maknoon mcp --transport sse --address 0.0.0.0:8080 --tls-cert /etc/maknoon/certs/server.crt --tls-key /etc/maknoon/certs/server.key &
         mkdir -p /home/maknoon/data/encrypted
         while true; do
           for f in /home/maknoon/data/*.bin; do
@@ -49,6 +49,7 @@ services:
         done
     volumes:
       - agility-data:/home/maknoon/data
+      - ./certs:/etc/maknoon/certs:ro
     networks:
       - agility-net
 
@@ -57,6 +58,8 @@ services:
     build:
       context: ../../
       dockerfile: Dockerfile.mission
+    volumes:
+      - ./certs:/etc/maknoon/certs:ro
     command: sleep 3600
     networks:
       - agility-net

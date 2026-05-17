@@ -25,6 +25,9 @@ func registerConfigTools(s *server.MCPServer, engine crypto.MaknoonEngine) {
 			if val, ok := args["default_identity"].(string); ok {
 				conf.DefaultIdentity = val
 			}
+			if val, ok := args["profile_id"].(float64); ok && val != 0 {
+				conf.Performance.DefaultProfile = byte(val)
+			}
 			if val, ok := args["concurrency"].(float64); ok {
 				conf.Performance.Concurrency = int(val)
 			}

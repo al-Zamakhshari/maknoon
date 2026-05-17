@@ -9,6 +9,8 @@ COMPOSE_FILE="deploy/docker/mission-agility.yml"
 
 trap 'fail_trap "Dynamic Agility Migration" "$COMPOSE_FILE"' EXIT
 
+generate_test_certs "deploy/docker/certs"
+
 echo "🏗️  Provisioning Agility Mission Infrastructure..."
 docker compose -f $COMPOSE_FILE up -d --build
 
@@ -45,24 +47,25 @@ fi
 echo "✅ Initial files confirmed as Profile 1 (ML-KEM)."
 
 # Step 2: Controller triggers migration via MCP SSE
-echo "🎯 CONTROLLER: Triggering Dynamic Migration to Profile 2 (AES-GCM-SIV)..."
+echo "🎯 CONTROLLER: Triggering Dynamic Migration to Profile 3 (Conservative/FrodoKEM)..."
 CONTROLLER_CONTAINER=$(docker compose -f $COMPOSE_FILE ps -q controller)
 
-# Establish session
-docker exec -d $CONTROLLER_CONTAINER sh -c "curl -s -N http://transformer:8080/sse > /tmp/sse.log 2>&1"
+# Establish session (TLS with self-signed cert — -k skips verify, same as --insecure on maknoon call)
+docker exec -d $CONTROLLER_CONTAINER sh -c "curl -s -k -N https://transformer:8080/sse > /tmp/sse.log 2>&1"
 sleep 5
 
-# Extract message path
+# Extract message path (URL starts with https, grep matches since https contains 'http')
 RAW_URL=$(docker exec $CONTROLLER_CONTAINER sh -c "grep 'data: http' /tmp/sse.log | head -n 1 | sed 's/data: //'")
-MSG_PATH=$(echo "$RAW_URL" | sed 's|http://[^/]*||' | tr -d '\r\n')
+MSG_PATH=$(echo "$RAW_URL" | sed 's|https://[^/]*||' | tr -d '\r\n')
 
 if [ -z "$MSG_PATH" ]; then
     echo "❌ FAILED: MCP SSE session establishment failed."
+    docker exec $CONTROLLER_CONTAINER sh -c "cat /tmp/sse.log"
     exit 1
 fi
 
 # Call config_update
-docker exec $CONTROLLER_CONTAINER curl -s -X POST "http://transformer:8080$MSG_PATH" \
+docker exec $CONTROLLER_CONTAINER curl -s -k -X POST "https://transformer:8080$MSG_PATH" \
   -H "Content-Type: application/json" \
   -d '{
     "jsonrpc": "2.0",
@@ -70,7 +73,7 @@ docker exec $CONTROLLER_CONTAINER curl -s -X POST "http://transformer:8080$MSG_P
     "params": {
       "name": "config_update",
       "arguments": {
-        "profile_id": 2
+        "profile_id": 3
       }
     },
     "id": 101
@@ -79,19 +82,19 @@ docker exec $CONTROLLER_CONTAINER curl -s -X POST "http://transformer:8080$MSG_P
 echo "⏳ Waiting for migration to propagate..."
 sleep 15
 
-# Step 3: Verify later files are Profile 2
-echo "🛡️  Verifying Post-Migration State (Profile 2: AES-GCM-SIV)..."
+# Step 3: Verify later files are Profile 3
+echo "🛡️  Verifying Post-Migration State (Profile 3: Conservative/FrodoKEM)..."
 # Look for the absolute NEWEST file
 FILE2=$(docker exec $TRANSFORMER_CONTAINER sh -c "ls -t /home/maknoon/data/encrypted/*.makn | head -n 1")
 INFO2=$(docker exec $TRANSFORMER_CONTAINER maknoon info "$FILE2" --json)
 P2=$(echo "$INFO2" | jq -r '.profile_id')
 
-if [ "$P2" != "2" ]; then
-    echo "❌ FAILED: Migration failed! Expected Profile 2, still seeing $P2"
+if [ "$P2" != "3" ]; then
+    echo "❌ FAILED: Migration failed! Expected Profile 3, still seeing $P2"
     exit 1
 fi
 
-echo "✅ SUCCESS: Dynamic Agility verified! Pipeline migrated from ML-KEM to AES-GCM-SIV without downtime."
+echo "✅ SUCCESS: Dynamic Agility verified! Pipeline migrated from Profile 1 (ML-KEM) to Profile 3 (Conservative) without downtime."
 
 echo "🧹 Tearing down Agility Mission..."
 docker compose -f $COMPOSE_FILE down
