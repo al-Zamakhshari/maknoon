@@ -1,4 +1,4 @@
-.PHONY: build test docker-build clean completion man
+.PHONY: build test docker-build clean completion man build-matrix
 
 # Build parameters
 BINARY_NAME=maknoon
@@ -62,6 +62,19 @@ smoke: build
 	@./scripts/smoke-governance.sh
 	@./scripts/mission-orchestrated-quorum.sh
 	@echo "✅ All smoke tests passed. Industrial Grade verified."
+
+# Build-tag matrix: verify all conditional compilation paths compile cleanly.
+# Platform tags (linux/!linux) gate the TPM backend.
+# Feature tags (nostr, fido2, minimal) gate optional dependencies when they land.
+build-matrix:
+	@echo "🔬 Verifying build-tag matrix..."
+	@echo "  [1/3] linux (TPM backend enabled)..."
+	@GOOS=linux CGO_ENABLED=0 go build ./... || (echo "❌ linux build failed"; exit 1)
+	@echo "  [2/3] darwin (!linux stub)..."
+	@GOOS=darwin CGO_ENABLED=0 go build ./... || (echo "❌ darwin build failed"; exit 1)
+	@echo "  [3/3] windows (!linux stub)..."
+	@GOOS=windows CGO_ENABLED=0 go build ./... || (echo "❌ windows build failed"; exit 1)
+	@echo "✅ All platform build paths verified."
 
 # Cleanup build artifacts
 clean:

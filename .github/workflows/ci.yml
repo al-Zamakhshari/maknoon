@@ -86,6 +86,9 @@ jobs:
           chmod +x scripts/smoke-tpm.go.sh
           ./scripts/smoke-tpm.go.sh
 
+      - name: Build-Tag Matrix
+        run: make build-matrix
+
   docker:
 
     name: Registry Distribution (GHCR)
