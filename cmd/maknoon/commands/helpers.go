@@ -356,8 +356,6 @@ func resolveProfile(name string) (byte, error) {
 	switch strings.ToLower(name) {
 	case "nist", "pq":
 		return 1, nil
-	case "aes":
-		return 2, nil
 	case "conservative", "legacy":
 		return 3, nil
 	case "hardened":

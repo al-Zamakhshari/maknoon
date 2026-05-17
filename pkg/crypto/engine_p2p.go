@@ -3,7 +3,6 @@ package crypto
 import (
 	"fmt"
 	"io"
-	"log/slog"
 	"strings"
 	"time"
 
@@ -12,9 +11,45 @@ import (
 	"github.com/multiformats/go-multiaddr"
 )
 
+// --- Engine Wrappers ---
+
 func (e *Engine) TunnelStart(ectx *EngineContext, opts tunnel.TunnelOptions) (tunnel.TunnelStatus, error) {
-	ectx = e.context(ectx)
-	if err := e.enforce(ectx, CapP2P); err != nil {
+	return e.Network.TunnelStart(ectx, opts)
+}
+
+func (e *Engine) TunnelStop(ectx *EngineContext) error {
+	return e.Network.TunnelStop(ectx)
+}
+
+func (e *Engine) TunnelStatus(ectx *EngineContext) (tunnel.TunnelStatus, error) {
+	return e.Network.TunnelStatus(ectx)
+}
+
+func (e *Engine) TunnelListen(ectx *EngineContext, addr, mode, identity string) (NetworkResult, error) {
+	return e.Network.TunnelListen(ectx, addr, mode, identity)
+}
+
+func (e *Engine) P2PSend(ectx *EngineContext, identityName, inputName string, r io.Reader, opts P2PSendOptions) (string, <-chan P2PStatus, error) {
+	return e.Network.P2PSend(ectx, identityName, inputName, r, opts)
+}
+
+func (e *Engine) P2PReceive(ectx *EngineContext, identityName, code string, opts P2PReceiveOptions) (<-chan P2PStatus, error) {
+	return e.Network.P2PReceive(ectx, identityName, code, opts)
+}
+
+func (e *Engine) ChatStart(ectx *EngineContext, identityName, target string) (*P2PChatSession, error) {
+	return e.Network.ChatStart(ectx, identityName, target)
+}
+
+func (e *Engine) ValidateWormholeURL(ectx *EngineContext, u string) error {
+	return e.Network.ValidateWormholeURL(ectx, u)
+}
+
+// --- NetworkService Implementation ---
+
+func (s *NetworkService) TunnelStart(ectx *EngineContext, opts tunnel.TunnelOptions) (tunnel.TunnelStatus, error) {
+	ectx = s.engine.context(ectx)
+	if err := s.engine.enforce(ectx, CapP2P); err != nil {
 		return tunnel.TunnelStatus{}, err
 	}
 
@@ -23,11 +58,13 @@ func (e *Engine) TunnelStart(ectx *EngineContext, opts tunnel.TunnelOptions) (tu
 		return tunnel.TunnelStatus{}, err
 	}
 
-	e.tunnel.mu.Lock()
-	defer e.tunnel.mu.Unlock()
+	s.tunnelMu.Lock()
+	defer s.tunnelMu.Unlock()
 
-	if e.tunnel.active != nil && e.tunnel.active.Active {
-		return *e.tunnel.active, fmt.Errorf("a tunnel is already active")
+	if s.activeTunnel != nil {
+		if at, ok := s.activeTunnel.(*tunnel.TunnelStatus); ok && at.Active {
+			return *at, fmt.Errorf("a tunnel is already active")
+		}
 	}
 
 	targetAddr := opts.P2PAddr
@@ -37,7 +74,7 @@ func (e *Engine) TunnelStart(ectx *EngineContext, opts tunnel.TunnelOptions) (tu
 
 	if opts.P2PMode && targetAddr != "" {
 		if strings.HasPrefix(targetAddr, "@") {
-			reg := NewIdentityRegistry(e.Config)
+			reg := NewIdentityRegistry(s.engine.Config)
 			record, err := reg.Resolve(ectx.Context, targetAddr)
 			if err != nil {
 				return tunnel.TunnelStatus{}, fmt.Errorf("failed to resolve tunnel peer '%s': %w", targetAddr, err)
@@ -67,7 +104,7 @@ func (e *Engine) TunnelStart(ectx *EngineContext, opts tunnel.TunnelOptions) (tu
 
 	var libp2pOpts []libp2p.Option
 	if opts.P2PMode && opts.Identity != "" {
-		id, err := e.Identities.LoadIdentity(opts.Identity, nil, "", false)
+		id, err := s.engine.Identity.LoadIdentity(ectx, opts.Identity, nil, "", false)
 		if err != nil {
 			return tunnel.TunnelStatus{}, err
 		}
@@ -78,7 +115,7 @@ func (e *Engine) TunnelStart(ectx *EngineContext, opts tunnel.TunnelOptions) (tu
 		libp2pOpts = append(libp2pOpts, libp2p.Identity(priv))
 	}
 
-	factory := &tunnel.TransportFactory{Config: e.Config.Tunnel}
+	factory := &tunnel.TransportFactory{Config: s.engine.Config.Tunnel}
 	session, err := factory.CreateClientSession(ectx.Context, opts, libp2pOpts...)
 	if err != nil {
 		return tunnel.TunnelStatus{}, err
@@ -96,10 +133,10 @@ func (e *Engine) TunnelStart(ectx *EngineContext, opts tunnel.TunnelOptions) (tu
 
 	remote := opts.RemoteEndpoint
 	if remote == "" {
-		remote = opts.P2PAddr
+		remote = "libp2p-resilient-tunnel"
 	}
 
-	status := &tunnel.TunnelStatus{
+	status := tunnel.TunnelStatus{
 		Active:         true,
 		LocalAddress:   fmt.Sprintf("127.0.0.1:%d", opts.LocalProxyPort),
 		RemoteEndpoint: remote,
@@ -107,47 +144,58 @@ func (e *Engine) TunnelStart(ectx *EngineContext, opts tunnel.TunnelOptions) (tu
 		DataLanes:      opts.DataLanes,
 		ParityLanes:    opts.ParityLanes,
 	}
-
-	// For resilient tunnels, check initial healthy count
 	if opts.DataLanes > 0 {
 		status.HealthyLanes = opts.DataLanes + opts.ParityLanes
 	}
 
-	e.tunnel.active = status
-	e.tunnel.gateway = gw
+	s.activeTunnel = &status
+	s.gateway = gw
 
-	return *status, nil
+	return status, nil
 }
 
-func (e *Engine) TunnelStop(ectx *EngineContext) error {
-	e.tunnel.mu.Lock()
-	defer e.tunnel.mu.Unlock()
+func (s *NetworkService) TunnelStop(ectx *EngineContext) error {
+	s.tunnelMu.Lock()
+	defer s.tunnelMu.Unlock()
 
-	if e.tunnel.gateway != nil {
-		e.tunnel.gateway.Stop()
-		if e.tunnel.gateway.Session != nil {
-			e.tunnel.gateway.Session.Close()
-		}
+	if s.activeTunnel == nil {
+		return nil
 	}
 
-	e.tunnel.active = nil
-	e.tunnel.gateway = nil
+	if gw, ok := s.gateway.(*tunnel.TunnelGateway); ok {
+		gw.Stop()
+	}
+
+	s.activeTunnel = nil
+	s.gateway = nil
+
+	if s.gatewayServer != nil {
+		if srv, ok := s.gatewayServer.(*tunnel.TunnelGateway); ok {
+			srv.Stop()
+		}
+		s.gatewayServer = nil
+	}
+
 	return nil
 }
 
-func (e *Engine) TunnelStatus(ectx *EngineContext) (tunnel.TunnelStatus, error) {
-	e.tunnel.mu.RLock()
-	defer e.tunnel.mu.RUnlock()
+func (s *NetworkService) TunnelStatus(ectx *EngineContext) (tunnel.TunnelStatus, error) {
+	s.tunnelMu.RLock()
+	defer s.tunnelMu.RUnlock()
 
-	if e.tunnel.active == nil {
+	if s.activeTunnel == nil {
 		return tunnel.TunnelStatus{Active: false}, nil
 	}
-	return *e.tunnel.active, nil
+
+	if st, ok := s.activeTunnel.(*tunnel.TunnelStatus); ok {
+		return *st, nil
+	}
+	return tunnel.TunnelStatus{Active: false}, nil
 }
 
-func (e *Engine) TunnelListen(ectx *EngineContext, addr string, mode string, identity string) (NetworkResult, error) {
-	ectx = e.context(ectx)
-	if err := e.enforce(ectx, CapP2P); err != nil {
+func (s *NetworkService) TunnelListen(ectx *EngineContext, addr, mode, identity string) (NetworkResult, error) {
+	ectx = s.engine.context(ectx)
+	if err := s.engine.enforce(ectx, CapP2P); err != nil {
 		return NetworkResult{}, err
 	}
 
@@ -160,29 +208,30 @@ func (e *Engine) TunnelListen(ectx *EngineContext, addr string, mode string, ide
 				libp2pOpts = append(libp2pOpts, libp2p.ListenAddrs(ma))
 			}
 		}
-	}
-
-	if mode == "p2p" && identity != "" {
-		id, err := e.Identities.LoadIdentity(identity, nil, "", false)
-		if err != nil {
-			return NetworkResult{}, err
+		if identity != "" {
+			id, err := s.engine.Identity.LoadIdentity(ectx, identity, nil, "", false)
+			if err != nil {
+				return NetworkResult{}, err
+			}
+			priv, err := id.AsLibp2pKey()
+			if err != nil {
+				return NetworkResult{}, err
+			}
+			libp2pOpts = append(libp2pOpts, libp2p.Identity(priv))
 		}
-		priv, err := id.AsLibp2pKey()
-		if err != nil {
-			return NetworkResult{}, err
-		}
-		libp2pOpts = append(libp2pOpts, libp2p.Identity(priv))
-	}
 
-	if mode == "p2p" {
 		h, err := tunnel.NewLibp2pHost(libp2pOpts...)
 		if err != nil {
 			return NetworkResult{}, err
 		}
-		e.RegisterQuorumHandler(h)
+		s.engine.RegisterQuorumHandler(h)
 		ln := tunnel.StartLibp2pListener(h)
 		srv := tunnel.NewTunnelServer(ln)
-		e.tunnel.server = srv
+
+		s.tunnelMu.Lock()
+		s.gatewayServer = srv
+		s.tunnelMu.Unlock()
+
 		go srv.Start()
 
 		res := NetworkResult{
@@ -193,7 +242,6 @@ func (e *Engine) TunnelListen(ectx *EngineContext, addr string, mode string, ide
 		for _, a := range h.Addrs() {
 			ma := fmt.Sprintf("%s/p2p/%s", a, h.ID())
 			res.Addrs = append(res.Addrs, ma)
-			// Prefer loopback IPv4 as the canonical local test address if none is set yet
 			if canonical == "" && strings.Contains(ma, "/127.0.0.1/") && strings.Contains(ma, "/tcp/") {
 				canonical = ma
 			}
@@ -205,123 +253,41 @@ func (e *Engine) TunnelListen(ectx *EngineContext, addr string, mode string, ide
 		return res, nil
 	}
 
-	factory := &tunnel.TransportFactory{Config: e.Config.Tunnel}
+	factory := &tunnel.TransportFactory{Config: s.engine.Config.Tunnel}
 	ln, err := factory.CreateListener(ectx.Context, addr, mode)
 	if err != nil {
 		return NetworkResult{}, err
 	}
-
 	srv := tunnel.NewTunnelServer(ln)
-	e.tunnel.server = srv
+
+	s.tunnelMu.Lock()
+	s.gatewayServer = srv
+	s.tunnelMu.Unlock()
+
 	go srv.Start()
 
-	actualAddr := ln.Addr().String()
-	return NetworkResult{Status: "listening", Addrs: []string{actualAddr}}, nil
+	return NetworkResult{Status: "listening", Addrs: []string{ln.Addr().String()}}, nil
 }
 
-func (e *Engine) ChatStart(ectx *EngineContext, identityName string, target string) (*P2PChatSession, error) {
-	ectx = e.context(ectx)
-	if err := e.enforce(ectx, CapP2P); err != nil {
-		return nil, err
+func (s *NetworkService) P2PSend(ectx *EngineContext, identityName, inputName string, r io.Reader, opts P2PSendOptions) (string, <-chan P2PStatus, error) {
+	ectx = s.engine.context(ectx)
+	if err := s.engine.enforce(ectx, CapP2P); err != nil {
+		return "", nil, err
 	}
-
-	idName := identityName
-	if idName == "" {
-		idName = e.GetConfig().DefaultIdentity
-	}
-	if idName == "" {
-		idName = "default"
-	}
-	id, err := e.Identities.LoadIdentity(idName, nil, "", false)
-	if err != nil {
-		return nil, err
-	}
-
-	priv, err := id.AsLibp2pKey()
-	if err != nil {
-		return nil, err
-	}
-
-	h, err := tunnel.NewLibp2pHost(libp2p.Identity(priv))
-	if err != nil {
-		return nil, err
-	}
-
-	sess := NewP2PChatSession(h)
-
-	if target == "" {
-		_, err = sess.StartHost(ectx.Context)
-	} else {
-		if strings.HasPrefix(target, "@") {
-			if err := e.ensureContacts(); err != nil {
-				return nil, err
-			}
-			c, err := e.contacts.manager.Get(target)
-			if err != nil {
-				return nil, err
-			}
-			target = c.PeerID
-		}
-		err = sess.StartJoin(ectx.Context, target)
-	}
-
-	if err != nil {
-		h.Close()
-		return nil, err
-	}
-
-	return sess, nil
-}
-
-func (e *Engine) P2PKeepAlive(ectx *EngineContext, identityName string) error {
-	ectx = e.context(ectx)
-	if err := e.enforce(ectx, CapP2P); err != nil {
-		return err
-	}
-
-	id, err := e.Identities.LoadIdentity(identityName, nil, "", false)
-	if err != nil {
-		return err
-	}
-
-	priv, err := id.AsLibp2pKey()
-	if err != nil {
-		return err
-	}
-
-	h, err := tunnel.NewLibp2pHost(libp2p.Identity(priv))
-	if err != nil {
-		return err
-	}
-
-	slog.Info("p2p keep-alive: advertising identity", "peer_id", h.ID(), "identity", identityName)
-
-	go func() {
-		<-ectx.Context.Done()
-		h.Close()
-	}()
-
-	return nil
-}
-
-func (e *Engine) P2PSend(ectx *EngineContext, identityName string, inputName string, r io.Reader, opts P2PSendOptions) (string, <-chan P2PStatus, error) {
-	ectx = e.context(ectx)
 	if opts.TraceID == "" {
 		opts.TraceID = GenerateTraceID()
 	}
-	e.Logger.Debug("P2PSend initiating", "trace_id", opts.TraceID, "input", inputName, "target", opts.To)
-
-	status := make(chan P2PStatus, 10)
+	s.engine.Logger.Debug("P2PSend initiating", "trace_id", opts.TraceID, "input", inputName, "target", opts.To)
 
 	idName := identityName
 	if idName == "" {
-		idName = e.GetConfig().DefaultIdentity
+		idName = s.engine.GetConfig().DefaultIdentity
 	}
 	if idName == "" {
 		idName = "default"
 	}
 
-	id, err := e.Identities.LoadIdentity(idName, opts.Passphrase, "", false)
+	id, err := s.engine.Identity.Mgr.LoadIdentity(idName, opts.Passphrase, "", false)
 	if err != nil {
 		return "", nil, err
 	}
@@ -333,40 +299,41 @@ func (e *Engine) P2PSend(ectx *EngineContext, identityName string, inputName str
 	if err != nil {
 		return "", nil, err
 	}
+
+	status := make(chan P2PStatus, 10)
 	if opts.DataShards > 0 {
-		go e.runLibp2pFragmentSend(ectx, inputName, r, h, opts.To, opts, status)
+		go s.engine.runLibp2pFragmentSend(ectx, inputName, r, h, opts.To, opts, status)
 	} else {
-		go e.runLibp2pSend(ectx, inputName, r, h, opts.To, opts, status)
+		go s.engine.runLibp2pSend(ectx, inputName, r, h, opts.To, opts, status)
 	}
 	return h.ID().String(), status, nil
 }
 
-func (e *Engine) P2PReceive(ectx *EngineContext, identityName string, code string, opts P2PReceiveOptions) (<-chan P2PStatus, error) {
-	ectx = e.context(ectx)
+func (s *NetworkService) P2PReceive(ectx *EngineContext, identityName, code string, opts P2PReceiveOptions) (<-chan P2PStatus, error) {
+	ectx = s.engine.context(ectx)
+	if err := s.engine.enforce(ectx, CapP2P); err != nil {
+		return nil, err
+	}
 	if opts.TraceID == "" {
 		opts.TraceID = GenerateTraceID()
 	}
-	e.Logger.Debug("P2PReceive initiating", "trace_id", opts.TraceID, "identity", identityName)
-
-	status := make(chan P2PStatus, 10)
+	s.engine.Logger.Debug("P2PReceive initiating", "trace_id", opts.TraceID, "identity", identityName)
 
 	idName := identityName
 	if idName == "" {
-		idName = e.GetConfig().DefaultIdentity
+		idName = s.engine.GetConfig().DefaultIdentity
 	}
 	if idName == "" {
 		idName = "default"
 	}
 
-	id, err := e.Identities.LoadIdentity(idName, opts.Passphrase, "", false)
+	id, err := s.engine.Identity.Mgr.LoadIdentity(idName, opts.Passphrase, "", false)
 	if err != nil {
 		return nil, err
 	}
-
 	if len(opts.PrivateKey) == 0 {
 		opts.PrivateKey = id.KEMPriv
 	}
-
 	priv, err := id.AsLibp2pKey()
 	if err != nil {
 		return nil, err
@@ -375,31 +342,82 @@ func (e *Engine) P2PReceive(ectx *EngineContext, identityName string, code strin
 	if err != nil {
 		return nil, err
 	}
-	e.RegisterQuorumHandler(h)
+	s.engine.RegisterQuorumHandler(h)
 
-	// Always register the fragment handler if we have an output directory
-	// This enables us to serve fragments we've already received.
 	storageDir := opts.OutputDir
 	if storageDir == "" {
 		storageDir = "."
 	}
-	e.RegisterFragmentHandler(h, storageDir)
+	s.engine.RegisterFragmentHandler(h, storageDir)
 
+	status := make(chan P2PStatus, 10)
 	if opts.IsFragmented {
-		go e.runLibp2pFragmentReceive(ectx, code, h, opts, status)
+		go s.engine.runLibp2pFragmentReceive(ectx, code, h, opts, status)
 	} else {
-		go e.runLibp2pReceive(ectx, h, opts, status)
+		go s.engine.runLibp2pReceive(ectx, h, opts, status)
 	}
 
 	var addrs []string
 	for _, a := range h.Addrs() {
 		addrs = append(addrs, a.String()+"/p2p/"+h.ID().String())
 	}
-
 	status <- P2PStatus{Phase: "connecting", Code: h.ID().String(), Addrs: addrs}
 	return status, nil
 }
 
-func (e *Engine) ValidateWormholeURL(ectx *EngineContext, url string) error {
+func (s *NetworkService) ChatStart(ectx *EngineContext, identityName, target string) (*P2PChatSession, error) {
+	ectx = s.engine.context(ectx)
+	if err := s.engine.enforce(ectx, CapP2P); err != nil {
+		return nil, err
+	}
+
+	idName := identityName
+	if idName == "" {
+		idName = s.engine.GetConfig().DefaultIdentity
+	}
+	if idName == "" {
+		idName = "default"
+	}
+
+	id, err := s.engine.Identity.Mgr.LoadIdentity(idName, nil, "", false)
+	if err != nil {
+		return nil, err
+	}
+	priv, err := id.AsLibp2pKey()
+	if err != nil {
+		return nil, err
+	}
+	h, err := tunnel.NewLibp2pHost(libp2p.Identity(priv))
+	if err != nil {
+		return nil, err
+	}
+
+	sess := NewP2PChatSession(h)
+	if target == "" {
+		if _, err = sess.StartHost(ectx.Context); err != nil {
+			h.Close()
+			return nil, err
+		}
+	} else {
+		if strings.HasPrefix(target, "@") {
+			if err := s.engine.ensureContacts(); err != nil {
+				return nil, err
+			}
+			c, err := s.engine.Contacts.Get(target)
+			if err != nil {
+				return nil, err
+			}
+			target = c.PeerID
+		}
+		if err = sess.StartJoin(ectx.Context, target); err != nil {
+			h.Close()
+			return nil, err
+		}
+	}
+
+	return sess, nil
+}
+
+func (s *NetworkService) ValidateWormholeURL(ectx *EngineContext, u string) error {
 	return nil // Deprecated
 }

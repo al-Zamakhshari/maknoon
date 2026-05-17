@@ -13,7 +13,7 @@ graph TD
         Engine[Engine Core]
     end
     
-    Maknoon -- PQC Keys --> Nostr[Nostr DHT / DNS]
+    Maknoon -- identity publish --> Registry[libp2p DHT / Nostr / DNS]
     Maknoon -- Tunnel --> Wormhole[Magic Wormhole Relay]
     Maknoon -- Audit --> Logs[Compliance Logs]
     Maknoon -- Storage --> FS[Local Filesystem / Cloud Sidecar]
@@ -164,6 +164,30 @@ graph TD
 *   **Encapsulation Protocol**: Local TCP connections are bridged into independent QUIC streams. The destination address is transmitted as a post-quantum-secured metadata header during stream initiation.
 *   **Memory Hygiene**: Plaintext network data is processed exclusively within hardware-locked **memguard enclaves**, with deterministic zeroization of buffers after every packet transmission.
 *   **Zero-Trust Identity**: Tunnel handshakes utilize the platform's **ML-KEM-1024 + X25519** hybrid posture, neutralizing "harvest now, decrypt later" transport threats.
+
+---
+
+## Identity Registry Stack
+
+Maknoon uses a three-tier decentralised identity registry for publishing and resolving PQC public keys.
+
+| Tier | Protocol | Handle Format | Notes |
+|------|----------|--------------|-------|
+| **Primary** | libp2p Kademlia DHT (`/maknoon` protocol) | `@alice` | Stores full ML-DSA-87 record; works when publisher is offline |
+| **Fallback** | Nostr relays (kind:0 events) | `@alice`, `alice@domain.com` (NIP-05) | Secp256k1 key derived ephemerally via HKDF from SIG private key — never stored on disk |
+| **Authoritative** | DNS TXT records | `@alice.example.com` | Requires domain ownership; supports deSEC.io auto-publish |
+| **Opt-in** | BitTorrent BEP-44 DHT | `@bep44:<ed25519-hex>` | Stores multiaddrs only; peer must be online for full record fetch |
+
+### Publish defaults
+```bash
+maknoon identity publish @alice               # → libp2p DHT (default)
+maknoon identity publish @alice --nostr       # → also Nostr relays
+maknoon identity publish @alice --dns --desec # → DNS via deSEC.io
+maknoon identity publish @alice --bep44       # → BEP-44 peer-discovery (opt-in)
+```
+
+### Resolve flow
+`MultiRegistry` tries tiers in order: libp2p DHT (10s timeout) → Nostr → DNS. A 10-second cap on the libp2p step ensures fast fallthrough when no `/maknoon/kad` peers are reachable.
 
 ---
 

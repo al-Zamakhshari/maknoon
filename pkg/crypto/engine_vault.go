@@ -1,9 +1,7 @@
 package crypto
 
 import (
-	"crypto/hmac"
 	"crypto/rand"
-	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -12,14 +10,61 @@ import (
 	"strings"
 )
 
-// VaultInitInstitutional creates a new institutional vault governed by a quorum.
+// --- Engine Wrappers ---
+
 func (e *Engine) VaultInitInstitutional(ectx *EngineContext, name string, threshold, shares int, peerIDs []string, passphrase []byte) (*VaultResult, error) {
-	ectx = e.context(ectx)
-	if err := e.enforce(ectx, CapVaultWrite); err != nil {
+	return e.Vault.InitInstitutional(ectx, name, threshold, shares, peerIDs, passphrase)
+}
+
+func (e *Engine) VaultStatus(ectx *EngineContext, name string) (*VaultResult, error) {
+	return e.Vault.Status(ectx, name)
+}
+
+func (e *Engine) VaultSet(ectx *EngineContext, vaultPath string, entry *VaultEntry, passphrase []byte, pin string, overwrite bool) error {
+	return e.Vault.Set(ectx, vaultPath, entry, passphrase, pin, overwrite)
+}
+
+func (e *Engine) VaultGet(ectx *EngineContext, vaultPath string, service string, passphrase []byte, pin string) (*VaultEntry, error) {
+	return e.Vault.Get(ectx, vaultPath, service, passphrase, pin)
+}
+
+func (e *Engine) VaultDelete(ectx *EngineContext, name string) error {
+	return e.Vault.Delete(ectx, name)
+}
+
+func (e *Engine) VaultRename(ectx *EngineContext, oldName, newName string) error {
+	return e.Vault.Rename(ectx, oldName, newName)
+}
+
+func (e *Engine) VaultList(ectx *EngineContext, vaultPath string, passphrase []byte) ([]VaultListEntry, error) {
+	return e.Vault.List(ectx, vaultPath, passphrase)
+}
+
+func (e *Engine) VaultSplit(ectx *EngineContext, vaultPath string, threshold, shares int, passphrase string) ([]string, error) {
+	return e.Vault.Split(ectx, vaultPath, threshold, shares, passphrase)
+}
+
+func (e *Engine) VaultRecover(ectx *EngineContext, mnemonics []string, vaultPath string, output string, passphrase string) (string, error) {
+	return e.Vault.Recover(ectx, mnemonics, vaultPath, output, passphrase)
+}
+
+func (e *Engine) VaultCheckShards(ectx *EngineContext, mnemonics []string) (*VaultResult, error) {
+	return e.Vault.CheckShards(ectx, mnemonics)
+}
+
+func (e *Engine) VaultRotate(ectx *EngineContext, vaultPath string, oldPassphrase, newPassphrase []byte) error {
+	return e.Vault.Rotate(ectx, vaultPath, oldPassphrase, newPassphrase)
+}
+
+// --- VaultService Implementation ---
+
+func (s *VaultService) InitInstitutional(ectx *EngineContext, name string, threshold, shares int, peerIDs []string, passphrase []byte) (*VaultResult, error) {
+	ectx = s.engine.context(ectx)
+	if err := s.engine.enforce(ectx, CapVaultWrite); err != nil {
 		return nil, err
 	}
 
-	path, err := e.resolveVaultPath(name)
+	path, err := s.resolveVaultPath(name)
 	if err != nil {
 		return nil, err
 	}
@@ -29,13 +74,13 @@ func (e *Engine) VaultInitInstitutional(ectx *EngineContext, name string, thresh
 	}
 
 	// 1. Shard the master passphrase using SSS
-	mnemonics, err := e.VaultSplit(ectx, path, threshold, shares, string(passphrase))
+	mnemonics, err := s.Split(ectx, path, threshold, shares, string(passphrase))
 	if err != nil {
 		return nil, fmt.Errorf("failed to shard passphrase: %w", err)
 	}
 
 	// 2. Open vault and save metadata
-	store, err := e.Vaults.Open(path)
+	store, err := s.Store.Open(path)
 	if err != nil {
 		return nil, err
 	}
@@ -78,18 +123,17 @@ func (e *Engine) VaultInitInstitutional(ectx *EngineContext, name string, thresh
 	}, nil
 }
 
-// VaultStatus returns the governance status of a vault.
-func (e *Engine) VaultStatus(ectx *EngineContext, name string) (*VaultResult, error) {
-	ectx = e.context(ectx)
-	if err := e.enforce(ectx, CapVaultRead); err != nil {
+func (s *VaultService) Status(ectx *EngineContext, name string) (*VaultResult, error) {
+	ectx = s.engine.context(ectx)
+	if err := s.engine.enforce(ectx, CapVaultRead); err != nil {
 		return nil, err
 	}
-	path, err := e.resolveVaultPath(name)
+	path, err := s.resolveVaultPath(name)
 	if err != nil {
 		return nil, err
 	}
 
-	store, err := e.Vaults.Open(path)
+	store, err := s.Store.Open(path)
 	if err != nil {
 		return nil, err
 	}
@@ -112,16 +156,15 @@ func (e *Engine) VaultStatus(ectx *EngineContext, name string) (*VaultResult, er
 	return &res, err
 }
 
-// VaultSet encrypts and saves a vault entry to disk.
-func (e *Engine) VaultSet(ectx *EngineContext, vaultPath string, entry *VaultEntry, passphrase []byte, pin string, overwrite bool) error {
-	ectx = e.context(ectx)
-	if err := e.enforce(ectx, CapVaultWrite); err != nil {
+func (s *VaultService) Set(ectx *EngineContext, vaultPath string, entry *VaultEntry, passphrase []byte, pin string, overwrite bool) error {
+	ectx = s.engine.context(ectx)
+	if err := s.engine.enforce(ectx, CapVaultWrite); err != nil {
 		return err
 	}
 	if vaultPath == "" {
 		vaultPath = "default"
 	}
-	path, err := e.resolveVaultPath(vaultPath)
+	path, err := s.resolveVaultPath(vaultPath)
 	if err != nil {
 		return err
 	}
@@ -130,7 +173,7 @@ func (e *Engine) VaultSet(ectx *EngineContext, vaultPath string, entry *VaultEnt
 		return err
 	}
 
-	store, err := e.Vaults.Open(path)
+	store, err := s.Store.Open(path)
 	if err != nil {
 		return err
 	}
@@ -169,16 +212,15 @@ func (e *Engine) VaultSet(ectx *EngineContext, vaultPath string, entry *VaultEnt
 	})
 }
 
-// VaultGet reads and decrypts a vault entry from disk.
-func (e *Engine) VaultGet(ectx *EngineContext, vaultPath string, service string, passphrase []byte, pin string) (*VaultEntry, error) {
-	ectx = e.context(ectx)
-	if err := e.enforce(ectx, CapVaultRead); err != nil {
+func (s *VaultService) Get(ectx *EngineContext, vaultPath string, service string, passphrase []byte, pin string) (*VaultEntry, error) {
+	ectx = s.engine.context(ectx)
+	if err := s.engine.enforce(ectx, CapVaultRead); err != nil {
 		return nil, err
 	}
 	if vaultPath == "" {
 		vaultPath = "default"
 	}
-	path, err := e.resolveVaultPath(vaultPath)
+	path, err := s.resolveVaultPath(vaultPath)
 	if err != nil {
 		return nil, err
 	}
@@ -187,7 +229,7 @@ func (e *Engine) VaultGet(ectx *EngineContext, vaultPath string, service string,
 		return nil, err
 	}
 
-	store, err := e.Vaults.Open(path)
+	store, err := s.Store.Open(path)
 	if err != nil {
 		return nil, err
 	}
@@ -209,8 +251,8 @@ func (e *Engine) VaultGet(ectx *EngineContext, vaultPath string, service string,
 	// 2. Handle Quorum Unlocking if necessary
 	finalPassphrase := passphrase
 	if isInstitutional && len(passphrase) == 0 {
-		e.Logger.Info("Institutional vault detected: initiating quorum unlock", "vault", vaultPath, "peers", len(quorumPeers))
-		responses, err := e.QuorumRequest(ectx, "", quorumPeers, ActionVaultUnlock, vaultPath, "Consensus-based vault access requested")
+		s.engine.Logger.Info("Institutional vault detected: initiating quorum unlock", "vault", vaultPath, "peers", len(quorumPeers))
+		responses, err := s.engine.QuorumRequest(ectx, "", quorumPeers, ActionVaultUnlock, vaultPath, "Consensus-based vault access requested")
 		if err != nil {
 			return nil, fmt.Errorf("quorum request failed: %w", err)
 		}
@@ -227,7 +269,7 @@ func (e *Engine) VaultGet(ectx *EngineContext, vaultPath string, service string,
 		}
 
 		// Attempt recovery from collected shares
-		recovered, err := e.VaultRecover(ectx, shares, vaultPath, "", "")
+		recovered, err := s.Recover(ectx, shares, vaultPath, "", "")
 		if err != nil {
 			return nil, fmt.Errorf("quorum recovery failed: %w (threshold may not have been met)", err)
 		}
@@ -260,12 +302,12 @@ func (e *Engine) VaultGet(ectx *EngineContext, vaultPath string, service string,
 	return entry, err
 }
 
-func (e *Engine) VaultDelete(ectx *EngineContext, name string) error {
-	ectx = e.context(ectx)
-	if err := e.enforce(ectx, CapVaultDelete); err != nil {
+func (s *VaultService) Delete(ectx *EngineContext, name string) error {
+	ectx = s.engine.context(ectx)
+	if err := s.engine.enforce(ectx, CapVaultDelete); err != nil {
 		return err
 	}
-	path, err := e.resolveVaultPath(name)
+	path, err := s.resolveVaultPath(name)
 	if err != nil {
 		return err
 	}
@@ -273,19 +315,19 @@ func (e *Engine) VaultDelete(ectx *EngineContext, name string) error {
 		return err
 	}
 
-	return e.Vaults.DeleteVault(path)
+	return s.Store.DeleteVault(path)
 }
 
-func (e *Engine) VaultRename(ectx *EngineContext, oldName, newName string) error {
-	ectx = e.context(ectx)
-	if err := e.enforce(ectx, CapVaultWrite); err != nil {
+func (s *VaultService) Rename(ectx *EngineContext, oldName, newName string) error {
+	ectx = s.engine.context(ectx)
+	if err := s.engine.enforce(ectx, CapVaultWrite); err != nil {
 		return err
 	}
-	oldPath, err := e.resolveVaultPath(oldName)
+	oldPath, err := s.resolveVaultPath(oldName)
 	if err != nil {
 		return err
 	}
-	newPath, err := e.resolveVaultPath(newName)
+	newPath, err := s.resolveVaultPath(newName)
 	if err != nil {
 		return err
 	}
@@ -307,15 +349,15 @@ func (e *Engine) VaultRename(ectx *EngineContext, oldName, newName string) error
 	return os.Rename(oldPath, newPath)
 }
 
-func (e *Engine) VaultList(ectx *EngineContext, vaultPath string, passphrase []byte) ([]VaultListEntry, error) {
-	ectx = e.context(ectx)
-	if err := e.enforce(ectx, CapVaultRead); err != nil {
+func (s *VaultService) List(ectx *EngineContext, vaultPath string, passphrase []byte) ([]VaultListEntry, error) {
+	ectx = s.engine.context(ectx)
+	if err := s.engine.enforce(ectx, CapVaultRead); err != nil {
 		return nil, err
 	}
 	if vaultPath == "" {
 		vaultPath = "default"
 	}
-	path, err := e.resolveVaultPath(vaultPath)
+	path, err := s.resolveVaultPath(vaultPath)
 	if err != nil {
 		return nil, err
 	}
@@ -323,7 +365,7 @@ func (e *Engine) VaultList(ectx *EngineContext, vaultPath string, passphrase []b
 		return nil, err
 	}
 
-	store, err := e.Vaults.Open(path)
+	store, err := s.Store.Open(path)
 	if err != nil {
 		return nil, err
 	}
@@ -345,8 +387,8 @@ func (e *Engine) VaultList(ectx *EngineContext, vaultPath string, passphrase []b
 	// 2. Handle Quorum Unlocking if necessary
 	finalPassphrase := passphrase
 	if isInstitutional && len(passphrase) == 0 {
-		e.Logger.Info("Institutional vault detected: initiating quorum unlock for listing", "vault", vaultPath)
-		responses, err := e.QuorumRequest(ectx, "", quorumPeers, ActionVaultUnlock, vaultPath, "Consensus-based vault listing requested")
+		s.engine.Logger.Info("Institutional vault detected: initiating quorum unlock for listing", "vault", vaultPath)
+		responses, err := s.engine.QuorumRequest(ectx, "", quorumPeers, ActionVaultUnlock, vaultPath, "Consensus-based vault listing requested")
 		if err != nil {
 			return nil, fmt.Errorf("quorum request failed: %w", err)
 		}
@@ -362,7 +404,7 @@ func (e *Engine) VaultList(ectx *EngineContext, vaultPath string, passphrase []b
 			return nil, &ErrAuthentication{Reason: "quorum failed: no approvals received from authorized peers"}
 		}
 
-		recovered, err := e.VaultRecover(ectx, shares, vaultPath, "", "")
+		recovered, err := s.Recover(ectx, shares, vaultPath, "", "")
 		if err != nil {
 			return nil, fmt.Errorf("quorum recovery failed: %w (threshold may not have been met)", err)
 		}
@@ -394,30 +436,30 @@ func (e *Engine) VaultList(ectx *EngineContext, vaultPath string, passphrase []b
 	return entries, err
 }
 
-func (e *Engine) VaultSplit(ectx *EngineContext, vaultPath string, threshold, shares int, passphrase string) ([]string, error) {
-	ectx = e.context(ectx)
-	if err := e.enforce(ectx, CapVaultRead); err != nil {
+func (s *VaultService) Split(ectx *EngineContext, vaultPath string, threshold, shares int, passphrase string) ([]string, error) {
+	ectx = s.engine.context(ectx)
+	if err := s.engine.enforce(ectx, CapVaultRead); err != nil {
 		return nil, err
 	}
 	if vaultPath == "" {
 		vaultPath = "default"
 	}
-	path, err := e.resolveVaultPath(vaultPath)
+	path, err := s.resolveVaultPath(vaultPath)
 	if err != nil {
 		return nil, err
 	}
 	return SplitVault(path, threshold, shares, passphrase)
 }
 
-func (e *Engine) VaultRecover(ectx *EngineContext, mnemonics []string, vaultPath string, output string, passphrase string) (string, error) {
-	ectx = e.context(ectx)
-	if err := e.enforce(ectx, CapVaultWrite); err != nil {
+func (s *VaultService) Recover(ectx *EngineContext, mnemonics []string, vaultPath string, output string, passphrase string) (string, error) {
+	ectx = s.engine.context(ectx)
+	if err := s.engine.enforce(ectx, CapVaultWrite); err != nil {
 		return "", err
 	}
 	if vaultPath == "" {
 		vaultPath = "default"
 	}
-	path, err := e.resolveVaultPath(vaultPath)
+	path, err := s.resolveVaultPath(vaultPath)
 	if err != nil {
 		return "", err
 	}
@@ -431,26 +473,26 @@ func (e *Engine) VaultRecover(ectx *EngineContext, mnemonics []string, vaultPath
 	// 2. If output is specified, migrate entries to the new vault
 	if output != "" {
 		// List entries from source vault
-		entries, err := e.VaultList(ectx, path, []byte(recoveredPass))
+		entries, err := s.List(ectx, path, []byte(recoveredPass))
 		if err != nil {
 			return "", fmt.Errorf("failed to list entries from source vault: %w", err)
 		}
 
 		// Create/Open target vault
-		outputPath, err := e.resolveVaultPath(output)
+		outputPath, err := s.resolveVaultPath(output)
 		if err != nil {
 			return "", err
 		}
 
 		for _, entry := range entries {
 			// Get full entry (with password)
-			fullEntry, err := e.VaultGet(ectx, path, entry.Service, []byte(recoveredPass), "")
+			fullEntry, err := s.Get(ectx, path, entry.Service, []byte(recoveredPass), "")
 			if err != nil {
 				return "", fmt.Errorf("failed to get entry '%s': %w", entry.Service, err)
 			}
 
 			// Set in new vault
-			err = e.VaultSet(ectx, outputPath, fullEntry, []byte(recoveredPass), "", true)
+			err = s.Set(ectx, outputPath, fullEntry, []byte(recoveredPass), "", true)
 			if err != nil {
 				return "", fmt.Errorf("failed to set entry '%s' in recovered vault: %w", entry.Service, err)
 			}
@@ -460,9 +502,9 @@ func (e *Engine) VaultRecover(ectx *EngineContext, mnemonics []string, vaultPath
 	return recoveredPass, nil
 }
 
-func (e *Engine) VaultCheckShards(ectx *EngineContext, mnemonics []string) (*VaultResult, error) {
-	ectx = e.context(ectx)
-	if err := e.enforce(ectx, CapVaultRead); err != nil {
+func (s *VaultService) CheckShards(ectx *EngineContext, mnemonics []string) (*VaultResult, error) {
+	ectx = s.engine.context(ectx)
+	if err := s.engine.enforce(ectx, CapVaultRead); err != nil {
 		return nil, err
 	}
 
@@ -479,117 +521,57 @@ func (e *Engine) VaultCheckShards(ectx *EngineContext, mnemonics []string) (*Vau
 		if i == 0 {
 			threshold = int(s.Threshold)
 		} else if int(s.Threshold) != threshold {
-			return nil, fmt.Errorf("shard %d has inconsistent threshold (expected %d, got %d)", i+1, threshold, s.Threshold)
+			return nil, &ErrFormat{Reason: "shards have inconsistent thresholds"}
 		}
-
-		// Verify checksum
-		h := hmac.New(sha256.New, shardChecksumKey)
-		h.Write([]byte{s.Version, s.Threshold, s.Index})
-		h.Write(s.Data)
-		sum := h.Sum(nil)
-		if !hmac.Equal(s.Checksum, sum[:ChecksumSize]) {
-			return nil, fmt.Errorf("checksum mismatch for shard %d", i+1)
-		}
-	}
-
-	msg := fmt.Sprintf("Validated %d healthy shards. Recovery requires %d shards.", len(mnemonics), threshold)
-	if len(mnemonics) < threshold {
-		msg += fmt.Sprintf(" You still need %d more shard(s) to recover.", threshold-len(mnemonics))
 	}
 
 	return &VaultResult{
 		Status:    "success",
-		Message:   msg,
 		Threshold: threshold,
+		Message:   fmt.Sprintf("%d of %d shards valid", len(mnemonics), threshold),
 	}, nil
 }
 
-func (e *Engine) VaultRotate(ectx *EngineContext, vaultPath string, oldPassphrase, newPassphrase []byte) error {
-	ectx = e.context(ectx)
-	if err := e.enforce(ectx, CapVaultWrite); err != nil {
+func (s *VaultService) Rotate(ectx *EngineContext, vaultPath string, oldPassphrase, newPassphrase []byte) error {
+	ectx = s.engine.context(ectx)
+	if err := s.engine.enforce(ectx, CapVaultWrite); err != nil {
 		return err
 	}
-	if vaultPath == "" {
-		vaultPath = "default"
+	if _, err := s.resolveVaultPath(vaultPath); err != nil {
+		return err
 	}
-	path, err := e.resolveVaultPath(vaultPath)
+
+	// 1. List all entries using old passphrase
+	entries, err := s.List(ectx, vaultPath, oldPassphrase)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to list entries for rotation: %w", err)
 	}
 
-	if err := ectx.Policy.ValidatePath(path); err != nil {
-		return err
+	// 2. Extract full content of each entry
+	var fullEntries []*VaultEntry
+	for _, e := range entries {
+		full, err := s.Get(ectx, vaultPath, e.Service, oldPassphrase, "")
+		if err != nil {
+			return fmt.Errorf("failed to extract entry '%s' for rotation: %w", e.Service, err)
+		}
+		fullEntries = append(fullEntries, full)
 	}
 
-	store, err := e.Vaults.Open(path)
-	if err != nil {
-		return err
-	}
-	defer store.Close()
-
-	// 1. Read and decrypt all entries in memory
-	var entries []*VaultEntry
-	err = store.View(func(tx Transaction) error {
-		salt := tx.Get(metaBucket, saltKey)
-		if salt == nil {
-			return &ErrAuthentication{Reason: "vault salt missing"}
+	// 3. Re-save all entries using new passphrase
+	for _, full := range fullEntries {
+		if err := s.Set(ectx, vaultPath, full, newPassphrase, "", true); err != nil {
+			return fmt.Errorf("failed to re-save entry '%s' with new passphrase: %w", full.Service, err)
 		}
-
-		oldKey := DeriveVaultKey(oldPassphrase, salt)
-		defer SafeClear(oldKey)
-
-		return tx.ForEach(vaultBucket, func(k, v []byte) error {
-			entry, err := OpenEntry(v, oldKey)
-			if err != nil {
-				return err
-			}
-			entries = append(entries, entry)
-			return nil
-		})
-	})
-	if err != nil {
-		return err
 	}
 
-	// 2. Perform in-place rotation with fresh salt and new key
-	return store.Update(func(tx Transaction) error {
-		// Generate fresh salt
-		newSalt := make([]byte, 32)
-		if _, err := io.ReadFull(rand.Reader, newSalt); err != nil {
-			return err
-		}
-
-		newKey := DeriveVaultKey(newPassphrase, newSalt)
-		defer SafeClear(newKey)
-
-		// Update salt in metadata
-		if err := tx.Put(metaBucket, saltKey, newSalt); err != nil {
-			return err
-		}
-
-		// Re-encrypt and update all entries
-		for _, entry := range entries {
-			payload, err := SealEntry(entry, newKey)
-			if err != nil {
-				return err
-			}
-			// Service key remains the same (Hashed service name)
-			serviceKey := Sha256Hex([]byte(strings.ToLower(entry.Service)))
-			if err := tx.Put(vaultBucket, serviceKey, payload); err != nil {
-				return err
-			}
-		}
-
-		return nil
-	})
+	return nil
 }
 
-func (e *Engine) resolveVaultPath(name string) (string, error) {
-	if name == "" {
-		return "", &ErrFormat{Reason: "vault name required"}
-	}
-	if filepath.IsAbs(name) || strings.Contains(name, string(os.PathSeparator)) {
+// --- Internal Helpers ---
+
+func (s *VaultService) resolveVaultPath(name string) (string, error) {
+	if filepath.IsAbs(name) {
 		return name, nil
 	}
-	return filepath.Join(e.Config.Paths.VaultsDir, name+".vault"), nil
+	return filepath.Join(s.engine.Config.Paths.VaultsDir, name+".vault"), nil
 }

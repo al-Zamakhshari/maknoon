@@ -30,9 +30,8 @@ func ProfilesCmd() *cobra.Command {
 func printProfiles() {
 	fmt.Println("🛡️  Maknoon Cryptographic Profiles")
 	fmt.Println("\nBuilt-in Profiles:")
-	fmt.Println("  nist (1):         NIST PQC (Kyber1024 + Dilithium87) + AES-256-GCM (Default)")
-	fmt.Println("  aes (2):          NIST PQC (Kyber1024 + Dilithium87) + AES-256-GCM-SIV")
-	fmt.Println("  conservative (3): FrodoKEM-640 + SLH-DSA-SHA2-128s (Non-Lattice)")
+	fmt.Println("  nist (1):         NIST PQC (ML-KEM-768 + ML-DSA-87) + AES-256-GCM (Default)")
+	fmt.Println("  conservative (3): FrodoKEM-640 + SLH-DSA + AES-256-GCM (Non-Lattice)")
 
 	conf := crypto.GetGlobalConfig()
 	if len(conf.Profiles) > 0 {
@@ -74,9 +73,8 @@ func profilesListCmd() *cobra.Command {
 					Details     *crypto.DynamicProfile `json:"details,omitempty"`
 				}
 				var list []profileInfo
-				list = append(list, profileInfo{Name: "nist", ID: 1, Description: "NIST PQC (Lattice-based)"})
-				list = append(list, profileInfo{Name: "aes", ID: 2, Description: "NIST PQC + AES-GCM"})
-				list = append(list, profileInfo{Name: "conservative", ID: 3, Description: "Non-Lattice PQC"})
+				list = append(list, profileInfo{Name: "nist", ID: 1, Description: "NIST PQC (ML-KEM + ML-DSA)"})
+				list = append(list, profileInfo{Name: "conservative", ID: 3, Description: "Non-Lattice PQC (FrodoKEM + SLH-DSA)"})
 
 				for name, p := range conf.Profiles {
 					list = append(list, profileInfo{Name: name, ID: p.CustomID, Details: p})
@@ -88,7 +86,6 @@ func profilesListCmd() *cobra.Command {
 			fmt.Printf("%-20s %-5s %-15s %-30s\n", "NAME", "ID", "CIPHER", "KDF SETTINGS")
 			fmt.Println("------------------------------------------------------------------------------------------")
 			fmt.Printf("%-20s %-5d %-15s %-30s\n", "nist", 1, "AES-256-GCM", "Argon2id (Default)")
-			fmt.Printf("%-20s %-5d %-15s %-30s\n", "aes", 2, "AES-GCM-SIV", "Argon2id (Default)")
 			fmt.Printf("%-20s %-5d %-15s %-30s\n", "conservative", 3, "AES-256-GCM", "Argon2id (Default)")
 
 			var names []string
@@ -125,7 +122,7 @@ func profilesGenCmd() *cobra.Command {
 			conf := crypto.GetGlobalConfig()
 
 			// Check for reserved names
-			reserved := map[string]bool{"nist": true, "aes": true, "conservative": true, "pq": true, "legacy": true, "hardened": true}
+			reserved := map[string]bool{"nist": true, "conservative": true, "pq": true, "legacy": true, "hardened": true}
 			if reserved[name] {
 				return fmt.Errorf("name '%s' is reserved", name)
 			}

@@ -6,11 +6,23 @@ import (
 	"strings"
 )
 
-// WorkspaceCreate creates a temporary, isolated directory for sensitive data processing.
-// On Linux, it attempts to use /dev/shm for RAM-disk based security.
+// --- Engine Wrappers ---
+
 func (e *Engine) WorkspaceCreate(ectx *EngineContext, name string) (string, error) {
-	ectx = e.context(ectx)
-	if err := e.enforce(ectx, CapVaultWrite); err != nil {
+	return e.Workspace.Create(ectx, name)
+}
+
+func (e *Engine) WorkspaceShred(ectx *EngineContext, path string) error {
+	return e.Workspace.Shred(ectx, path)
+}
+
+// --- WorkspaceService Implementation ---
+
+// Create creates a temporary, isolated directory for sensitive data processing.
+// On Linux, it attempts to use /dev/shm for RAM-disk based security.
+func (s *WorkspaceService) Create(ectx *EngineContext, name string) (string, error) {
+	ectx = s.engine.context(ectx)
+	if err := s.engine.enforce(ectx, CapVaultWrite); err != nil {
 		return "", err
 	}
 
@@ -26,23 +38,26 @@ func (e *Engine) WorkspaceCreate(ectx *EngineContext, name string) (string, erro
 		return "", err
 	}
 
-	e.Logger.Info("Created ephemeral workspace", "path", path)
+	s.engine.Logger.Info("Created ephemeral workspace", "path", path)
 	return path, nil
 }
 
-// WorkspaceShred securely deletes an ephemeral workspace using the engine's secure delete primitives.
-func (e *Engine) WorkspaceShred(ectx *EngineContext, path string) error {
-	ectx = e.context(ectx)
-	if err := e.enforce(ectx, CapVaultWrite); err != nil {
+// Shred securely deletes an ephemeral workspace using the engine's secure delete primitives.
+func (s *WorkspaceService) Shred(ectx *EngineContext, path string) error {
+	ectx = s.engine.context(ectx)
+	if err := s.engine.enforce(ectx, CapVaultWrite); err != nil {
 		return err
 	}
 
 	// Safety check: only allow shredding directories created by Maknoon
 	base := filepath.Base(path)
 	if !strings.HasPrefix(base, "maknoon_workspace_") {
-		return &ErrPolicyViolation{Reason: "only ephemeral maknoon workspaces can be shredded via this tool"}
+		return &ErrPolicyViolation{
+			Reason:     "only ephemeral maknoon workspaces can be shredded via this tool",
+			PolicyName: ectx.Policy.Name(),
+		}
 	}
 
-	e.Logger.Info("Shredding ephemeral workspace", "path", path)
-	return e.SecureDelete(path)
+	s.engine.Logger.Info("Shredding ephemeral workspace", "path", path)
+	return s.engine.SecureDelete(path)
 }

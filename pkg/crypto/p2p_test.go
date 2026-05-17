@@ -143,7 +143,7 @@ func TestP2PCustomIdentity(t *testing.T) {
 
 	// 2. Generate a custom identity
 	idName := "custom-peer"
-	_, err = engine.Identities.CreateIdentity(idName, nil, "", false, "nist")
+	_, err = engine.Identity.Mgr.CreateIdentity(idName, nil, "", false, "nist")
 	if err != nil {
 		t.Fatalf("Failed to generate identity: %v", err)
 	}

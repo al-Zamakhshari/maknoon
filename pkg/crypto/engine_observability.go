@@ -13,39 +13,10 @@ import (
 	"github.com/al-Zamakhshari/maknoon/pkg/tunnel"
 )
 
+// --- Engine Wrappers ---
+
 func (e *Engine) NetworkStatus(ectx *EngineContext) (NetStatusResult, error) {
-	res := NetStatusResult{}
-
-	// 1. Check active tunnel
-	e.tunnel.mu.RLock()
-	if e.tunnel.active != nil {
-		at := e.tunnel.active
-		res.Tunnel.Active = true
-		res.Tunnel.LocalAddress = at.LocalAddress
-		res.Tunnel.RemoteEndpoint = at.RemoteEndpoint
-		res.Tunnel.HandshakeTime = at.HandshakeTime
-		res.Tunnel.DataLanes = at.DataLanes
-		res.Tunnel.ParityLanes = at.ParityLanes
-		res.Tunnel.HealthyLanes = at.HealthyLanes
-	}
-	e.tunnel.mu.RUnlock()
-
-	// 2. Create a temporary host to check P2P environment (if no persistent host)
-	h, err := tunnel.NewLibp2pHost()
-	if err != nil {
-		return res, fmt.Errorf("failed to initialize diagnostic host: %w", err)
-	}
-	defer h.Close()
-
-	res.PeerID = h.ID().String()
-	for _, addr := range h.Addrs() {
-		res.Addresses = append(res.Addresses, addr.String())
-	}
-	for _, p := range h.Mux().Protocols() {
-		res.Protocols = append(res.Protocols, string(p))
-	}
-
-	return res, nil
+	return e.Network.NetworkStatus(ectx)
 }
 
 func (e *Engine) Diagnostic() DiagnosticResult {
@@ -56,7 +27,7 @@ func (e *Engine) Diagnostic() DiagnosticResult {
 	res.System.OS = runtime.GOOS
 	res.System.Arch = runtime.GOARCH
 	res.System.Go = runtime.Version()
-	res.System.Version = Version
+	res.System.Version = "v1.3.x"
 
 	// User Info
 	if u, err := user.Current(); err == nil {
@@ -114,4 +85,42 @@ func (e *Engine) AuditExport(ectx *EngineContext) ([]AuditEntry, error) {
 	}
 
 	return entries, scanner.Err()
+}
+
+// --- NetworkService Implementation ---
+
+func (s *NetworkService) NetworkStatus(ectx *EngineContext) (NetStatusResult, error) {
+	res := NetStatusResult{}
+
+	// 1. Check active tunnel
+	s.tunnelMu.RLock()
+	if s.activeTunnel != nil {
+		if at, ok := s.activeTunnel.(*tunnel.TunnelStatus); ok {
+			res.Tunnel.Active = true
+			res.Tunnel.LocalAddress = at.LocalAddress
+			res.Tunnel.RemoteEndpoint = at.RemoteEndpoint
+			res.Tunnel.HandshakeTime = at.HandshakeTime
+			res.Tunnel.DataLanes = at.DataLanes
+			res.Tunnel.ParityLanes = at.ParityLanes
+			res.Tunnel.HealthyLanes = at.HealthyLanes
+		}
+	}
+	s.tunnelMu.RUnlock()
+
+	// 2. Create a temporary host to check P2P environment
+	h, err := tunnel.NewLibp2pHost()
+	if err != nil {
+		return res, fmt.Errorf("failed to initialize diagnostic host: %w", err)
+	}
+	defer h.Close()
+
+	res.PeerID = h.ID().String()
+	for _, addr := range h.Addrs() {
+		res.Addresses = append(res.Addresses, addr.String())
+	}
+	for _, p := range h.Mux().Protocols() {
+		res.Protocols = append(res.Protocols, string(p))
+	}
+
+	return res, nil
 }

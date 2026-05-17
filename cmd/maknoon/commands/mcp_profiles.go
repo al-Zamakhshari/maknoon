@@ -15,9 +15,8 @@ func registerProfilesTools(s *server.MCPServer, engine crypto.MaknoonEngine) {
 			conf := engine.GetConfig()
 
 			var res crypto.ProfileListResult
-			res.Profiles = append(res.Profiles, crypto.ProfileInfo{Name: "nist", ID: 1, Description: "NIST PQC (Lattice-based)"})
-			res.Profiles = append(res.Profiles, crypto.ProfileInfo{Name: "aes", ID: 2, Description: "NIST PQC + AES-GCM"})
-			res.Profiles = append(res.Profiles, crypto.ProfileInfo{Name: "conservative", ID: 3, Description: "Non-Lattice PQC"})
+			res.Profiles = append(res.Profiles, crypto.ProfileInfo{Name: "nist", ID: 1, Description: "NIST PQC (ML-KEM + ML-DSA)"})
+			res.Profiles = append(res.Profiles, crypto.ProfileInfo{Name: "conservative", ID: 3, Description: "Non-Lattice PQC (FrodoKEM + SLH-DSA)"})
 
 			for name, p := range conf.Profiles {
 				res.Profiles = append(res.Profiles, crypto.ProfileInfo{Name: name, ID: p.CustomID, Details: p})
