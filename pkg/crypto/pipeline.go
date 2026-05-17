@@ -283,7 +283,7 @@ func Protect(inputName string, r io.Reader, w io.Writer, opts Options) (byte, er
 	}
 
 	// Create a minimal engine to call the method
-	e := &Engine{Config: GetGlobalConfig(), Logger: slog.Default()}
+	e := newShimEngine()
 	res, err := e.Protect(ectx, inputName, r, w, opts)
 	return res.Flags, err
 }
@@ -297,7 +297,7 @@ func Unprotect(r io.Reader, w io.Writer, outPath string, opts Options) (byte, er
 		Policy:  &HumanPolicy{},
 	}
 
-	e := &Engine{Config: GetGlobalConfig(), Logger: slog.Default()}
+	e := newShimEngine()
 	res, err := e.Unprotect(ectx, r, w, outPath, opts)
 	return res.Flags, err
 }

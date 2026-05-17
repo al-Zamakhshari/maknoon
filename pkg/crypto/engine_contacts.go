@@ -5,34 +5,29 @@ import (
 	"fmt"
 )
 
-func (e *Engine) ensureContacts() error {
-	e.contacts.mu.Lock()
-	defer e.contacts.mu.Unlock()
-
-	if e.contacts.manager != nil {
-		return nil
-	}
-
-	store, err := e.Vaults.Open(e.contacts.path)
-	if err != nil {
-		return fmt.Errorf("failed to open contacts store: %w", err)
-	}
-
-	e.contacts.manager = NewContactManager(store)
-	if e.Identities != nil {
-		e.Identities.Contacts = e.contacts.manager
-	}
-
-	return nil
-}
+// --- Engine Wrappers ---
 
 func (e *Engine) ContactAdd(ectx *EngineContext, petname, kemPub, sigPub, note string) error {
-	ectx = e.context(ectx)
-	if err := e.enforce(ectx, CapIdentity); err != nil {
+	return e.Identity.ContactAdd(ectx, petname, kemPub, sigPub, note)
+}
+
+func (e *Engine) ContactList(ectx *EngineContext) ([]*Contact, error) {
+	return e.Identity.ContactList(ectx)
+}
+
+func (e *Engine) ContactDelete(ectx *EngineContext, petname string) error {
+	return e.Identity.ContactDelete(ectx, petname)
+}
+
+// --- IdentityService Implementation ---
+
+func (s *IdentityService) ContactAdd(ectx *EngineContext, petname, kemPub, sigPub, note string) error {
+	ectx = s.engine.context(ectx)
+	if err := s.engine.enforce(ectx, CapIdentity); err != nil {
 		return err
 	}
 
-	if err := e.ensureContacts(); err != nil {
+	if err := s.engine.ensureContacts(); err != nil {
 		return err
 	}
 
@@ -58,23 +53,44 @@ func (e *Engine) ContactAdd(ectx *EngineContext, petname, kemPub, sigPub, note s
 		Notes:     note,
 	}
 
-	return e.contacts.manager.Add(contact)
+	return s.engine.Contacts.Add(contact)
 }
 
-func (e *Engine) ContactList(ectx *EngineContext) ([]*Contact, error) {
-	if err := e.ensureContacts(); err != nil {
+func (s *IdentityService) ContactList(ectx *EngineContext) ([]*Contact, error) {
+	if err := s.engine.ensureContacts(); err != nil {
 		return nil, err
 	}
-	return e.contacts.manager.List()
+	return s.engine.Contacts.List()
 }
 
-func (e *Engine) ContactDelete(ectx *EngineContext, petname string) error {
-	ectx = e.context(ectx)
-	if err := e.enforce(ectx, CapIdentity); err != nil {
+func (s *IdentityService) ContactDelete(ectx *EngineContext, petname string) error {
+	ectx = s.engine.context(ectx)
+	if err := s.engine.enforce(ectx, CapIdentity); err != nil {
 		return err
 	}
-	if err := e.ensureContacts(); err != nil {
+	if err := s.engine.ensureContacts(); err != nil {
 		return err
 	}
-	return e.contacts.manager.Delete(petname)
+	return s.engine.Contacts.Delete(petname)
+}
+
+func (e *Engine) ensureContacts() error {
+	e.contactsMu.Lock()
+	defer e.contactsMu.Unlock()
+
+	if e.Contacts != nil {
+		return nil
+	}
+
+	store, err := e.Vault.Store.Open(e.contactsPath)
+	if err != nil {
+		return fmt.Errorf("failed to open contacts store: %w", err)
+	}
+
+	e.Contacts = NewContactManager(store)
+	if e.Identity.Mgr != nil {
+		e.Identity.Mgr.Contacts = e.Contacts
+	}
+
+	return nil
 }

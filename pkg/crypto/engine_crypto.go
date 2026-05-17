@@ -8,41 +8,81 @@ import (
 	"github.com/awnumar/memguard"
 )
 
+// --- Engine Wrappers ---
+
 func (e *Engine) Protect(ectx *EngineContext, inputName string, r io.Reader, w io.Writer, opts Options) (EncryptResult, error) {
-	ectx = e.context(ectx)
-	if err := e.enforce(ectx, CapProtect); err != nil {
-		return EncryptResult{}, err
-	}
-	return e.ProtectStream(ectx, inputName, r, w, opts)
+	return e.Crypto.Protect(ectx, inputName, r, w, opts)
 }
 
 func (e *Engine) Unprotect(ectx *EngineContext, r io.Reader, w io.Writer, outPath string, opts Options) (DecryptResult, error) {
-	ectx = e.context(ectx)
-	if err := e.enforce(ectx, CapUnprotect); err != nil {
-		return DecryptResult{}, err
-	}
-	return e.UnprotectStream(ectx, r, w, outPath, opts)
+	return e.Crypto.Unprotect(ectx, r, w, outPath, opts)
 }
 
 func (e *Engine) Sign(ectx *EngineContext, data []byte, privKey []byte) ([]byte, error) {
-	ectx = e.context(ectx)
-	if err := e.enforce(ectx, CapCrypto); err != nil {
+	return e.Crypto.Sign(ectx, data, privKey)
+}
+
+func (e *Engine) Verify(ectx *EngineContext, data []byte, sig []byte, pubKey []byte) (bool, error) {
+	return e.Crypto.Verify(ectx, data, sig, pubKey)
+}
+
+func (e *Engine) Wrap(ectx *EngineContext, pubKey []byte) (DataKey, error) {
+	return e.Crypto.Wrap(ectx, pubKey)
+}
+
+func (e *Engine) Unwrap(ectx *EngineContext, wrappedKey []byte, privKey []byte) ([]byte, error) {
+	return e.Crypto.Unwrap(ectx, wrappedKey, privKey)
+}
+
+func (e *Engine) RegisterProfile(ectx *EngineContext, name string, dp *DynamicProfile) error {
+	return e.Crypto.RegisterProfile(ectx, name, dp)
+}
+
+func (e *Engine) RemoveProfile(ectx *EngineContext, name string) error {
+	return e.Crypto.RemoveProfile(ectx, name)
+}
+
+func (e *Engine) Inspect(ectx *EngineContext, in io.Reader, stealth bool) (*HeaderInfo, error) {
+	return e.Crypto.Inspect(ectx, in, stealth)
+}
+
+// --- CryptoService Implementation ---
+
+func (s *CryptoService) Protect(ectx *EngineContext, inputName string, r io.Reader, w io.Writer, opts Options) (EncryptResult, error) {
+	ectx = s.engine.context(ectx)
+	if err := s.engine.enforce(ectx, CapProtect); err != nil {
+		return EncryptResult{}, err
+	}
+	return s.engine.ProtectStream(ectx, inputName, r, w, opts)
+}
+
+func (s *CryptoService) Unprotect(ectx *EngineContext, r io.Reader, w io.Writer, outPath string, opts Options) (DecryptResult, error) {
+	ectx = s.engine.context(ectx)
+	if err := s.engine.enforce(ectx, CapUnprotect); err != nil {
+		return DecryptResult{}, err
+	}
+	return s.engine.UnprotectStream(ectx, r, w, outPath, opts)
+}
+
+func (s *CryptoService) Sign(ectx *EngineContext, data []byte, privKey []byte) ([]byte, error) {
+	ectx = s.engine.context(ectx)
+	if err := s.engine.enforce(ectx, CapCrypto); err != nil {
 		return nil, err
 	}
 	return SignData(data, privKey)
 }
 
-func (e *Engine) Verify(ectx *EngineContext, data []byte, sig []byte, pubKey []byte) (bool, error) {
-	ectx = e.context(ectx)
-	if err := e.enforce(ectx, CapCrypto); err != nil {
+func (s *CryptoService) Verify(ectx *EngineContext, data []byte, sig []byte, pubKey []byte) (bool, error) {
+	ectx = s.engine.context(ectx)
+	if err := s.engine.enforce(ectx, CapCrypto); err != nil {
 		return false, err
 	}
 	return VerifySignature(data, sig, pubKey), nil
 }
 
-func (e *Engine) Wrap(ectx *EngineContext, pubKey []byte) (DataKey, error) {
-	ectx = e.context(ectx)
-	if err := e.enforce(ectx, CapCrypto); err != nil {
+func (s *CryptoService) Wrap(ectx *EngineContext, pubKey []byte) (DataKey, error) {
+	ectx = s.engine.context(ectx)
+	if err := s.engine.enforce(ectx, CapCrypto); err != nil {
 		return DataKey{}, err
 	}
 
@@ -68,9 +108,9 @@ func (e *Engine) Wrap(ectx *EngineContext, pubKey []byte) (DataKey, error) {
 	}, nil
 }
 
-func (e *Engine) Unwrap(ectx *EngineContext, wrappedKey []byte, privKey []byte) ([]byte, error) {
-	ectx = e.context(ectx)
-	if err := e.enforce(ectx, CapCrypto); err != nil {
+func (s *CryptoService) Unwrap(ectx *EngineContext, wrappedKey []byte, privKey []byte) ([]byte, error) {
+	ectx = s.engine.context(ectx)
+	if err := s.engine.enforce(ectx, CapCrypto); err != nil {
 		return nil, err
 	}
 
@@ -94,38 +134,38 @@ func (e *Engine) Unwrap(ectx *EngineContext, wrappedKey []byte, privKey []byte) 
 	return plaintext, nil
 }
 
-func (e *Engine) RegisterProfile(ectx *EngineContext, name string, dp *DynamicProfile) error {
-	ectx = e.context(ectx)
+func (s *CryptoService) RegisterProfile(ectx *EngineContext, name string, dp *DynamicProfile) error {
+	ectx = s.engine.context(ectx)
 	if !ectx.Policy.AllowConfigModification() {
 		return &ErrPolicyViolation{
 			Reason:     "profile registration is prohibited under the active policy",
 			PolicyName: ectx.Policy.Name(),
 		}
 	}
-	if e.Config.Profiles == nil {
-		e.Config.Profiles = make(map[string]*DynamicProfile)
+	if s.engine.Config.Profiles == nil {
+		s.engine.Config.Profiles = make(map[string]*DynamicProfile)
 	}
-	e.Config.Profiles[name] = dp
+	s.engine.Config.Profiles[name] = dp
 	RegisterProfile(dp)
-	return e.Config.Save()
+	return s.engine.Config.Save()
 }
 
-func (e *Engine) RemoveProfile(ectx *EngineContext, name string) error {
-	ectx = e.context(ectx)
+func (s *CryptoService) RemoveProfile(ectx *EngineContext, name string) error {
+	ectx = s.engine.context(ectx)
 	if !ectx.Policy.AllowConfigModification() {
 		return &ErrPolicyViolation{
 			Reason:     "profile removal is prohibited under the active policy",
 			PolicyName: ectx.Policy.Name(),
 		}
 	}
-	if _, ok := e.Config.Profiles[name]; !ok {
+	if _, ok := s.engine.Config.Profiles[name]; !ok {
 		return fmt.Errorf("profile '%s' not found", name)
 	}
-	delete(e.Config.Profiles, name)
-	return e.Config.Save()
+	delete(s.engine.Config.Profiles, name)
+	return s.engine.Config.Save()
 }
 
-func (e *Engine) Inspect(_ *EngineContext, in io.Reader, stealth bool) (*HeaderInfo, error) {
+func (s *CryptoService) Inspect(_ *EngineContext, in io.Reader, stealth bool) (*HeaderInfo, error) {
 	magic, profileID, flags, recipients, err := ReadHeader(in, stealth)
 	if err != nil {
 		return nil, err

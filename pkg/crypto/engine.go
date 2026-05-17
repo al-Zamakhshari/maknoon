@@ -6,37 +6,27 @@ import (
 	"log/slog"
 	"path/filepath"
 	"sync"
-
-	"github.com/al-Zamakhshari/maknoon/pkg/tunnel"
 )
 
 var _ MaknoonEngine = (*Engine)(nil)
 
-// tunnelState holds all mutable tunnel lifecycle state under a single typed lock.
-type tunnelState struct {
-	active  *tunnel.TunnelStatus
-	gateway *tunnel.TunnelGateway
-	server  *tunnel.TunnelServer
-	mu      sync.RWMutex
-}
-
-// contactsState holds the lazily-initialised contacts manager and its lock.
-type contactsState struct {
-	manager *ContactManager
-	path    string
-	mu      sync.Mutex
-}
-
 // Engine is the central stateful service for Maknoon operations.
 type Engine struct {
-	Policy     SecurityPolicy
-	Config     *Config
-	Identities *IdentityManager
-	Vaults     VaultStore
-	Logger     *slog.Logger
+	Policy SecurityPolicy
+	Config *Config
+	Logger *slog.Logger
 
-	contacts contactsState
-	tunnel   tunnelState
+	// Component Services
+	Vault     *VaultService
+	Identity  *IdentityService
+	Network   *NetworkService
+	Crypto    *CryptoService
+	Workspace *WorkspaceService
+
+	// Contacts State
+	Contacts     *ContactManager
+	contactsMu   sync.Mutex
+	contactsPath string
 }
 
 func (e *Engine) GetPolicy() SecurityPolicy { return e.Policy }
@@ -96,6 +86,7 @@ func (e *Engine) UpdateConfig(ectx *EngineContext, newConf *Config) error {
 		return err
 	}
 	e.Config = newConf
+	e.Identity.Mgr.Config = newConf
 	return nil
 }
 
@@ -125,17 +116,20 @@ func NewEngine(policy SecurityPolicy, idMgr *IdentityManager, conf *Config, vaul
 	}
 
 	e := &Engine{
-		Policy:     policy,
-		Config:     conf,
-		Identities: idMgr,
-		Vaults:     vaultStore,
-		Logger:     logger,
-		contacts: contactsState{
-			path: filepath.Join(conf.Paths.VaultsDir, "..", "contacts.db"),
-		},
+		Policy:       policy,
+		Config:       conf,
+		Logger:       logger,
+		contactsPath: filepath.Join(conf.Paths.VaultsDir, "..", "contacts.db"),
 	}
 
-	e.Identities.P2P = e
+	// Initialize Services
+	e.Vault = &VaultService{engine: e, Store: vaultStore}
+	e.Identity = &IdentityService{engine: e, Mgr: idMgr}
+	e.Network = &NetworkService{engine: e}
+	e.Crypto = &CryptoService{engine: e}
+	e.Workspace = &WorkspaceService{engine: e}
+
+	e.Identity.Mgr.P2P = e
 	return e, nil
 }
 
@@ -165,9 +159,22 @@ func (e *Engine) enforce(ectx *EngineContext, cap Capability) error {
 	return nil
 }
 
+// newShimEngine creates a minimal engine for use as a one-shot shim (e.g. pipeline package-level
+// helpers). All services that may be called are initialized; vault/identity/network are left nil.
+func newShimEngine() *Engine {
+	e := &Engine{
+		Policy: &HumanPolicy{},
+		Config: GetGlobalConfig(),
+		Logger: slog.Default(),
+	}
+	e.Crypto = &CryptoService{engine: e}
+	e.Workspace = &WorkspaceService{engine: e}
+	return e
+}
+
 func (e *Engine) Close() error {
-	if e.contacts.manager != nil {
-		return e.contacts.manager.Close()
+	if e.Contacts != nil {
+		return e.Contacts.Close()
 	}
 	return nil
 }

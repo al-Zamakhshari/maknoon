@@ -110,7 +110,7 @@ func (e *Engine) RegisterQuorumHandler(h host.Host) {
 		} else {
 			// Fallback: Check if they are in our local contacts
 			if err := e.ensureContacts(); err == nil {
-				if c, err2 := e.contacts.manager.GetByPeerID(req.Requester); err2 == nil {
+				if c, err2 := e.Contacts.GetByPeerID(req.Requester); err2 == nil {
 					sigPub = c.SIGPubKey
 				}
 			}
@@ -177,7 +177,7 @@ func (e *Engine) RegisterQuorumHandler(h host.Host) {
 		}
 
 		// 3. Sign Response
-		id, _ := e.Identities.LoadIdentity(e.Config.DefaultIdentity, nil, "", false)
+		id, _ := e.Identity.Mgr.LoadIdentity(e.Config.DefaultIdentity, nil, "", false)
 		if id != nil {
 			respSig, _ := e.Sign(ectx, []byte(resp.TraceID+fmt.Sprint(resp.Approved)), id.SIGPriv)
 			resp.Signature = respSig
@@ -194,7 +194,7 @@ func (e *Engine) QuorumRequest(ectx *EngineContext, identityName string, targets
 		return nil, err
 	}
 
-	id, err := e.Identities.LoadIdentity(identityName, nil, "", false)
+	id, err := e.Identity.Mgr.LoadIdentity(identityName, nil, "", false)
 	if err != nil {
 		return nil, err
 	}

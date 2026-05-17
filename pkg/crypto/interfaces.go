@@ -74,8 +74,8 @@ type Protector interface {
 	ValidateProfile(ectx *EngineContext, p *DynamicProfile) error
 }
 
-// IdentityService handles identity lifecycle and discovery.
-type IdentityService interface {
+// IdentityCapabilities handles identity lifecycle and discovery.
+type IdentityCapabilities interface {
 	IdentityActive(ectx *EngineContext) ([]string, error)
 	IdentityInfo(ectx *EngineContext, name string) (*IdentityInfoResult, error)
 	IdentityRename(ectx *EngineContext, oldName, newName string) error
@@ -185,7 +185,7 @@ type WorkspaceManager interface {
 // MaknoonEngine is the primary high-level facade for all Maknoon services.
 type MaknoonEngine interface {
 	Protector
-	IdentityService
+	IdentityCapabilities
 	VaultManager
 	P2PService
 	Utils
