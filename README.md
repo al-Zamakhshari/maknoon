@@ -13,7 +13,7 @@ Maknoon is an industrial-grade cryptographic engine and Model Context Protocol (
 
 | Feature | Specification |
 | :--- | :--- |
-| **Hybrid PQC** | NIST ML-KEM-1024 (Kyber) + X25519 (RFC 9180). |
+| **Hybrid PQC** | ML-KEM-768 + X25519 (X-Wing, IETF draft-connolly-cfrg-xwing-kem). |
 | **Non-Lattice** | **Conservative Profile**: FrodoKEM-640 + SLH-DSA fallback. |
 | **Resilient Tunnels** | **Phase 7.4**: RAID-for-Networking surviving up to 66% lane failure. |
 | **Cipher Stack** | AES-256-GCM (Encryption) + ML-DSA-87 (Forensic Signatures). |

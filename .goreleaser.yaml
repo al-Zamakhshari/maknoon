@@ -18,6 +18,10 @@ builds:
       - arm64
     main: ./cmd/maknoon/main.go
     binary: maknoon
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X github.com/al-Zamakhshari/maknoon/pkg/crypto.Version={{.Version}}
 
 archives:
   - formats: [tar.gz]

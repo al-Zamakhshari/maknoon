@@ -139,6 +139,9 @@ func TestIntegrationBasicSymmetric(t *testing.T) {
 }
 
 func TestIntegrationDirectoryEncryption(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
 	tmpDir := t.TempDir()
 	srcDir := filepath.Join(tmpDir, "source")
 	if err := os.MkdirAll(srcDir, 0755); err != nil {

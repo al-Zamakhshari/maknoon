@@ -10,6 +10,9 @@ import (
 )
 
 func TestResilientTunnelChaos(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping chaos test in short mode")
+	}
 	// Setup 3 sub-sessions (1 data + 2 parity for extreme resilience)
 	subs := make([]MuxSession, 3)
 	for i := 0; i < 3; i++ {

@@ -25,7 +25,7 @@ func SafeClear(b []byte) {
 	memguard.WipeBytes(b)
 }
 
-// GenerateKeys generates a new key pair for the hybrid ML-KEM-768 + X25519 KEM.
+// GenerateKeys generates a new key pair using X-Wing (ML-KEM-768 + X25519).
 func GenerateKeys() (hpke.PrivateKey, hpke.PublicKey, error) {
 	kem := hpke.MLKEM768X25519()
 

@@ -56,7 +56,7 @@ func (e *Engine) Diagnostic() DiagnosticResult {
 	res.System.OS = runtime.GOOS
 	res.System.Arch = runtime.GOARCH
 	res.System.Go = runtime.Version()
-	res.System.Version = "v1.3.x"
+	res.System.Version = Version
 
 	// User Info
 	if u, err := user.Current(); err == nil {

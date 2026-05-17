@@ -3,7 +3,10 @@
 # Build parameters
 BINARY_NAME=maknoon
 PKG=./cmd/maknoon
-LDFLAGS=-s -w
+VERSION=$(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
+LDFLAGS=-s -w \
+  -X main.version=$(VERSION) \
+  -X github.com/al-Zamakhshari/maknoon/pkg/crypto.Version=$(VERSION)
 
 # Standard Production Build (Statically linked, Stripped symbols)
 build:
