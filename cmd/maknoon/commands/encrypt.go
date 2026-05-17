@@ -165,7 +165,7 @@ func EncryptCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&stealth, "stealth", false, "Enable fingerprint resistance (headerless)")
 	cmd.Flags().BoolVar(&tofu, "trust-on-first-use", false, "Automatically add unknown signers to contacts")
 	cmd.Flags().BoolVar(&shred, "shred", false, "Securely delete original file after successful encryption")
-	cmd.Flags().StringVar(&profileStr, "profile", "", "Cryptographic profile (nist, aes, conservative)")
+	cmd.Flags().StringVar(&profileStr, "profile", "", "Cryptographic profile (nist, conservative)")
 	cmd.Flags().StringVar(&profileFile, "profile-file", "", "Path to a custom profile JSON file")
 
 	_ = cmd.RegisterFlagCompletionFunc("public-key", completeIdentities)

@@ -14,12 +14,13 @@ Maknoon is an industrial-grade cryptographic engine and Model Context Protocol (
 | Feature | Specification |
 | :--- | :--- |
 | **Hybrid PQC** | ML-KEM-768 + X25519 (X-Wing, IETF draft-connolly-cfrg-xwing-kem). |
-| **Non-Lattice** | **Conservative Profile**: FrodoKEM-640 + SLH-DSA fallback. |
-| **Resilient Tunnels** | **Phase 7.4**: RAID-for-Networking surviving up to 66% lane failure. |
+| **Non-Lattice** | **Conservative Profile (3)**: FrodoKEM-640 + SLH-DSA-SHA2-128s. |
+| **Resilient Tunnels** | RAID-for-Networking surviving up to 66% lane failure (Reed-Solomon). |
 | **Cipher Stack** | AES-256-GCM (Encryption) + ML-DSA-87 (Forensic Signatures). |
 | **Unified Binary** | CLI, MCP (Stdio/SSE), and **Enterprise REST API**. |
-| **Threshold Sig** | **Phase 6.1**: M-of-N Post-Quantum digital signatures. |
+| **Threshold Sig** | M-of-N Post-Quantum digital signatures (ML-DSA-87). |
 | **Privacy RAID** | Fragment dispersal (Shamir + Erasure Coding) for data at rest. |
+| **Decentralised Identity** | Three-tier registry: libp2p DHT (primary) → Nostr relays (fallback) → DNS. |
 
 ---
 
@@ -41,17 +42,21 @@ make build
 
 ## 📖 Practical Examples
 
-### 1. Post-Quantum Identity & Data Protection
-Generate a hardware-compliant identity and encrypt data for multiple recipients.
+### 1. Post-Quantum Identity & Decentralised Discovery
+Generate an identity and publish it to the decentralised registry stack.
 ```bash
-# 1. Generate an identity bound to a specific profile
+# 1. Generate a hybrid ML-KEM + ML-DSA identity (profile: nist or conservative)
 maknoon keygen -o alice_id --profile nist
 
-# 2. Encrypt a directory into a PQC-secured archive
-maknoon encrypt ./sensitive_data -p bob.pub -p charlie.pub --sign-key alice.key -o bundle.makn
+# 2. Publish to libp2p Kademlia DHT (default) + Nostr relays
+maknoon identity publish @alice --name alice_id
+maknoon identity publish @alice --name alice_id --nostr   # also push to Nostr
 
-# 3. Inspect the cryptographic provenance without decrypting
-maknoon info bundle.makn --json
+# 3. Encrypt for a remote peer — resolved via the registry
+maknoon encrypt ./secret.txt -p @alice -o secret.makn
+
+# 4. Inspect the cryptographic provenance without decrypting
+maknoon info secret.makn --json
 ```
 
 ### 2. Resilient L4 Tunnels (Phase 7.4)

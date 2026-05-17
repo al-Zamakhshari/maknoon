@@ -160,7 +160,7 @@ func KeygenCmd() *cobra.Command {
 	cmd.Flags().StringVarP(&passphrase, "passphrase", "s", "", "Passphrase to protect the keys")
 	cmd.Flags().BoolVarP(&useFido2, "fido2", "f", false, "Use FIDO2 security key to protect the private keys")
 	cmd.Flags().BoolVarP(&quiet, "quiet", "q", false, "Suppress informational output")
-	cmd.Flags().StringVar(&profileStr, "profile", "nist", "Cryptographic profile (nist, aes, conservative)")
+	cmd.Flags().StringVar(&profileStr, "profile", "nist", "Cryptographic profile (nist, conservative)")
 	cmd.Flags().StringVar(&profileFile, "profile-file", "", "Path to a custom profile JSON file to protect the keys")
 
 	_ = cmd.RegisterFlagCompletionFunc("profile", completeProfiles)

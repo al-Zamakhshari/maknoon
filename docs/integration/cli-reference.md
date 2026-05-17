@@ -78,9 +78,10 @@ Maknoon utilizes a decentralized identity model based on NIST-standardized PQC a
 
 | Command | Functionality | Key Parameters |
 | :--- | :--- | :--- |
-| `keygen` | Provisions a new hybrid PQC identity pair. | `--profile`, `--output` |
-| `identity list` | Enumerates locally managed cryptographic identities. | `--json` |
-| `identity publish` | Announces public keys to decentralized registries. | `--nostr`, `--dns`, `--desec` |
+| `keygen` | Provisions a new hybrid PQC identity pair. | `--profile` (`nist`\|`conservative`), `--output` |
+| `identity active` | Enumerates locally managed cryptographic identities. | `--json` |
+| `identity info` | Shows key details including `nostr_pub` hex for relay discovery. | `--json` |
+| `identity publish` | Announces public keys to decentralised registries. Defaults to libp2p DHT. | `--nostr`, `--dns`, `--desec`, `--bep44` |
 | `identity shard` | Splits a generic secret into Shamir shards (SSS). | `--threshold`, `--shares` |
 | `identity reconstruct` | Rebuilds a secret from threshold shards. | `--json` |
 | `identity split` | Shards a private identity file via Shamir's Secret Sharing. | `--threshold`, `--shares` |
@@ -107,7 +108,7 @@ Administrative commands for system configuration, capability discovery, and cryp
 | Command | Functionality | Key Parameters |
 | :--- | :--- | :--- |
 | `config` | Manages global security and performance settings. | `list`, `set`, `init` |
-| `profiles` | Manages cryptographic parameter sets (ciphers, KDF). | `list`, `gen`, `rm` |
+| `profiles` | Lists built-in profiles (`nist`=1, `conservative`=3) and manages custom profiles. | `list`, `gen`, `rm` |
 | `schema` | Generates a recursive JSON-Schema of the CLI. | `(No parameters)` |
 | `man` | Generates technical manual pages (roff/man format). | `(No parameters)` |
 
