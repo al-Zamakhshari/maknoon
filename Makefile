@@ -66,6 +66,41 @@ smoke: build
 	@./scripts/mission-orchestrated-quorum.sh
 	@echo "✅ All smoke tests passed. Industrial Grade verified."
 
+# Go mission tests — in-process, no Docker required, fast (< 30s)
+mission-tests:
+	go test -v -run 'TestMission' -timeout 120s ./cmd/maknoon/commands/ ./cmd/maknoon/
+
+# Run all 9 Docker-based missions + print structured summary
+missions: build
+	@mkdir -p mission-reports
+	@FAILED=""; \
+	for s in \
+	    scripts/mission-pipeline-verify.sh \
+	    scripts/mission-quorum-verify.sh \
+	    scripts/mission-deadmans-verify.sh \
+	    scripts/mission-orchestrated-quorum.sh \
+	    scripts/mission-blind-proxy-verify.sh \
+	    scripts/mission-bridge-verify.sh \
+	    scripts/mission-mesh-verify.sh \
+	    scripts/mission-global-verify.sh \
+	    scripts/mission-agility-verify.sh; do \
+	    echo ""; echo "═══ $$(basename $$s) ═══"; \
+	    MISSION_REPORT_FILE="mission-reports/$$(basename $$s .sh).jsonl" \
+	        bash "$$s" || FAILED="$$FAILED $$s"; \
+	done; \
+	bash scripts/mission-summary.sh mission-reports; \
+	[ -z "$$FAILED" ] || { echo "❌ Failed:$$FAILED"; exit 1; }
+
+# Run all smoke scripts (25+), not just the 5 in 'smoke'
+smoke-full: build
+	@FAILED=""; \
+	for s in scripts/smoke-*.sh; do \
+	    echo "--- $$s ---"; \
+	    bash "$$s" || FAILED="$$FAILED $$s"; \
+	done; \
+	[ -z "$$FAILED" ] || { echo "❌ Failed:$$FAILED"; exit 1; }
+	@echo "✅ All smoke scripts passed."
+
 # Build-tag matrix: verify all conditional compilation paths compile cleanly.
 # Platform tags (linux/!linux) gate the TPM backend.
 # Feature tags (nostr, fido2, minimal) gate optional dependencies when they land.
