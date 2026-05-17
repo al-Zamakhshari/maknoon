@@ -145,7 +145,6 @@ func KeygenCmd() *cobra.Command {
 				fmt.Printf("Success! Identity generated in %s\n", filepath.Dir(res.BasePath))
 				fmt.Printf("  - Encryption Keys: %s.kem.{key,pub}\n", res.BaseName)
 				fmt.Printf("  - Signing Keys:    %s.sig.{key,pub}\n", res.BaseName)
-				fmt.Printf("  - Nostr Keys:      %s.nostr.{key,pub}\n", res.BaseName)
 			}
 
 			if JSONOutput {
