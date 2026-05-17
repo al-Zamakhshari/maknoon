@@ -14,8 +14,8 @@ func (m *IdentityManager) SplitIdentity(name string, threshold, shares int, pass
 	}
 	defer id.Wipe()
 
-	// 2. Pack the keys
-	blob := make([]byte, 12+len(id.KEMPriv)+len(id.SIGPriv)+len(id.NostrPriv))
+	// 2. Pack the keys (2-field format: KEM + SIG)
+	blob := make([]byte, 8+len(id.KEMPriv)+len(id.SIGPriv))
 	offset := 0
 	binary.BigEndian.PutUint32(blob[offset:offset+4], uint32(len(id.KEMPriv)))
 	copy(blob[offset+4:offset+4+len(id.KEMPriv)], id.KEMPriv)
@@ -23,10 +23,6 @@ func (m *IdentityManager) SplitIdentity(name string, threshold, shares int, pass
 
 	binary.BigEndian.PutUint32(blob[offset:offset+4], uint32(len(id.SIGPriv)))
 	copy(blob[offset+4:offset+4+len(id.SIGPriv)], id.SIGPriv)
-	offset += 4 + len(id.SIGPriv)
-
-	binary.BigEndian.PutUint32(blob[offset:offset+4], uint32(len(id.NostrPriv)))
-	copy(blob[offset+4:], id.NostrPriv)
 
 	defer SafeClear(blob)
 
@@ -79,7 +75,8 @@ func (m *IdentityManager) CombineIdentity(mnemonics []string, output, passphrase
 	sigPriv := combined[offset+4 : offset+4+int(sigLen)]
 	offset += 4 + int(sigLen)
 
-	nostrPriv := combined[offset+4:]
+	// Discard any trailing field (backward-compat: old shards had a 3rd Nostr key field).
+	_ = combined[offset:]
 
 	// Store
 	basePath, baseName, err := m.ResolveBaseKeyPath(output)
@@ -96,18 +93,13 @@ func (m *IdentityManager) CombineIdentity(mnemonics []string, output, passphrase
 	if err != nil {
 		return "", err
 	}
-	var nostrPub []byte
-	if len(nostrPriv) > 0 {
-		nostrPub, _ = DeriveNostrPublic(nostrPriv)
-	}
 
 	pass := []byte(passphrase)
 	if noPassword {
 		pass = nil
 	}
 
-	// Use existing SaveIdentity logic for consistency
-	if err := m.SaveIdentity(basePath, baseName, kemPub, kemPriv, sigPub, sigPriv, nostrPub, nostrPriv, pass, 1); err != nil {
+	if err := m.SaveIdentity(basePath, baseName, kemPub, kemPriv, sigPub, sigPriv, pass, 1); err != nil {
 		return "", err
 	}
 

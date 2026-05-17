@@ -6,15 +6,16 @@ import (
 	"crypto/ed25519"
 	"crypto/hpke"
 	"crypto/rand"
-	"encoding/hex"
+	"crypto/sha256"
 	"fmt"
+	"io"
 
 	"github.com/cloudflare/circl/sign/mldsa/mldsa87"
-	"github.com/nbd-wtf/go-nostr"
+	"golang.org/x/crypto/hkdf"
 )
 
-// GeneratePQKeyPair generates a fresh Hybrid KEM, SIG, and Secp256k1 (Nostr) keypair using the specified profile.
-func GeneratePQKeyPair(profileID byte) (kemPub, kemPriv, sigPub, sigPriv, nostrPub, nostrPriv []byte, err error) {
+// GeneratePQKeyPair generates a fresh Hybrid KEM and SIG (ML-DSA-87 + Ed25519) keypair.
+func GeneratePQKeyPair(profileID byte) (kemPub, kemPriv, sigPub, sigPriv []byte, err error) {
 	profile, err := GetProfile(profileID, nil)
 	if err != nil {
 		profile = DefaultProfile()
@@ -22,38 +23,25 @@ func GeneratePQKeyPair(profileID byte) (kemPub, kemPriv, sigPub, sigPriv, nostrP
 
 	kemPriv, kemPub, err = profile.GenerateHybridKeyPair()
 	if err != nil {
-		return nil, nil, nil, nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 
 	mldsaPub, mldsaPriv, err := profile.GenerateSIGKeyPair()
 	if err != nil {
 		SafeClear(kemPriv)
-		return nil, nil, nil, nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 
-	// Generate Ed25519 for libp2p compatibility (Hybrid SIG)
+	// Generate Ed25519 for libp2p and BEP-44 compatibility (appended to ML-DSA bundle).
 	edPub, edPriv, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		SafeClear(kemPriv)
 		SafeClear(mldsaPriv)
-		return nil, nil, nil, nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 
-	// Bundle: ML-DSA + Ed25519
-	// We append Ed25519 to the end to maintain backward compatibility with partial reads if needed.
 	sigPub = append(mldsaPub, edPub...)
 	sigPriv = append(mldsaPriv, edPriv...)
-
-	// Generate Secp256k1 for Nostr
-	nostrPrivStr := nostr.GeneratePrivateKey()
-	nostrPubStr, err := nostr.GetPublicKey(nostrPrivStr)
-	if err != nil {
-		SafeClear(kemPriv)
-		SafeClear(sigPriv)
-		return nil, nil, nil, nil, nil, nil, err
-	}
-	nostrPriv, _ = hex.DecodeString(nostrPrivStr)
-	nostrPub, _ = hex.DecodeString(nostrPubStr)
 
 	return
 }
@@ -95,13 +83,16 @@ func DeriveSIGPublic(privKeyBytes []byte, profileID byte) ([]byte, error) {
 	return mldsaPub, nil
 }
 
-// DeriveNostrPublic derives the hex public key from a Nostr private key hex string.
-func DeriveNostrPublic(privKeyBytes []byte) ([]byte, error) {
-	pub, err := nostr.GetPublicKey(hex.EncodeToString(privKeyBytes))
-	if err != nil {
-		return nil, err
+// DeriveNostrKeypair derives a secp256k1 private key (32 raw bytes) from the
+// ML-DSA-87+Ed25519 SIG private key using HKDF-SHA256. The key is used only
+// as a Nostr transport signing key; it is never stored on disk.
+func DeriveNostrKeypair(sigPriv []byte) ([]byte, error) {
+	r := hkdf.New(sha256.New, sigPriv, []byte("maknoon-nostr-transport-v1"), []byte("secp256k1"))
+	key := make([]byte, 32)
+	if _, err := io.ReadFull(r, key); err != nil {
+		return nil, fmt.Errorf("HKDF derivation failed: %w", err)
 	}
-	return hex.DecodeString(pub)
+	return key, nil
 }
 
 // DeriveKEMPublic derives the public key from a Hybrid KEM private key.

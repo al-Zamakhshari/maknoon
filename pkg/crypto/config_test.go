@@ -64,11 +64,13 @@ func TestConfigValidation(t *testing.T) {
 	}
 	conf.Security.ArgonMemory = 64 * 1024
 
-	// Invalid Nostr URL
-	conf.Nostr.Relays = []string{"http://not-ws"}
+	// Invalid Nostr relay URL
+	conf.Nostr.Relays = []string{"http://not-a-relay.com"}
 	if err := conf.Validate(); err == nil {
-		t.Error("Expected error for invalid Nostr URL, got nil")
+		t.Error("Expected error for invalid nostr relay URL, got nil")
 	}
+	conf.Nostr.Relays = DefaultConfig().Nostr.Relays
+
 }
 
 func TestEngineUpdateConfigPolicy(t *testing.T) {

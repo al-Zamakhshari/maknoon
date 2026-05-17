@@ -112,11 +112,11 @@ func registerIdentityTools(s *server.MCPServer, engine crypto.MaknoonEngine) {
 			return mcp.NewToolResultText(string(outData)), nil
 		})
 
-	s.AddTool(mcp.NewTool("identity_publish", mcp.WithDescription("Publish identity to a registry (DNS or Nostr)")),
+	s.AddTool(mcp.NewTool("identity_publish", mcp.WithDescription("Publish identity to a registry (libp2p DHT, Nostr, DNS, or BEP-44)")),
 		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			args := getArgs(request)
 			handle := getString(args, "handle", "")
-			registry := getString(args, "registry", "nostr")
+			registry := getString(args, "registry", "libp2p")
 			local, _ := args["local"].(bool)
 
 			var multiaddrs []string
@@ -135,10 +135,17 @@ func registerIdentityTools(s *server.MCPServer, engine crypto.MaknoonEngine) {
 				Multiaddrs: multiaddrs,
 			}
 
-			if registry == "nostr" {
+			switch registry {
+			case "libp2p":
+				opts.LibP2P = true
+			case "nostr":
 				opts.Nostr = true
-			} else if registry == "dns" {
+			case "bep44":
+				opts.BEP44 = true
+			case "dns":
 				opts.DNS = true
+			default:
+				opts.LibP2P = true // default to libp2p DHT
 			}
 
 			err := engine.IdentityPublish(&crypto.EngineContext{Context: ctx}, handle, opts)

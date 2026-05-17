@@ -84,7 +84,7 @@ func TestMCPCryptoToolsParity(t *testing.T) {
 
 	// 4. Test Sign/Verify (The new Signer methods)
 	// Generate a key first
-	_, _, _, sigPriv, _, _, err := crypto.GeneratePQKeyPair(1) // NIST profile
+	_, _, _, sigPriv, err := crypto.GeneratePQKeyPair(1) // NIST profile
 	if err != nil {
 		t.Fatalf("GeneratePQKeyPair failed: %v", err)
 	}
