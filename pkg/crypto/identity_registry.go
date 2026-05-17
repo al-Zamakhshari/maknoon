@@ -53,7 +53,6 @@ func (m *IdentityManager) IdentityPublish(ctx context.Context, handle string, op
 			// Wait a bit for libp2p to detect addresses
 			time.Sleep(2 * time.Second)
 			record.Multiaddrs = sess.Multiaddrs()
-			fmt.Fprintf(os.Stderr, "DEBUG: Captured Multiaddrs: %v\n", record.Multiaddrs)
 			sess.Close()
 		}
 	}

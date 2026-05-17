@@ -246,7 +246,6 @@ func ReassembleFragments(srcDir string, w io.Writer, authorizedPubKey []byte) er
 				}
 				block = block[:n]
 				if !VerifySignature(block, sig, authorizedPubKey) {
-					fmt.Fprintf(os.Stderr, "DEBUG: Sig verification failed for shard %d block at remaining %d. SigLen: %d, DataLen: %d, PubKeyLen: %d\n", i, remaining, len(sig), len(block), len(authorizedPubKey))
 					return fmt.Errorf("integrity failure in shard %d", i)
 				}
 				shardData[i] = block

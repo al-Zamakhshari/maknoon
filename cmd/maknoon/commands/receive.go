@@ -2,6 +2,7 @@ package commands
 
 import (
 	"context"
+	"encoding/hex"
 	"fmt"
 	"os"
 
@@ -10,15 +11,16 @@ import (
 )
 
 var (
-	recvOutput     string
-	recvPassphrase string
-	recvStealth    bool
-	quietRecv      bool
-	recvPrivateKey string
-	recvP2PMode    bool
-	recvIdentity   string
-	recvFragment   bool
-	recvFrom       string
+	recvOutput       string
+	recvPassphrase   string
+	recvStealth      bool
+	quietRecv        bool
+	recvPrivateKey   string
+	recvP2PMode      bool
+	recvIdentity     string
+	recvFragment     bool
+	recvFrom         string
+	recvSenderSIGPub string
 )
 
 // ReceiveCmd returns the cobra command for receiving files via secure P2P.
@@ -50,6 +52,16 @@ func ReceiveCmd() *cobra.Command {
 				IsFragmented: recvFragment,
 				From:         recvFrom,
 				FragmentName: code,
+			}
+
+			if recvSenderSIGPub != "" {
+				sigPubBytes, err := hex.DecodeString(recvSenderSIGPub)
+				if err != nil {
+					err = fmt.Errorf("invalid --sender-sig-pub (expected hex): %w", err)
+					p.RenderError(err)
+					return err
+				}
+				opts.SenderSIGPub = sigPubBytes
 			}
 
 			if cmd.Flags().Changed("stealth") {
@@ -121,6 +133,7 @@ func ReceiveCmd() *cobra.Command {
 	cmd.Flags().StringVar(&recvIdentity, "identity", "", "Identity name to use (default: active identity)")
 	cmd.Flags().BoolVar(&recvFragment, "fragment", false, "Enable automated fragment retrieval")
 	cmd.Flags().StringVar(&recvFrom, "from", "", "Comma-separated list of sources (@petname or PeerID)")
+	cmd.Flags().StringVar(&recvSenderSIGPub, "sender-sig-pub", "", "Sender's ML-DSA public key (hex) for fragment integrity verification")
 
 	return cmd
 }
