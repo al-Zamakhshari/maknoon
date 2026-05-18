@@ -96,7 +96,7 @@ func DecryptCmd() *cobra.Command {
 			// 3. Resolve optional sender public key for integrated verification
 			var senderKey []byte
 			if flags&crypto.FlagSigned != 0 {
-				resolvedSenderPath := crypto.ResolveKeyPath(senderKeyPath, "MAKNOON_PUBLIC_KEY")
+				resolvedSenderPath := GlobalContext.Engine.ResolveKeyPath(nil, senderKeyPath, "MAKNOON_PUBLIC_KEY")
 				if resolvedSenderPath == "" {
 					err := fmt.Errorf("file has integrated signature but sender public key not provided (use --sender-key)")
 					p.RenderError(err)

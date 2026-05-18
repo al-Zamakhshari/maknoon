@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"os"
 	"testing"
-
-	"github.com/al-Zamakhshari/maknoon/pkg/crypto"
 )
 
 func TestMain(m *testing.M) {
@@ -47,7 +45,7 @@ func TestResolveKeyPath(t *testing.T) {
 	defer func() { _ = os.Remove(tmpFile.Name()) }()
 
 	// 1. Explicit path
-	res := crypto.ResolveKeyPath(tmpFile.Name(), "UNUSED")
+	res := GlobalContext.Engine.ResolveKeyPath(nil, tmpFile.Name(), "UNUSED")
 	if res != tmpFile.Name() {
 		t.Errorf("Expected %s, got %s", tmpFile.Name(), res)
 	}
@@ -58,7 +56,7 @@ func TestResolveKeyPath(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = os.Unsetenv(envKey) }()
-	res = crypto.ResolveKeyPath("", envKey)
+	res = GlobalContext.Engine.ResolveKeyPath(nil, "", envKey)
 	if res != tmpFile.Name() {
 		t.Errorf("Expected %s from env, got %s", tmpFile.Name(), res)
 	}
