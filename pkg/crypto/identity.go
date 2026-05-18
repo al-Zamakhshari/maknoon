@@ -67,28 +67,13 @@ func NewCustomIdentityManager(store KeyStore, contacts *ContactManager) *Identit
 }
 
 // ResolveKeyPath checks if a key exists locally, in ~/.maknoon/keys/, or in environment variables.
+//
+// Deprecated: use IdentityManager.ResolveKeyPath or Engine.ResolveKeyPath instead.
+// This package-level helper is retained only for external callers that have not yet
+// migrated; new code should use the manager method which goes through the managed store.
 func ResolveKeyPath(path string, envVar string) string {
-	if path != "" {
-		if _, err := os.Stat(path); err == nil {
-			return path
-		}
-	}
-	if envVar != "" {
-		if env := os.Getenv(envVar); env != "" {
-			if _, err := os.Stat(env); err == nil {
-				return env
-			}
-		}
-	}
-	// Check default keys directory
-	if path != "" {
-		home := GetUserHomeDir()
-		defaultPath := filepath.Join(home, MaknoonDir, KeysDir, path)
-		if _, err := os.Stat(defaultPath); err == nil {
-			return defaultPath
-		}
-	}
-	return ""
+	m := NewIdentityManager()
+	return m.ResolveKeyPath(path, envVar)
 }
 
 // ResolveKeyPath is a convenience method on IdentityManager.

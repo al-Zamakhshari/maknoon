@@ -27,10 +27,24 @@ type Engine struct {
 	Contacts     *ContactManager
 	contactsMu   sync.Mutex
 	contactsPath string
+
+	// Config change listeners — fired after UpdateConfig replaces the singleton.
+	configChangeMu      sync.RWMutex
+	onConfigChangeHooks []func(*Config)
 }
 
 func (e *Engine) GetPolicy() SecurityPolicy { return e.Policy }
 func (e *Engine) GetConfig() *Config        { return e.Config }
+
+// OnConfigChange registers fn to be called (with a snapshot of the new Config)
+// every time UpdateConfig successfully replaces the engine's configuration.
+// Listeners are called synchronously after the singleton is replaced; they must
+// not call UpdateConfig themselves to avoid a deadlock.
+func (e *Engine) OnConfigChange(fn func(*Config)) {
+	e.configChangeMu.Lock()
+	defer e.configChangeMu.Unlock()
+	e.onConfigChangeHooks = append(e.onConfigChangeHooks, fn)
+}
 
 func (e *Engine) UpdateConfig(ectx *EngineContext, newConf *Config) error {
 	ectx = e.context(ectx)
@@ -87,6 +101,16 @@ func (e *Engine) UpdateConfig(ectx *EngineContext, newConf *Config) error {
 	}
 	e.Config = newConf
 	e.Identity.Mgr.Config = newConf
+
+	// Notify registered listeners with a snapshot of the new config.
+	e.configChangeMu.RLock()
+	hooks := make([]func(*Config), len(e.onConfigChangeHooks))
+	copy(hooks, e.onConfigChangeHooks)
+	e.configChangeMu.RUnlock()
+	snap := newConf.Clone()
+	for _, fn := range hooks {
+		fn(snap)
+	}
 	return nil
 }
 
@@ -164,15 +188,30 @@ func (e *Engine) enforce(ectx *EngineContext, cap Capability) error {
 // Vault, Identity, Network, and Contacts are nil — do not call methods that require them.
 // This exists solely so that the pipeline package-level helpers can share policy/config
 // without a full engine initialization.
-func newShimEngine() *Engine {
+//
+// Deprecated: use NewStreamEngine instead.
+func newShimEngine(conf *Config) *Engine {
+	if conf == nil {
+		conf = GetGlobalConfig()
+	}
 	e := &Engine{
 		Policy: &HumanPolicy{},
-		Config: GetGlobalConfig(),
+		Config: conf,
 		Logger: slog.Default(),
 	}
 	e.Crypto = &CryptoService{engine: e}
 	e.Workspace = &WorkspaceService{engine: e}
 	return e
+}
+
+// NewStreamEngine creates a crypto-only engine suitable for stream encrypt/decrypt
+// operations that don't require vault, identity, network, or contact services.
+// If conf is nil, the global config is used.
+//
+// Note: Vault, Identity, Network, and Contacts are nil on the returned engine.
+// Panics or errors will occur if methods that require those services are called.
+func NewStreamEngine(conf *Config) *Engine {
+	return newShimEngine(conf)
 }
 
 func (e *Engine) Close() error {
