@@ -124,6 +124,18 @@ func (s *FileSystemKeyStore) ListKeys(dir string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Inline containment guard so the Rel check is in the same scope as os.ReadDir.
+	if s.BaseDir != "" {
+		base := filepath.Clean(s.BaseDir)
+		rel, relErr := filepath.Rel(base, safe)
+		if relErr != nil || strings.HasPrefix(rel, "..") {
+			tmpBase := filepath.Clean(os.TempDir())
+			relTmp, relTmpErr := filepath.Rel(tmpBase, safe)
+			if relTmpErr != nil || strings.HasPrefix(relTmp, "..") {
+				return nil, &ErrPolicyViolation{Reason: "list-keys path outside permitted directories", Path: dir}
+			}
+		}
+	}
 	entries, err := os.ReadDir(safe)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -142,6 +154,18 @@ func (s *FileSystemKeyStore) EnsureDir(dir string) error {
 	safe, err := s.safePath(dir)
 	if err != nil {
 		return err
+	}
+	// Inline containment guard so the Rel check is in the same scope as os.MkdirAll.
+	if s.BaseDir != "" {
+		base := filepath.Clean(s.BaseDir)
+		rel, relErr := filepath.Rel(base, safe)
+		if relErr != nil || strings.HasPrefix(rel, "..") {
+			tmpBase := filepath.Clean(os.TempDir())
+			relTmp, relTmpErr := filepath.Rel(tmpBase, safe)
+			if relTmpErr != nil || strings.HasPrefix(relTmp, "..") {
+				return &ErrPolicyViolation{Reason: "ensure-dir path outside permitted directories", Path: dir}
+			}
+		}
 	}
 	return os.MkdirAll(safe, 0700)
 }

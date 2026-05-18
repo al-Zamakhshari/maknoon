@@ -14,7 +14,13 @@ import (
 // (or is an absolute path that doesn't traverse upward).  This is the canonical
 // CodeQL go/path-injection sanitiser pattern: filepath.Clean + filepath.Rel.
 // Returns the cleaned path on success, or an error if the path is unsafe.
+// containedPath returns the cleaned form of p if and only if it falls within
+// one of the allowedBases. Paths outside every allowed base are rejected.
+// Callers must supply at least one base; an empty base list always returns an error.
 func containedPath(p string, allowedBases ...string) (string, error) {
+	if len(allowedBases) == 0 {
+		return "", fmt.Errorf("containedPath: no allowed bases provided for %q", p)
+	}
 	clean := filepath.Clean(p)
 	for _, base := range allowedBases {
 		b := filepath.Clean(base)
@@ -23,24 +29,19 @@ func containedPath(p string, allowedBases ...string) (string, error) {
 			return clean, nil
 		}
 	}
-	// Absolute path not within any allowed base: allow if it does not traverse.
-	if filepath.IsAbs(clean) && !strings.Contains(clean, "..") {
-		return clean, nil
-	}
-	if !filepath.IsAbs(clean) && !strings.HasPrefix(clean, "..") {
-		return clean, nil
-	}
 	return "", fmt.Errorf("path %q is outside permitted directories", p)
 }
 
 // SecureDelete securely wipes and removes a file or directory.
 func (e *Engine) SecureDeleteStream(path string) error {
-	// Containment check: filepath.Rel against config directories is the canonical
-	// CodeQL go/path-injection sanitiser pattern.
+	// Containment check: path must be within one of the known safe directories.
+	// homeDir is included so CLI users can shred files anywhere in their home tree.
 	keysBase := filepath.Clean(e.Config.Paths.KeysDir)
 	vaultsBase := filepath.Clean(e.Config.Paths.VaultsDir)
 	tmpBase := filepath.Clean(os.TempDir())
-	safe, err := containedPath(path, keysBase, vaultsBase, tmpBase)
+	homeDir, _ := os.UserHomeDir()
+	homeBase := filepath.Clean(homeDir)
+	safe, err := containedPath(path, keysBase, vaultsBase, tmpBase, homeBase)
 	if err != nil {
 		return &ErrPolicyViolation{Reason: "secure-delete path outside permitted directories", Path: path}
 	}

@@ -39,17 +39,10 @@ func NewFragmentWriter(opts FragmentOptions) (*FragmentWriter, error) {
 	writers := make([]io.WriteCloser, totalShards)
 
 	if opts.TargetDir != "" {
-		// Containment check: filepath.Clean + filepath.Rel is the canonical
-		// CodeQL go/path-injection sanitiser pattern.  We allow the target dir
-		// to reside under os.TempDir() OR as any absolute path that does not
-		// escape via "..".  The Rel guard below is what breaks the taint chain.
 		safeDir := filepath.Clean(opts.TargetDir)
-		tmpBase := filepath.Clean(os.TempDir())
-		relTmp, errTmp := filepath.Rel(tmpBase, safeDir)
-		if errTmp == nil && !strings.HasPrefix(relTmp, "..") {
-			// within temp — allowed
-		} else if !filepath.IsAbs(safeDir) || strings.Contains(safeDir, "..") {
-			return nil, fmt.Errorf("fragment target dir is not a valid absolute path: %q", opts.TargetDir)
+		// Reject any path that traverses upward.
+		if strings.HasPrefix(safeDir, "..") || strings.Contains(safeDir, string(filepath.Separator)+".."+string(filepath.Separator)) {
+			return nil, fmt.Errorf("fragment target dir contains path traversal: %q", opts.TargetDir)
 		}
 		if err := os.MkdirAll(safeDir, 0700); err != nil {
 			return nil, err
@@ -167,15 +160,10 @@ func (fw *FragmentWriter) Close() error {
 }
 
 func ReassembleFragments(srcDir string, w io.Writer, authorizedPubKey []byte) error {
-	// Containment check — filepath.Clean + filepath.Rel is the canonical
-	// CodeQL go/path-injection sanitiser pattern.
 	safeDir := filepath.Clean(srcDir)
-	tmpBase := filepath.Clean(os.TempDir())
-	relTmp, errTmp := filepath.Rel(tmpBase, safeDir)
-	if errTmp == nil && !strings.HasPrefix(relTmp, "..") {
-		// within temp dir — allowed
-	} else if !filepath.IsAbs(safeDir) || strings.Contains(safeDir, "..") {
-		return fmt.Errorf("source dir is not a valid path: %q", srcDir)
+	// Reject any path containing traversal sequences.
+	if strings.HasPrefix(safeDir, "..") || strings.Contains(safeDir, string(filepath.Separator)+".."+string(filepath.Separator)) {
+		return fmt.Errorf("source dir contains path traversal: %q", srcDir)
 	}
 	files, err := os.ReadDir(safeDir)
 	if err != nil {
