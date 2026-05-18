@@ -44,7 +44,7 @@ type Identity struct {
 type IdentityManager struct {
 	Store    KeyStore
 	Contacts *ContactManager
-	P2P      P2PService
+	P2P      MultiaddrsProvider
 	Config   *Config
 }
 

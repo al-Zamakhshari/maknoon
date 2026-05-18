@@ -95,15 +95,13 @@ func (s *NetworkService) NetworkStatus(ectx *EngineContext) (NetStatusResult, er
 	// 1. Check active tunnel
 	s.tunnelMu.RLock()
 	if s.activeTunnel != nil {
-		if at, ok := s.activeTunnel.(*tunnel.TunnelStatus); ok {
-			res.Tunnel.Active = true
-			res.Tunnel.LocalAddress = at.LocalAddress
-			res.Tunnel.RemoteEndpoint = at.RemoteEndpoint
-			res.Tunnel.HandshakeTime = at.HandshakeTime
-			res.Tunnel.DataLanes = at.DataLanes
-			res.Tunnel.ParityLanes = at.ParityLanes
-			res.Tunnel.HealthyLanes = at.HealthyLanes
-		}
+		res.Tunnel.Active = true
+		res.Tunnel.LocalAddress = s.activeTunnel.LocalAddress
+		res.Tunnel.RemoteEndpoint = s.activeTunnel.RemoteEndpoint
+		res.Tunnel.HandshakeTime = s.activeTunnel.HandshakeTime
+		res.Tunnel.DataLanes = s.activeTunnel.DataLanes
+		res.Tunnel.ParityLanes = s.activeTunnel.ParityLanes
+		res.Tunnel.HealthyLanes = s.activeTunnel.HealthyLanes
 	}
 	s.tunnelMu.RUnlock()
 

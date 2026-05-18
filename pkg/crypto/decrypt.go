@@ -351,7 +351,10 @@ func streamDecryptSequential(r io.Reader, w io.Writer, aead cipher.AEAD, baseNon
 	}
 	bufPtr := bufferPool.Get().(*[]byte)
 	buf := *bufPtr
-	defer bufferPool.Put(bufPtr)
+	defer func() {
+		SafeClear(*bufPtr)
+		bufferPool.Put(bufPtr)
+	}()
 
 	chunkIndex := uint64(0)
 	totalProcessed := int64(0)

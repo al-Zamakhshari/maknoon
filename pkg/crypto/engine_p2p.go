@@ -1,6 +1,7 @@
 package crypto
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"strings"
@@ -61,10 +62,8 @@ func (s *NetworkService) TunnelStart(ectx *EngineContext, opts tunnel.TunnelOpti
 	s.tunnelMu.Lock()
 	defer s.tunnelMu.Unlock()
 
-	if s.activeTunnel != nil {
-		if at, ok := s.activeTunnel.(*tunnel.TunnelStatus); ok && at.Active {
-			return *at, fmt.Errorf("a tunnel is already active")
-		}
+	if s.activeTunnel != nil && s.activeTunnel.Active {
+		return *s.activeTunnel, fmt.Errorf("a tunnel is already active")
 	}
 
 	targetAddr := opts.P2PAddr
@@ -162,17 +161,15 @@ func (s *NetworkService) TunnelStop(ectx *EngineContext) error {
 		return nil
 	}
 
-	if gw, ok := s.gateway.(*tunnel.TunnelGateway); ok {
-		gw.Stop()
+	if s.gateway != nil {
+		s.gateway.Stop()
 	}
 
 	s.activeTunnel = nil
 	s.gateway = nil
 
 	if s.gatewayServer != nil {
-		if srv, ok := s.gatewayServer.(*tunnel.TunnelGateway); ok {
-			srv.Stop()
-		}
+		s.gatewayServer.Stop()
 		s.gatewayServer = nil
 	}
 
@@ -187,10 +184,7 @@ func (s *NetworkService) TunnelStatus(ectx *EngineContext) (tunnel.TunnelStatus,
 		return tunnel.TunnelStatus{Active: false}, nil
 	}
 
-	if st, ok := s.activeTunnel.(*tunnel.TunnelStatus); ok {
-		return *st, nil
-	}
-	return tunnel.TunnelStatus{Active: false}, nil
+	return *s.activeTunnel, nil
 }
 
 func (s *NetworkService) TunnelListen(ectx *EngineContext, addr, mode, identity string) (NetworkResult, error) {
@@ -420,4 +414,24 @@ func (s *NetworkService) ChatStart(ectx *EngineContext, identityName, target str
 
 func (s *NetworkService) ValidateWormholeURL(ectx *EngineContext, u string) error {
 	return nil // Deprecated
+}
+
+// networkMultiaddrsAdapter implements MultiaddrsProvider using NetworkService.
+// It is a thin adapter that breaks the circular Engine→IdentityManager→Engine reference
+// by exposing only the narrow Multiaddrs capability needed by IdentityPublish.
+type networkMultiaddrsAdapter struct {
+	network *NetworkService
+}
+
+// Multiaddrs starts a transient libp2p host for identityName, waits briefly for
+// address detection, then returns the discovered multiaddrs and closes the session.
+func (a *networkMultiaddrsAdapter) Multiaddrs(ctx context.Context, identityName string) []string {
+	sess, err := a.network.ChatStart(nil, identityName, "")
+	if err != nil {
+		return nil
+	}
+	time.Sleep(2 * time.Second)
+	addrs := sess.Multiaddrs()
+	sess.Close()
+	return addrs
 }

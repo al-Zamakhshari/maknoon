@@ -1,0 +1,221 @@
+🏗️  Provisioning Orchestrated Quorum Mesh...
+ Image docker-initiator Building 
+ Image docker-guardian-1 Building 
+ Image docker-guardian-2 Building 
+ Image docker-guardian-3 Building 
+#1 [internal] load local bake definitions
+#1 reading from stdin 1.83kB done
+#1 DONE 0.0s
+
+#2 [guardian-3 internal] load build definition from Dockerfile.mission
+#2 transferring dockerfile: 765B done
+#2 DONE 0.0s
+
+#3 [guardian-1 internal] load metadata for docker.io/library/alpine:3.21
+#3 DONE 0.9s
+
+#4 [initiator internal] load metadata for docker.io/library/golang:1.26-alpine
+#4 DONE 0.9s
+
+#5 [initiator internal] load .dockerignore
+#5 transferring context: 136B done
+#5 DONE 0.0s
+
+#6 [guardian-2 builder 1/7] FROM docker.io/library/golang:1.26-alpine@sha256:91eda9776261207ea25fd06b5b7fed8d397dd2c0a283e77f2ab6e91bfa71079d
+#6 resolve docker.io/library/golang:1.26-alpine@sha256:91eda9776261207ea25fd06b5b7fed8d397dd2c0a283e77f2ab6e91bfa71079d 0.0s done
+#6 DONE 0.0s
+
+#7 [guardian-3 stage-1 1/7] FROM docker.io/library/alpine:3.21@sha256:48b0309ca019d89d40f670aa1bc06e426dc0931948452e8491e3d65087abc07d
+#7 resolve docker.io/library/alpine:3.21@sha256:48b0309ca019d89d40f670aa1bc06e426dc0931948452e8491e3d65087abc07d 0.0s done
+#7 DONE 0.0s
+
+#8 [initiator internal] load build context
+#8 transferring context: 17.17kB done
+#8 DONE 0.0s
+
+#9 [guardian-3 builder 2/7] RUN apk add --no-cache git ca-certificates tzdata
+#9 CACHED
+
+#10 [guardian-3 builder 3/7] WORKDIR /app
+#10 CACHED
+
+#11 [guardian-3 builder 4/7] COPY go.mod go.sum ./
+#11 CACHED
+
+#12 [guardian-3 builder 5/7] RUN go mod download
+#12 CACHED
+
+#13 [initiator builder 6/7] COPY . .
+#13 DONE 0.0s
+
+#14 [guardian-1 builder 7/7] RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o maknoon ./cmd/maknoon
+#14 DONE 8.5s
+
+#15 [guardian-1 stage-1 3/7] RUN addgroup -S maknoon -g 1000 && adduser -S maknoon -u 1000 -G maknoon
+#15 CACHED
+
+#16 [guardian-1 stage-1 2/7] RUN apk add --no-cache ca-certificates tzdata curl su-exec jq
+#16 CACHED
+
+#17 [guardian-1 stage-1 5/7] RUN mkdir -p /home/maknoon && chown 1000:1000 /home/maknoon
+#17 CACHED
+
+#18 [guardian-1 stage-1 4/7] RUN mkdir -p /tmp/maknoon && chmod 1777 /tmp && chown 1000:1000 /tmp/maknoon
+#18 CACHED
+
+#19 [guardian-1 stage-1 6/7] COPY --from=builder /app/maknoon /usr/local/bin/maknoon
+#19 CACHED
+
+#20 [guardian-1 stage-1 7/7] WORKDIR /home/maknoon
+#20 CACHED
+
+#21 [initiator] exporting to image
+#21 exporting layers done
+#21 exporting manifest sha256:dab3f381b83d64d73dfac7de2283829c389bc363a34fa24a72973b80d9e75eab done
+#21 exporting config sha256:8823f77b6194174bdacb7dfe374040bae3e89f3a5c8c48818a6ef881583e1d1c done
+#21 exporting attestation manifest sha256:a23f642a1b06e23d7df3f992cce92e5fd79e8673e2604cb9cae893253a1a48a7 0.0s done
+#21 exporting manifest list sha256:fc907b3df70ab7000b4ee0077b50d6f54732d169c2e8601f8bc247a2899bb481 done
+#21 naming to docker.io/library/docker-initiator:latest done
+#21 unpacking to docker.io/library/docker-initiator:latest done
+#21 DONE 0.1s
+
+#22 [guardian-3] exporting to image
+#22 exporting layers done
+#22 exporting manifest sha256:0b74ba519f66b50605d0e7c4f295d68ce89a258cea93298543725f29cb65da3e done
+#22 exporting config sha256:bf58b253286bb177e081c8e71d0b8d254bf43d23debdfd95f60f7f2dce0d6dda done
+#22 exporting attestation manifest sha256:579b2947f7413c4eae78c36f43fd40faf57e89685ae41b77d883090ae074b325 0.0s done
+#22 exporting manifest list sha256:1d092e09ef6d878637a461bfb8c7a8eccff28cb980bdd1307670c17388722ce1 done
+#22 naming to docker.io/library/docker-guardian-3:latest done
+#22 unpacking to docker.io/library/docker-guardian-3:latest done
+#22 DONE 0.1s
+
+#23 [guardian-2] exporting to image
+#23 exporting layers done
+#23 exporting manifest sha256:ac5d7e1d04eb9786e4726154d52948c226bdd47d85e1c4bd4023a9bfe4c7996c done
+#23 exporting config sha256:c3803e9e0605b153887639f0b513257016e8cccfc14fff0ca1261441b4cf5f6e done
+#23 exporting attestation manifest sha256:5f4f95d2052a67cf6e1e861abbdc451a6c8e1ae544e29b2688d6ecc1fb396bcf 0.0s done
+#23 exporting manifest list sha256:00377eea105b9abf850efbadf1abf93760bd7ab58b5126a1c1032968121327b7 done
+#23 naming to docker.io/library/docker-guardian-2:latest done
+#23 unpacking to docker.io/library/docker-guardian-2:latest done
+#23 DONE 0.1s
+
+#24 [guardian-1] exporting to image
+#24 exporting layers done
+#24 exporting manifest sha256:c145e1a5f03e57cfcaa8d938797935a0809ab22d6ddb77ac7ad750e608017723 done
+#24 exporting config sha256:6edad0f742baaeefefba13b5f2a43968ac6953e52fdf344ff9da4618f2f491d8 done
+#24 exporting attestation manifest sha256:11e5874f942a83bb1dd0ecf2e800d1d1028d84f1f07304d57a9f2f4d0f608de2 0.0s done
+#24 exporting manifest list sha256:996f0ccd5ddfe3714c0f10db97ad922a6fd6772e18c51e0e2dc26cc974beaae3 done
+#24 naming to docker.io/library/docker-guardian-1:latest done
+#24 unpacking to docker.io/library/docker-guardian-1:latest done
+#24 DONE 0.1s
+
+#25 [guardian-1] resolving provenance for metadata file
+#25 DONE 0.0s
+
+#26 [guardian-2] resolving provenance for metadata file
+#26 DONE 0.0s
+
+#27 [initiator] resolving provenance for metadata file
+#27 DONE 0.1s
+
+#28 [guardian-3] resolving provenance for metadata file
+#28 DONE 0.0s
+ Image docker-guardian-1 Built 
+ Image docker-guardian-2 Built 
+ Image docker-guardian-3 Built 
+ Image docker-initiator Built 
+ Network docker_orchestrated-net Creating 
+ Network docker_orchestrated-net Created 
+ Container docker-initiator-1 Creating 
+ Container docker-guardian-2-1 Creating 
+ Container docker-guardian-1-1 Creating 
+ Container docker-guardian-3-1 Creating 
+ Container docker-initiator-1 Created 
+ Container docker-guardian-1-1 Created 
+ Container docker-guardian-2-1 Created 
+ Container docker-guardian-3-1 Created 
+ Container docker-guardian-1-1 Starting 
+ Container docker-initiator-1 Starting 
+ Container docker-guardian-2-1 Starting 
+ Container docker-guardian-3-1 Starting 
+ Container docker-guardian-3-1 Started 
+ Container docker-initiator-1 Started 
+ Container docker-guardian-1-1 Started 
+ Container docker-guardian-2-1 Started 
+🆔 Generating Identities...
+  - Guardian-1: /ip4/172.18.0.4/tcp/4000/p2p/12D3KooWGxRonAHokUNVkpDQupWPSvutRhNKYLmWwFzXuJCHUyMs
+  - Guardian-2: /ip4/172.18.0.5/tcp/4000/p2p/12D3KooWGxaqCaxxtL1gPyp393873AwCxy4qPsraUcNc1iVKQt2Y
+  - Guardian-3: /ip4/172.18.0.2/tcp/4000/p2p/12D3KooWKSpijVEnHFH7tjYtcbhXHqrwWRoEk1q9UBAUEiCnRkfR
+  - Initiator: 12D3KooWRUtYeKntoouUY85JJSWCQCT1ooStS4z3rBVk78FUEYLC
+🔒 Initiator initializing institutional vault with peers: /ip4/172.18.0.4/tcp/4000/p2p/12D3KooWGxRonAHokUNVkpDQupWPSvutRhNKYLmWwFzXuJCHUyMs,/ip4/172.18.0.5/tcp/4000/p2p/12D3KooWGxaqCaxxtL1gPyp393873AwCxy4qPsraUcNc1iVKQt2Y,/ip4/172.18.0.2/tcp/4000/p2p/12D3KooWKSpijVEnHFH7tjYtcbhXHqrwWRoEk1q9UBAUEiCnRkfR
+📤 Distributing shards and auto-approval policies...
+ docker-initiator-1 Copying docker-initiator-1:/home/maknoon/.maknoon/keys/default.kem.pub to ./initiator.kem.pub
+ docker-initiator-1 Copied docker-initiator-1:/home/maknoon/.maknoon/keys/default.kem.pub to ./initiator.kem.pub
+ docker-initiator-1 Copying docker-initiator-1:/home/maknoon/.maknoon/keys/default.sig.pub to ./initiator.sig.pub
+ docker-initiator-1 Copied docker-initiator-1:/home/maknoon/.maknoon/keys/default.sig.pub to ./initiator.sig.pub
+ docker-guardian-1-1 Copying policy.json to docker-guardian-1-1:/home/maknoon/policy.json
+ docker-guardian-1-1 Copied policy.json to docker-guardian-1-1:/home/maknoon/policy.json
+ docker-guardian-1-1 Copying initiator.kem.pub to docker-guardian-1-1:/home/maknoon/initiator.kem.pub
+ docker-guardian-1-1 Copied initiator.kem.pub to docker-guardian-1-1:/home/maknoon/initiator.kem.pub
+ docker-guardian-1-1 Copying initiator.sig.pub to docker-guardian-1-1:/home/maknoon/initiator.sig.pub
+ docker-guardian-1-1 Copied initiator.sig.pub to docker-guardian-1-1:/home/maknoon/initiator.sig.pub
+{
+  "petname": "@initiator",
+  "status": "success"
+}
+ docker-guardian-2-1 Copying policy.json to docker-guardian-2-1:/home/maknoon/policy.json
+ docker-guardian-2-1 Copied policy.json to docker-guardian-2-1:/home/maknoon/policy.json
+ docker-guardian-2-1 Copying initiator.kem.pub to docker-guardian-2-1:/home/maknoon/initiator.kem.pub
+ docker-guardian-2-1 Copied initiator.kem.pub to docker-guardian-2-1:/home/maknoon/initiator.kem.pub
+ docker-guardian-2-1 Copying initiator.sig.pub to docker-guardian-2-1:/home/maknoon/initiator.sig.pub
+ docker-guardian-2-1 Copied initiator.sig.pub to docker-guardian-2-1:/home/maknoon/initiator.sig.pub
+{
+  "petname": "@initiator",
+  "status": "success"
+}
+ docker-guardian-3-1 Copying policy.json to docker-guardian-3-1:/home/maknoon/policy.json
+ docker-guardian-3-1 Copied policy.json to docker-guardian-3-1:/home/maknoon/policy.json
+ docker-guardian-3-1 Copying initiator.kem.pub to docker-guardian-3-1:/home/maknoon/initiator.kem.pub
+ docker-guardian-3-1 Copied initiator.kem.pub to docker-guardian-3-1:/home/maknoon/initiator.kem.pub
+ docker-guardian-3-1 Copying initiator.sig.pub to docker-guardian-3-1:/home/maknoon/initiator.sig.pub
+ docker-guardian-3-1 Copied initiator.sig.pub to docker-guardian-3-1:/home/maknoon/initiator.sig.pub
+{
+  "petname": "@initiator",
+  "status": "success"
+}
+📝 Populating institutional vault...
+{
+  "status": "success",
+  "service": "intel-service"
+}
+🩹 ATTEMPTING AUTOMATED ORCHESTRATED UNLOCK (No passphrase provided)...
+2026/05/16 20:40:02 INFO Institutional vault detected: initiating quorum unlock vault=/home/maknoon/.maknoon/vaults/mission-vault.vault peers=3
+2026/05/16 20:40:02 failed to sufficiently increase receive buffer size (was: 208 kiB, wanted: 7168 kiB, got: 416 kiB). See https://github.com/quic-go/quic-go/wiki/UDP-Buffer-Sizes for details.
+❌ FAILED: Automated recovery failed.
+Initiator Output: {
+  "error": "authentication failed: quorum failed: no approvals received from authorized peers",
+  "status": "error"
+}
+EXEC_FAILED
+
+❌ ERROR: Mission 'Orchestrated Quorum' failed with exit code 1
+🔍 Capturing container logs for diagnostic...
+🧹 Tearing down failed mission infrastructure...
+ Container docker-guardian-3-1 Stopping 
+ Container docker-initiator-1 Stopping 
+ Container docker-guardian-1-1 Stopping 
+ Container docker-guardian-2-1 Stopping 
+ Container docker-initiator-1 Stopped 
+ Container docker-initiator-1 Removing 
+ Container docker-initiator-1 Removed 
+ Container docker-guardian-2-1 Stopped 
+ Container docker-guardian-2-1 Removing 
+ Container docker-guardian-2-1 Removed 
+ Container docker-guardian-3-1 Stopped 
+ Container docker-guardian-3-1 Removing 
+ Container docker-guardian-3-1 Removed 
+ Container docker-guardian-1-1 Stopped 
+ Container docker-guardian-1-1 Removing 
+ Container docker-guardian-1-1 Removed 
+ Network docker_orchestrated-net Removing 
+ Network docker_orchestrated-net Removed 
