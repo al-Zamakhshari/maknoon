@@ -311,6 +311,14 @@
         "required": false
       },
       {
+        "name": "session-key",
+        "shorthand": "",
+        "description": "Pre-derived 64-char hex key (bypasses KDF)",
+        "type": "string",
+        "default": "",
+        "required": false
+      },
+      {
         "name": "stealth",
         "shorthand": "",
         "description": "Enable fingerprint resistance (headerless)",
@@ -440,6 +448,14 @@
         "description": "Suppress progress bars and informational messages",
         "type": "bool",
         "default": "false",
+        "required": false
+      },
+      {
+        "name": "session-key",
+        "shorthand": "",
+        "description": "Pre-derived 64-char hex key (bypasses KDF — use 'maknoon session derive' to generate)",
+        "type": "string",
+        "default": "",
         "required": false
       },
       {
@@ -1309,6 +1325,22 @@
     ],
     "flags": [
       {
+        "name": "dir",
+        "shorthand": "",
+        "description": "Reencrypt all .makn files in a directory (recursive)",
+        "type": "bool",
+        "default": "false",
+        "required": false
+      },
+      {
+        "name": "dry-run",
+        "shorthand": "",
+        "description": "List files that would be reencrypted without doing it",
+        "type": "bool",
+        "default": "false",
+        "required": false
+      },
+      {
         "name": "output",
         "shorthand": "o",
         "description": "Output file path (default: overwrite input in-place)",
@@ -1331,6 +1363,30 @@
         "type": "int",
         "default": "3",
         "required": false
+      },
+      {
+        "name": "workers",
+        "shorthand": "",
+        "description": "Parallel worker count for directory reencrypt",
+        "type": "int",
+        "default": "4",
+        "required": false
+      }
+    ]
+  },
+  {
+    "name": "registry",
+    "path": "maknoon registry",
+    "description": "Identity registry operations (health, status)",
+    "arguments": null,
+    "flags": null,
+    "subcommands": [
+      {
+        "name": "health",
+        "path": "maknoon registry health",
+        "description": "Check connectivity of configured Nostr relays",
+        "arguments": null,
+        "flags": null
       }
     ]
   },
@@ -1464,6 +1520,31 @@
         "type": "string",
         "default": "",
         "required": false
+      }
+    ]
+  },
+  {
+    "name": "session",
+    "path": "maknoon session",
+    "description": "Session key utilities (derive, inspect)",
+    "arguments": null,
+    "flags": null,
+    "subcommands": [
+      {
+        "name": "derive",
+        "path": "maknoon session derive",
+        "description": "Derive a session key from a passphrase and print it as hex",
+        "arguments": null,
+        "flags": [
+          {
+            "name": "passphrase",
+            "shorthand": "s",
+            "description": "Passphrase to derive from",
+            "type": "string",
+            "default": "",
+            "required": false
+          }
+        ]
       }
     ]
   },
