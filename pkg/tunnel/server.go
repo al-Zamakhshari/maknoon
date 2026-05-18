@@ -28,6 +28,13 @@ func (s *TunnelServer) Start() error {
 	return s.Serve(ctx, s.Listener)
 }
 
+// Stop shuts down the server by closing its listener.
+func (s *TunnelServer) Stop() {
+	if s.Listener != nil {
+		s.Listener.Close()
+	}
+}
+
 // Serve begins accepting sessions from a polymorphic MuxListener.
 func (s *TunnelServer) Serve(ctx context.Context, ln MuxListener) error {
 	defer ln.Close()

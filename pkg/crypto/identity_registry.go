@@ -8,6 +8,11 @@ import (
 	"time"
 )
 
+// MultiaddrsProvider can return the node's current P2P multiaddresses.
+type MultiaddrsProvider interface {
+	Multiaddrs(ctx context.Context, identityName string) []string
+}
+
 // IdentityPublishOptions settings for publishing an identity.
 type IdentityPublishOptions struct {
 	Name       string   // Local identity name
@@ -52,12 +57,7 @@ func (m *IdentityManager) IdentityPublish(ctx context.Context, handle string, op
 
 	// 2b. Attempt to capture active P2P Multiaddrs if none provided
 	if len(record.Multiaddrs) == 0 && m.P2P != nil {
-		if sess, err := m.P2P.ChatStart(nil, name, ""); err == nil {
-			// Wait a bit for libp2p to detect addresses
-			time.Sleep(2 * time.Second)
-			record.Multiaddrs = sess.Multiaddrs()
-			sess.Close()
-		}
+		record.Multiaddrs = m.P2P.Multiaddrs(ctx, name)
 	}
 
 	if err := record.Sign(id.SIGPriv); err != nil {

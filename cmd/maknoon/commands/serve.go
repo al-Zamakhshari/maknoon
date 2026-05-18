@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"context"
 	"crypto/tls"
 	"encoding/base64"
 	"encoding/hex"
@@ -199,6 +200,26 @@ func runAPIServer() error {
 		ReadHeaderTimeout: 10 * time.Second,
 		MaxHeaderBytes:    1 << 20, // 1 MB header limit
 	}
+
+	// Graceful shutdown on SIGTERM / SIGINT
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGTERM, syscall.SIGINT)
+	go func() {
+		<-sigCh
+		shutCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		if GlobalContext.Engine != nil {
+			type shutdowner interface {
+				Shutdown(ctx context.Context) error
+			}
+			if s, ok := GlobalContext.Engine.(shutdowner); ok {
+				_ = s.Shutdown(shutCtx)
+			} else {
+				_ = GlobalContext.Engine.Close()
+			}
+		}
+		_ = httpServer.Shutdown(shutCtx)
+	}()
 
 	fmt.Printf("🚀 Starting Maknoon PQC API Server on %s\n", addr)
 	fmt.Println("🔒 Transport encryption active (PQ-TLS 1.3)")

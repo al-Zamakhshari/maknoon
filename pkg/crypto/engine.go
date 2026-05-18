@@ -129,7 +129,7 @@ func NewEngine(policy SecurityPolicy, idMgr *IdentityManager, conf *Config, vaul
 	e.Crypto = &CryptoService{engine: e}
 	e.Workspace = &WorkspaceService{engine: e}
 
-	e.Identity.Mgr.P2P = e
+	e.Identity.Mgr.P2P = &networkMultiaddrsAdapter{network: e.Network}
 	return e, nil
 }
 
@@ -180,6 +180,23 @@ func (e *Engine) Close() error {
 		return e.Contacts.Close()
 	}
 	return nil
+}
+
+// Shutdown performs a graceful shutdown of all engine subsystems:
+// network (tunnel + gateway), audit log flush, and contacts DB.
+func (e *Engine) Shutdown(ctx context.Context) error {
+	// 1. Close network (tunnel + gateway)
+	if e.Network != nil {
+		if err := e.Network.Shutdown(ctx); err != nil {
+			e.Logger.Warn("network shutdown error", "err", err)
+		}
+	}
+	// 2. Flush audit log if present
+	if al, ok := e.Logger.Handler().(interface{ Flush() error }); ok {
+		_ = al.Flush()
+	}
+	// 3. Close contacts DB
+	return e.Close()
 }
 
 func SafeClear(b []byte) {
