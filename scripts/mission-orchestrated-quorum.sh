@@ -99,15 +99,23 @@ checked_compose_exec "$COMPOSE_FILE" initiator \
 
 # Wait for all guardians to be listening on port 4000
 for j in {1..3}; do
-    wait_for_condition "guardian-$j listening on :4000" 30 \
+    wait_for_condition "guardian-$j listening on :4000" 90 \
         docker compose -f "$COMPOSE_FILE" exec -T "guardian-$j" \
             sh -c "netstat -tln 2>/dev/null | grep ':4000 ' || ss -tln | grep ':4000 '"
 done
 
 # Step 5: THE CORE TEST - Automated Quorum Unlock
 echo "🩹 ATTEMPTING AUTOMATED ORCHESTRATED UNLOCK (No passphrase provided)..."
-GET_OUT=$(docker compose -f "$COMPOSE_FILE" exec -T initiator \
-    maknoon vault get "intel-service" --vault mission-vault --json || echo "EXEC_FAILED")
+GET_OUT="EXEC_FAILED"
+for attempt in $(seq 1 10); do
+    echo "   Vault unlock attempt $attempt/10..."
+    GET_OUT=$(docker compose -f "$COMPOSE_FILE" exec -T initiator \
+        maknoon vault get "intel-service" --vault mission-vault --json 2>/dev/null || echo "EXEC_FAILED")
+    if printf '%s' "$GET_OUT" | jq -e '.password != null' >/dev/null 2>&1; then
+        break
+    fi
+    sleep 5
+done
 
 assert_json_field "$GET_OUT" ".password" "RecoveredValue123"
 

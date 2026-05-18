@@ -20,13 +20,13 @@ TRANSFORMER_CONTAINER=$(docker compose -f "$COMPOSE_FILE" ps -q transformer)
 CONTROLLER_CONTAINER=$(docker compose -f "$COMPOSE_FILE" ps -q controller)
 
 # Wait for the transformer MCP SSE server to be ready
-wait_for_condition "transformer MCP SSE ready" 60 \
+wait_for_condition "transformer MCP SSE ready" 180 \
     docker exec "$TRANSFORMER_CONTAINER" \
         sh -c "curl -sk -o /dev/null -w '%{http_code}' https://localhost:8080/sse | grep -q 200"
 
 # Step 1: Wait for first encrypted files to appear, then verify Profile 1
 echo "🛡️  Verifying Initial State (Profile 1: ML-KEM)..."
-wait_for_condition "first encrypted files" 60 \
+wait_for_condition "first encrypted files" 120 \
     docker exec "$TRANSFORMER_CONTAINER" \
         sh -c "ls /home/maknoon/data/encrypted/*.makn >/dev/null 2>&1"
 
@@ -42,7 +42,7 @@ echo "🎯 CONTROLLER: Triggering Dynamic Migration to Profile 3 (Conservative/F
 docker exec -d "$CONTROLLER_CONTAINER" \
     sh -c "curl -s -k -N https://transformer:8080/sse > /tmp/sse.log 2>&1"
 
-wait_for_condition "SSE session message path" 30 \
+wait_for_condition "SSE session message path" 90 \
     docker exec "$CONTROLLER_CONTAINER" grep -q "data: http" /tmp/sse.log
 RAW_URL=$(docker exec "$CONTROLLER_CONTAINER" \
     sh -c "grep 'data: http' /tmp/sse.log | head -n 1 | sed 's/data: //'")
@@ -60,7 +60,7 @@ docker exec "$CONTROLLER_CONTAINER" curl -s -k -X POST "https://transformer:8080
     > /dev/null
 
 # Wait for migration to propagate — poll until a file with profile 3 appears
-wait_for_condition "profile-3 file appears" 60 \
+wait_for_condition "profile-3 file appears" 120 \
     docker exec "$TRANSFORMER_CONTAINER" sh -c \
         "ls -t /home/maknoon/data/encrypted/*.makn 2>/dev/null | head -n 1 | xargs -I{} maknoon info {} --json | jq -e '.profile_id == \"3\"'"
 

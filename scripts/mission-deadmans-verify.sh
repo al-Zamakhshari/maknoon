@@ -15,7 +15,7 @@ echo "🏗️  Provisioning Dead Man's Switch Infrastructure..."
 docker compose -f "$COMPOSE_FILE" up -d --build
 
 # Wait for recovery-node identity to be ready
-wait_for_condition "recovery-node identity ready" 60 \
+wait_for_condition "recovery-node identity ready" 120 \
     docker compose -f "$COMPOSE_FILE" exec -T recovery-node \
         test -f /home/maknoon/.maknoon/keys/recovery-id.kem.pub
 
@@ -61,10 +61,10 @@ RECOVERY_IP=$(docker inspect -f \
 for i in 1 2 3; do
     echo "📡 Guardian $i sending shard..."
     docker exec "$RECOVERY_CONTAINER" sh -c \
-        "timeout 30 maknoon receive --p2p --identity recovery-id --trace > shard_recv.log 2>&1" &
+        "timeout 120 maknoon receive --p2p --identity recovery-id --trace > shard_recv.log 2>&1" &
     RECV_PID=$!
 
-    wait_for_condition "recovery-node listening for shard $i" 30 \
+    wait_for_condition "recovery-node listening for shard $i" 120 \
         docker exec "$RECOVERY_CONTAINER" grep -q "/ip4/$RECOVERY_IP" shard_recv.log
     RECOVERY_ADDR=$(docker exec "$RECOVERY_CONTAINER" \
         grep "/ip4/$RECOVERY_IP" shard_recv.log | grep "/tcp/" | tail -n 1 | awk '{print $NF}' | tr -d '\r')

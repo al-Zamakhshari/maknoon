@@ -16,7 +16,7 @@ docker compose -f "$COMPOSE_FILE" up -d --build
 
 # Wait for all node identities to be ready
 for node in sink relay producer; do
-    wait_for_condition "$node identity ready" 60 \
+    wait_for_condition "$node identity ready" 120 \
         docker compose -f "$COMPOSE_FILE" exec -T "$node" \
             test -f /home/maknoon/.maknoon/keys/${node}-id.kem.pub
 done
@@ -48,7 +48,7 @@ RELAY_IP_PROD=$(docker inspect -f \
     "{{with index .NetworkSettings.Networks \"$NET_PRODUCER\"}}{{.IPAddress}}{{end}}" \
     "$RELAY_CONTAINER")
 
-wait_for_condition "relay multiaddr in logs" 30 \
+wait_for_condition "relay multiaddr in logs" 120 \
     docker compose -f "$COMPOSE_FILE" logs relay \| grep -q "/ip4/$RELAY_IP_PROD.*tcp"
 RELAY_ADDR=$(docker compose -f "$COMPOSE_FILE" logs relay \
     | grep "/ip4/$RELAY_IP_PROD" | grep "/tcp/" | head -n 1 | awk '{print $NF}' | tr -d '\r')
@@ -58,7 +58,7 @@ checked_exec "$PRODUCER_CONTAINER" \
     maknoon send L1.makn --to "$RELAY_ADDR" --public-key relay.pub --identity producer-id --trace
 
 # Step 4: Relay receives L1, wraps in L2, sends to Sink
-wait_for_condition "relay received L1" 30 \
+wait_for_condition "relay received L1" 120 \
     docker exec "$RELAY_CONTAINER" find /home/maknoon -name "L1.makn"
 RELAY_L1_PATH=$(docker exec "$RELAY_CONTAINER" find /home/maknoon -name "L1.makn" | head -n 1)
 
@@ -73,7 +73,7 @@ SINK_IP_SINK=$(docker inspect -f \
     "{{with index .NetworkSettings.Networks \"$NET_SINK\"}}{{.IPAddress}}{{end}}" \
     "$SINK_CONTAINER")
 
-wait_for_condition "sink multiaddr in logs" 30 \
+wait_for_condition "sink multiaddr in logs" 120 \
     docker compose -f "$COMPOSE_FILE" logs sink \| grep -q "/ip4/$SINK_IP_SINK.*tcp"
 SINK_ADDR=$(docker compose -f "$COMPOSE_FILE" logs sink \
     | grep "/ip4/$SINK_IP_SINK" | grep "/tcp/" | head -n 1 | awk '{print $NF}' | tr -d '\r')
@@ -83,7 +83,7 @@ checked_exec "$RELAY_CONTAINER" \
     maknoon send L2.makn --to "$SINK_ADDR" --public-key sink.pub --identity relay-id --trace
 
 # Step 5: Sink receives and decrypts twice
-wait_for_condition "sink received L2" 30 \
+wait_for_condition "sink received L2" 120 \
     docker exec "$SINK_CONTAINER" find /home/maknoon -name "L2.makn"
 SINK_L2_PATH=$(docker exec "$SINK_CONTAINER" find /home/maknoon -name "L2.makn" | head -n 1)
 

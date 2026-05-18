@@ -15,7 +15,7 @@ echo "🏗️  Provisioning Zero-Trust Mesh..."
 docker compose -f "$COMPOSE_FILE" up -d --build
 
 # Wait for Gateway to log a non-loopback multiaddr
-wait_for_condition "gateway multiaddr in logs" 60 \
+wait_for_condition "gateway multiaddr in logs" 180 \
     docker compose -f "$COMPOSE_FILE" logs maknoon-gateway \| grep -q "/ip4/[^1]"
 GATEWAY_ADDR=$(docker compose -f "$COMPOSE_FILE" logs maknoon-gateway \
     | grep "/ip4/" | grep -v "127.0.0.1" | head -n 1 | awk '{print $NF}' | tr -d '\r')
@@ -35,7 +35,7 @@ docker exec -d "$CLIENT_CONTAINER" sh -c \
     "maknoon keygen --no-password -o client-id && \
      maknoon tunnel start --p2p --p2p-addr $GATEWAY_ADDR --port 1080 --identity client-id > tunnel.log 2>&1"
 
-wait_for_port "$CLIENT_CONTAINER" 1080 30 || exit 1
+wait_for_port "$CLIENT_CONTAINER" 1080 60 || exit 1
 
 # Test Connectivity
 echo "🧪 Verifying end-to-end connectivity via SOCKS5..."

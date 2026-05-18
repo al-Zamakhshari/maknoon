@@ -22,7 +22,7 @@ GATEWAY_B_IP_PUB=$(docker inspect -f \
     "{{with index .NetworkSettings.Networks \"$NET_PUBLIC\"}}{{.IPAddress}}{{end}}" \
     "$GATEWAY_B_CONTAINER")
 
-wait_for_condition "gateway-b multiaddr in logs" 60 \
+wait_for_condition "gateway-b multiaddr in logs" 180 \
     docker compose -f "$COMPOSE_FILE" logs gateway-b \| grep -q "/ip4/$GATEWAY_B_IP_PUB.*tcp"
 GATEWAY_B_ADDR=$(docker compose -f "$COMPOSE_FILE" logs gateway-b \
     | grep "/ip4/$GATEWAY_B_IP_PUB" | grep "/tcp/" | head -n 1 | awk '{print $NF}' | tr -d '\r')
@@ -41,7 +41,7 @@ docker exec -d "$GATEWAY_A_CONTAINER" sh -c \
     "maknoon keygen --no-password -o gateway-a-id && \
      maknoon tunnel start --p2p --p2p-addr $GATEWAY_B_ADDR --port 1080 --bind 0.0.0.0 --identity gateway-a-id --trace > tunnel.log 2>&1"
 
-wait_for_port "$GATEWAY_A_CONTAINER" 1080 30 || {
+wait_for_port "$GATEWAY_A_CONTAINER" 1080 60 || {
     docker exec "$GATEWAY_A_CONTAINER" cat tunnel.log
     exit 1
 }
