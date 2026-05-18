@@ -225,10 +225,9 @@ jobs:
           go-version-file: 'go.mod'
           cache: true
 
-      - name: Install cosign
-        uses: sigstore/cosign-installer@v3
-        with:
-          cosign-release: 'v2.4.0'
+      # cosign signing step placeholder — add back once COSIGN_KEY secret is configured.
+      # goreleaser-action@v7 installs its own cosign for self-verification; installing
+      # cosign v2.4.0 here conflicts with its bundle format.
 
       - name: Get Next Version
         id: next_version
