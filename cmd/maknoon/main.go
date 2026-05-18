@@ -88,6 +88,7 @@ Post-Quantum Cryptography (PQC).`,
 	addCommand(commands.InfoCmd(), "core")
 	addCommand(commands.FragmentCmd(), "core")
 	addCommand(commands.ReassembleCmd(), "core")
+	addCommand(commands.ReencryptCmd(), "core")
 
 	addCommand(commands.KeygenCmd(), "identity")
 	addCommand(commands.IdentityCmd(), "identity")

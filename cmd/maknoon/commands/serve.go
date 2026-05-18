@@ -147,6 +147,8 @@ func runAPIServer() error {
 
 	// Register REST API routes
 	mux.HandleFunc("/v1/health", handleHealth)
+	mux.HandleFunc("/v1/live", handleLive)
+	mux.HandleFunc("/v1/ready", handleReady)
 	mux.HandleFunc("/v1/vault/get", handleVaultGet)
 	mux.HandleFunc("/v1/vault/set", handleVaultSet)
 	mux.HandleFunc("/v1/vault/init-institutional", handleVaultInitInstitutional)
@@ -167,6 +169,7 @@ func runAPIServer() error {
 	// Crypto operations
 	mux.HandleFunc("/v1/crypto/encrypt", handleEncrypt)
 	mux.HandleFunc("/v1/crypto/decrypt", handleDecrypt)
+	mux.HandleFunc("/v1/crypto/reencrypt", handleReencrypt)
 
 	// Identity management
 	mux.HandleFunc("/v1/identity/keygen", handleIdentityKeygen)
@@ -200,6 +203,32 @@ func runAPIServer() error {
 func handleHealth(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"status": "pass", "version": "4.1.0"})
+}
+
+// handleLive is a Kubernetes liveness probe — always returns 200 as long as the process is running.
+func handleLive(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"status": "alive"})
+}
+
+// handleReady is a Kubernetes readiness probe — returns 200 only when the engine is fully
+// initialized and the vault directory is accessible.
+func handleReady(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	if GlobalContext.Engine == nil {
+		http.Error(w, `{"status":"not ready","reason":"engine not initialized"}`, http.StatusServiceUnavailable)
+		return
+	}
+	conf := GlobalContext.Engine.GetConfig()
+	vaultsDir := conf.Paths.VaultsDir
+	if vaultsDir == "" {
+		vaultsDir = crypto.GetUserHomeDir() + "/.maknoon/vaults"
+	}
+	if _, err := os.Stat(vaultsDir); err != nil {
+		http.Error(w, `{"status":"not ready","reason":"vault directory not accessible"}`, http.StatusServiceUnavailable)
+		return
+	}
+	json.NewEncoder(w).Encode(map[string]string{"status": "ready"})
 }
 
 // REST Handlers (Implementation of engine primitives)
@@ -866,6 +895,71 @@ func handleDecrypt(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	renderAPISuccess(w, map[string]any{"status": "success", "output": outputPath})
+}
+
+func handleReencrypt(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var req struct {
+		Input      string `json:"input"`
+		Output     string `json:"output"`
+		Passphrase string `json:"passphrase"`
+		Profile    int    `json:"profile"`
+	}
+	if err := json.NewDecoder(io.LimitReader(r.Body, maxRequestBodyBytes)).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	inputPath, err := sanitizeRESTPath(req.Input, os.TempDir())
+	if err != nil {
+		http.Error(w, fmt.Sprintf("invalid input: %v", err), http.StatusBadRequest)
+		return
+	}
+	outputPath := inputPath
+	if req.Output != "" {
+		outputPath, err = sanitizeRESTPath(req.Output, os.TempDir())
+		if err != nil {
+			http.Error(w, fmt.Sprintf("invalid output: %v", err), http.StatusBadRequest)
+			return
+		}
+	}
+	if req.Profile == 0 {
+		req.Profile = 3
+	}
+
+	in, err := os.Open(inputPath)
+	if err != nil {
+		renderAPIError(w, err)
+		return
+	}
+	defer in.Close()
+
+	passphrase := []byte(req.Passphrase)
+	targetProfile := byte(req.Profile)
+	result, err := reencryptReader(in, passphrase, targetProfile)
+	if err != nil {
+		renderAPIError(w, err)
+		return
+	}
+
+	outFile, err := os.Create(outputPath)
+	if err != nil {
+		renderAPIError(w, err)
+		return
+	}
+	defer outFile.Close()
+	if _, err := io.Copy(outFile, result); err != nil {
+		renderAPIError(w, err)
+		return
+	}
+
+	renderAPISuccess(w, map[string]any{
+		"status":     "success",
+		"output":     outputPath,
+		"to_profile": targetProfile,
+	})
 }
 
 func handleIdentityKeygen(w http.ResponseWriter, r *http.Request) {

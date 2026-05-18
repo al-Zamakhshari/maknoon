@@ -1,0 +1,2009 @@
+[
+  {
+    "name": "audit",
+    "path": "maknoon audit",
+    "description": "Manage and export cryptographic audit logs",
+    "arguments": null,
+    "flags": null,
+    "subcommands": [
+      {
+        "name": "enroll",
+        "path": "maknoon audit enroll",
+        "description": "Bind audit log integrity to a physical security key (FIDO2)",
+        "arguments": null,
+        "flags": null
+      },
+      {
+        "name": "export",
+        "path": "maknoon audit export",
+        "description": "Export a forensic summary of all cryptographic operations",
+        "arguments": null,
+        "flags": null
+      }
+    ]
+  },
+  {
+    "name": "call",
+    "path": "maknoon call",
+    "description": "Invoke an MCP tool on a running Maknoon agent via a standard SSE client",
+    "arguments": [
+      {
+        "name": "tool_name",
+        "required": false
+      }
+    ],
+    "flags": [
+      {
+        "name": "addr",
+        "shorthand": "",
+        "description": "Address of the running Maknoon agent",
+        "type": "string",
+        "default": "localhost:8080",
+        "required": false
+      },
+      {
+        "name": "args",
+        "shorthand": "",
+        "description": "JSON string of tool arguments",
+        "type": "string",
+        "default": "",
+        "required": false
+      },
+      {
+        "name": "insecure",
+        "shorthand": "",
+        "description": "Skip TLS certificate verification (ONLY FOR TESTING)",
+        "type": "bool",
+        "default": "false",
+        "required": false
+      }
+    ]
+  },
+  {
+    "name": "chat",
+    "path": "maknoon chat",
+    "description": "Start a secure, identity-bound Ghost Chat session (Agent Mode)",
+    "arguments": [
+      {
+        "name": "id|@petname",
+        "required": false
+      }
+    ],
+    "flags": [
+      {
+        "name": "identity",
+        "shorthand": "",
+        "description": "Local identity name to use for the session",
+        "type": "string",
+        "default": "",
+        "required": false
+      }
+    ]
+  },
+  {
+    "name": "config",
+    "path": "maknoon config",
+    "description": "Manage Maknoon configuration (security, performance, agent limits)",
+    "arguments": null,
+    "flags": null,
+    "subcommands": [
+      {
+        "name": "export",
+        "path": "maknoon config export",
+        "description": "Export the active configuration to a JSON file (secrets redacted)",
+        "arguments": null,
+        "flags": [
+          {
+            "name": "output",
+            "shorthand": "o",
+            "description": "Output file path (default: stdout)",
+            "type": "string",
+            "default": "",
+            "required": false
+          }
+        ]
+      },
+      {
+        "name": "import",
+        "path": "maknoon config import",
+        "description": "Import configuration from a JSON file",
+        "arguments": [
+          {
+            "name": "file",
+            "required": false
+          }
+        ],
+        "flags": null
+      },
+      {
+        "name": "init",
+        "path": "maknoon config init",
+        "description": "Initialize default configuration file",
+        "arguments": null,
+        "flags": null
+      },
+      {
+        "name": "list",
+        "path": "maknoon config list",
+        "description": "List all active configuration settings",
+        "arguments": null,
+        "flags": null
+      },
+      {
+        "name": "set",
+        "path": "maknoon config set",
+        "description": "Update a configuration setting",
+        "arguments": [
+          {
+            "name": "key",
+            "required": false
+          },
+          {
+            "name": "value",
+            "required": false
+          }
+        ],
+        "flags": null
+      },
+      {
+        "name": "validate",
+        "path": "maknoon config validate",
+        "description": "Validate the active configuration for correctness",
+        "arguments": null,
+        "flags": null
+      }
+    ]
+  },
+  {
+    "name": "contact",
+    "path": "maknoon contact",
+    "description": "Manage local trusted contacts (Petnames)",
+    "arguments": null,
+    "flags": null,
+    "subcommands": [
+      {
+        "name": "add",
+        "path": "maknoon contact add",
+        "description": "Add a new trusted contact",
+        "arguments": [
+          {
+            "name": "petname",
+            "required": false
+          }
+        ],
+        "flags": [
+          {
+            "name": "kem-pub",
+            "shorthand": "",
+            "description": "Path to the contact's ML-KEM public key",
+            "type": "string",
+            "default": "",
+            "required": false
+          },
+          {
+            "name": "note",
+            "shorthand": "n",
+            "description": "Optional note for this contact",
+            "type": "string",
+            "default": "",
+            "required": false
+          },
+          {
+            "name": "peer-id",
+            "shorthand": "",
+            "description": "Explicit libp2p Peer ID (optional)",
+            "type": "string",
+            "default": "",
+            "required": false
+          },
+          {
+            "name": "sig-pub",
+            "shorthand": "",
+            "description": "Path to the contact's ML-DSA public key",
+            "type": "string",
+            "default": "",
+            "required": false
+          }
+        ]
+      },
+      {
+        "name": "list",
+        "path": "maknoon contact list",
+        "description": "List all trusted contacts",
+        "arguments": null,
+        "flags": null
+      },
+      {
+        "name": "remove",
+        "path": "maknoon contact remove",
+        "description": "Remove a contact from your address book",
+        "arguments": [
+          {
+            "name": "petname",
+            "required": false
+          }
+        ],
+        "flags": null
+      }
+    ]
+  },
+  {
+    "name": "decrypt",
+    "path": "maknoon decrypt",
+    "description": "Decrypt a .makn file or directory",
+    "arguments": [
+      {
+        "name": "file",
+        "required": false
+      }
+    ],
+    "flags": [
+      {
+        "name": "concurrency",
+        "shorthand": "j",
+        "description": "Number of parallel workers (0 for auto)",
+        "type": "int",
+        "default": "0",
+        "required": false
+      },
+      {
+        "name": "fido2",
+        "shorthand": "f",
+        "description": "Use FIDO2 security key for authentication",
+        "type": "bool",
+        "default": "false",
+        "required": false
+      },
+      {
+        "name": "output",
+        "shorthand": "o",
+        "description": "Output file path or directory (use - for stdout)",
+        "type": "string",
+        "default": "",
+        "required": false
+      },
+      {
+        "name": "overwrite",
+        "shorthand": "",
+        "description": "Overwrite existing files",
+        "type": "bool",
+        "default": "false",
+        "required": false
+      },
+      {
+        "name": "passphrase",
+        "shorthand": "s",
+        "description": "Passphrase for decryption",
+        "type": "string",
+        "default": "",
+        "required": false
+      },
+      {
+        "name": "private-key",
+        "shorthand": "k",
+        "description": "Path to your private key",
+        "type": "string",
+        "default": "",
+        "required": false
+      },
+      {
+        "name": "profile-file",
+        "shorthand": "",
+        "description": "Path to a custom profile JSON file",
+        "type": "string",
+        "default": "",
+        "required": false
+      },
+      {
+        "name": "quiet",
+        "shorthand": "q",
+        "description": "Suppress progress bars and informational messages",
+        "type": "bool",
+        "default": "false",
+        "required": false
+      },
+      {
+        "name": "sender-key",
+        "shorthand": "",
+        "description": "Path to the sender's public key (required for signed files)",
+        "type": "string",
+        "default": "",
+        "required": false
+      },
+      {
+        "name": "stealth",
+        "shorthand": "",
+        "description": "Enable fingerprint resistance (headerless)",
+        "type": "bool",
+        "default": "false",
+        "required": false
+      },
+      {
+        "name": "trust-on-first-use",
+        "shorthand": "",
+        "description": "Automatically add unknown signers to contacts",
+        "type": "bool",
+        "default": "false",
+        "required": false
+      },
+      {
+        "name": "verbose",
+        "shorthand": "",
+        "description": "Enable internal pipeline tracing (slog)",
+        "type": "bool",
+        "default": "false",
+        "required": false
+      }
+    ]
+  },
+  {
+    "name": "diag",
+    "path": "maknoon diag",
+    "description": "Output a machine-readable engine state manifest",
+    "arguments": null,
+    "flags": null
+  },
+  {
+    "name": "encrypt",
+    "path": "maknoon encrypt",
+    "description": "Encrypt a file or directory symmetrically or asymmetrically",
+    "arguments": [
+      {
+        "name": "file/dir",
+        "required": false
+      }
+    ],
+    "flags": [
+      {
+        "name": "argon-mem",
+        "shorthand": "",
+        "description": "Argon2id memory in KB",
+        "type": "uint32",
+        "default": "0",
+        "required": false
+      },
+      {
+        "name": "argon-threads",
+        "shorthand": "",
+        "description": "Argon2id parallel threads",
+        "type": "uint8",
+        "default": "0",
+        "required": false
+      },
+      {
+        "name": "argon-time",
+        "shorthand": "",
+        "description": "Argon2id iterations",
+        "type": "uint32",
+        "default": "0",
+        "required": false
+      },
+      {
+        "name": "compress",
+        "shorthand": "c",
+        "description": "Enable Zstd compression",
+        "type": "bool",
+        "default": "false",
+        "required": false
+      },
+      {
+        "name": "concurrency",
+        "shorthand": "j",
+        "description": "Number of parallel workers (0 for auto)",
+        "type": "int",
+        "default": "0",
+        "required": false
+      },
+      {
+        "name": "output",
+        "shorthand": "o",
+        "description": "Output file path (use - for stdout)",
+        "type": "string",
+        "default": "",
+        "required": false
+      },
+      {
+        "name": "passphrase",
+        "shorthand": "s",
+        "description": "Passphrase for symmetric encryption",
+        "type": "string",
+        "default": "",
+        "required": false
+      },
+      {
+        "name": "profile",
+        "shorthand": "",
+        "description": "Cryptographic profile (nist, conservative)",
+        "type": "string",
+        "default": "",
+        "required": false
+      },
+      {
+        "name": "profile-file",
+        "shorthand": "",
+        "description": "Path to a custom profile JSON file",
+        "type": "string",
+        "default": "",
+        "required": false
+      },
+      {
+        "name": "public-key",
+        "shorthand": "p",
+        "description": "Path to recipient public key(s)",
+        "type": "stringSlice",
+        "default": "[]",
+        "required": false
+      },
+      {
+        "name": "quiet",
+        "shorthand": "q",
+        "description": "Suppress progress bars and informational messages",
+        "type": "bool",
+        "default": "false",
+        "required": false
+      },
+      {
+        "name": "shred",
+        "shorthand": "",
+        "description": "Securely delete original file after successful encryption",
+        "type": "bool",
+        "default": "false",
+        "required": false
+      },
+      {
+        "name": "sign-key",
+        "shorthand": "",
+        "description": "Path to your private ML-DSA key for integrated signing",
+        "type": "string",
+        "default": "",
+        "required": false
+      },
+      {
+        "name": "stealth",
+        "shorthand": "",
+        "description": "Enable fingerprint resistance (headerless)",
+        "type": "bool",
+        "default": "false",
+        "required": false
+      },
+      {
+        "name": "trust-on-first-use",
+        "shorthand": "",
+        "description": "Automatically add unknown signers to contacts",
+        "type": "bool",
+        "default": "false",
+        "required": false
+      },
+      {
+        "name": "verbose",
+        "shorthand": "",
+        "description": "Enable internal pipeline tracing (slog)",
+        "type": "bool",
+        "default": "false",
+        "required": false
+      }
+    ]
+  },
+  {
+    "name": "fragment",
+    "path": "maknoon fragment",
+    "description": "Split a file into redundant erasure-coded fragments (RAID-for-Privacy)",
+    "arguments": [
+      {
+        "name": "file",
+        "required": false
+      }
+    ],
+    "flags": [
+      {
+        "name": "data",
+        "shorthand": "d",
+        "description": "Number of data shards",
+        "type": "int",
+        "default": "5",
+        "required": false
+      },
+      {
+        "name": "output",
+        "shorthand": "o",
+        "description": "Output directory for fragments",
+        "type": "string",
+        "default": "",
+        "required": false
+      },
+      {
+        "name": "parity",
+        "shorthand": "r",
+        "description": "Number of parity shards (redundancy)",
+        "type": "int",
+        "default": "3",
+        "required": false
+      },
+      {
+        "name": "passphrase",
+        "shorthand": "s",
+        "description": "Passphrase for the signing key",
+        "type": "string",
+        "default": "",
+        "required": false
+      },
+      {
+        "name": "sign-with",
+        "shorthand": "",
+        "description": "ML-DSA private key to sign each fragment block",
+        "type": "string",
+        "default": "",
+        "required": false
+      }
+    ]
+  },
+  {
+    "name": "gen",
+    "path": "maknoon gen",
+    "description": "Generate a high-entropy secure password or passphrase",
+    "arguments": null,
+    "flags": null,
+    "subcommands": [
+      {
+        "name": "passphrase",
+        "path": "maknoon gen passphrase",
+        "description": "Generate a mnemonic passphrase",
+        "arguments": null,
+        "flags": [
+          {
+            "name": "separator",
+            "shorthand": "p",
+            "description": "Separator between words",
+            "type": "string",
+            "default": "-",
+            "required": false
+          },
+          {
+            "name": "words",
+            "shorthand": "w",
+            "description": "Number of words for the passphrase",
+            "type": "int",
+            "default": "4",
+            "required": false
+          }
+        ]
+      },
+      {
+        "name": "password",
+        "path": "maknoon gen password",
+        "description": "Generate a random character password",
+        "arguments": null,
+        "flags": [
+          {
+            "name": "length",
+            "shorthand": "l",
+            "description": "Length of the generated password",
+            "type": "int",
+            "default": "32",
+            "required": false
+          },
+          {
+            "name": "no-symbols",
+            "shorthand": "n",
+            "description": "Exclude symbols from the password",
+            "type": "bool",
+            "default": "false",
+            "required": false
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "identity",
+    "path": "maknoon identity",
+    "description": "Manage Post-Quantum cryptographic identities",
+    "arguments": null,
+    "flags": null,
+    "subcommands": [
+      {
+        "name": "active",
+        "path": "maknoon identity active",
+        "description": "List absolute paths of available public keys for encryption",
+        "arguments": null,
+        "flags": null
+      },
+      {
+        "name": "combine",
+        "path": "maknoon identity combine",
+        "description": "Recover an identity from mnemonic shards",
+        "arguments": [
+          {
+            "name": "mnemonics...",
+            "required": false
+          }
+        ],
+        "flags": [
+          {
+            "name": "no-password",
+            "shorthand": "n",
+            "description": "Do not protect the restored identity with a passphrase",
+            "type": "bool",
+            "default": "false",
+            "required": false
+          },
+          {
+            "name": "output",
+            "shorthand": "o",
+            "description": "Name for the recovered identity",
+            "type": "string",
+            "default": "recovered",
+            "required": false
+          },
+          {
+            "name": "passphrase",
+            "shorthand": "s",
+            "description": "Passphrase to protect the restored identity",
+            "type": "string",
+            "default": "",
+            "required": false
+          }
+        ]
+      },
+      {
+        "name": "delete",
+        "path": "maknoon identity delete",
+        "description": "Permanently delete a local identity (securely shreds private keys)",
+        "arguments": [
+          {
+            "name": "name",
+            "required": false
+          }
+        ],
+        "flags": [
+          {
+            "name": "force",
+            "shorthand": "",
+            "description": "Confirm permanent deletion without interactive prompt",
+            "type": "bool",
+            "default": "false",
+            "required": false
+          }
+        ]
+      },
+      {
+        "name": "info",
+        "path": "maknoon identity info",
+        "description": "Show details about a local identity",
+        "arguments": [
+          {
+            "name": "name",
+            "required": false
+          }
+        ],
+        "flags": null
+      },
+      {
+        "name": "publish",
+        "path": "maknoon identity publish",
+        "description": "Anchor your active identity to a global registry (libp2p DHT / Nostr / DNS)",
+        "arguments": [
+          {
+            "name": "handle",
+            "required": false
+          }
+        ],
+        "flags": [
+          {
+            "name": "bep44",
+            "shorthand": "",
+            "description": "Publish peer-discovery mini-record to BitTorrent BEP-44 DHT (requires peer online for resolution)",
+            "type": "bool",
+            "default": "false",
+            "required": false
+          },
+          {
+            "name": "desec",
+            "shorthand": "",
+            "description": "Automatically publish to deSEC.io (requires --desec-token or DESEC_TOKEN)",
+            "type": "bool",
+            "default": "false",
+            "required": false
+          },
+          {
+            "name": "desec-token",
+            "shorthand": "",
+            "description": "deSEC.io API token",
+            "type": "string",
+            "default": "",
+            "required": false
+          },
+          {
+            "name": "dns",
+            "shorthand": "",
+            "description": "Generate a DNS TXT record for decentralized discovery",
+            "type": "bool",
+            "default": "false",
+            "required": false
+          },
+          {
+            "name": "local",
+            "shorthand": "",
+            "description": "Pin identity to local contacts only",
+            "type": "bool",
+            "default": "false",
+            "required": false
+          },
+          {
+            "name": "multiaddr",
+            "shorthand": "",
+            "description": "Explicit Multiaddrs to broadcast (overrides auto-capture)",
+            "type": "stringSlice",
+            "default": "[]",
+            "required": false
+          },
+          {
+            "name": "nostr",
+            "shorthand": "",
+            "description": "Publish to Nostr relays (secp256k1 key derived ephemerally)",
+            "type": "bool",
+            "default": "false",
+            "required": false
+          }
+        ]
+      },
+      {
+        "name": "reconstruct",
+        "path": "maknoon identity reconstruct",
+        "description": "Reconstruct a generic secret from Shamir shards",
+        "arguments": [
+          {
+            "name": "shards...",
+            "required": false
+          }
+        ],
+        "flags": null
+      },
+      {
+        "name": "rename",
+        "path": "maknoon identity rename",
+        "description": "Rename a local identity",
+        "arguments": [
+          {
+            "name": "old",
+            "required": false
+          },
+          {
+            "name": "new",
+            "required": false
+          }
+        ],
+        "flags": null
+      },
+      {
+        "name": "shard",
+        "path": "maknoon identity shard",
+        "description": "Split a generic secret into Shamir shards (SSS)",
+        "arguments": [
+          {
+            "name": "secret",
+            "required": false
+          }
+        ],
+        "flags": [
+          {
+            "name": "shares",
+            "shorthand": "n",
+            "description": "Total shares",
+            "type": "int",
+            "default": "3",
+            "required": false
+          },
+          {
+            "name": "threshold",
+            "shorthand": "m",
+            "description": "Threshold for recovery",
+            "type": "int",
+            "default": "2",
+            "required": false
+          }
+        ]
+      },
+      {
+        "name": "split",
+        "path": "maknoon identity split",
+        "description": "Shard an identity using Shamir's Secret Sharing",
+        "arguments": [
+          {
+            "name": "name",
+            "required": false
+          }
+        ],
+        "flags": [
+          {
+            "name": "shares",
+            "shorthand": "n",
+            "description": "Total shares to generate",
+            "type": "int",
+            "default": "3",
+            "required": false
+          },
+          {
+            "name": "threshold",
+            "shorthand": "m",
+            "description": "Minimum shares required",
+            "type": "int",
+            "default": "2",
+            "required": false
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "info",
+    "path": "maknoon info",
+    "description": "Inspect a Maknoon encrypted file's metadata",
+    "arguments": [
+      {
+        "name": "file",
+        "required": false
+      }
+    ],
+    "flags": [
+      {
+        "name": "stealth",
+        "shorthand": "",
+        "description": "Enable fingerprint resistance (headerless)",
+        "type": "bool",
+        "default": "false",
+        "required": false
+      }
+    ]
+  },
+  {
+    "name": "keygen",
+    "path": "maknoon keygen",
+    "description": "Generate a Post-Quantum (KEM \u0026 SIG) identity",
+    "arguments": null,
+    "flags": [
+      {
+        "name": "argon-mem",
+        "shorthand": "",
+        "description": "Argon2id memory in KB",
+        "type": "uint32",
+        "default": "65536",
+        "required": false
+      },
+      {
+        "name": "argon-threads",
+        "shorthand": "",
+        "description": "Argon2id parallel threads",
+        "type": "uint8",
+        "default": "4",
+        "required": false
+      },
+      {
+        "name": "argon-time",
+        "shorthand": "",
+        "description": "Argon2id iterations",
+        "type": "uint32",
+        "default": "3",
+        "required": false
+      },
+      {
+        "name": "fido2",
+        "shorthand": "f",
+        "description": "Use FIDO2 security key to protect the private keys",
+        "type": "bool",
+        "default": "false",
+        "required": false
+      },
+      {
+        "name": "no-password",
+        "shorthand": "n",
+        "description": "Generate unprotected keys (automation mode)",
+        "type": "bool",
+        "default": "false",
+        "required": false
+      },
+      {
+        "name": "output",
+        "shorthand": "o",
+        "description": "Base name or path for the keys",
+        "type": "string",
+        "default": "",
+        "required": false
+      },
+      {
+        "name": "passphrase",
+        "shorthand": "s",
+        "description": "Passphrase to protect the keys",
+        "type": "string",
+        "default": "",
+        "required": false
+      },
+      {
+        "name": "profile",
+        "shorthand": "",
+        "description": "Cryptographic profile (nist, conservative)",
+        "type": "string",
+        "default": "nist",
+        "required": false
+      },
+      {
+        "name": "profile-file",
+        "shorthand": "",
+        "description": "Path to a custom profile JSON file to protect the keys",
+        "type": "string",
+        "default": "",
+        "required": false
+      },
+      {
+        "name": "quiet",
+        "shorthand": "q",
+        "description": "Suppress informational output",
+        "type": "bool",
+        "default": "false",
+        "required": false
+      },
+      {
+        "name": "rotate",
+        "shorthand": "",
+        "description": "Rotate: securely shred old identity [name] and replace with newly generated keys",
+        "type": "string",
+        "default": "",
+        "required": false
+      }
+    ]
+  },
+  {
+    "name": "man",
+    "path": "maknoon man",
+    "description": "Verify or generate the man page",
+    "arguments": null,
+    "flags": [
+      {
+        "name": "generate",
+        "shorthand": "",
+        "description": "Generate the man page to stdout",
+        "type": "bool",
+        "default": "false",
+        "required": false
+      },
+      {
+        "name": "verify",
+        "shorthand": "",
+        "description": "Verify that the man page is up to date with the CLI structure",
+        "type": "bool",
+        "default": "false",
+        "required": false
+      }
+    ]
+  },
+  {
+    "name": "mcp",
+    "path": "maknoon mcp",
+    "description": "Start the Model Context Protocol (MCP) server for AI Agent integration",
+    "arguments": null,
+    "flags": [
+      {
+        "name": "address",
+        "shorthand": "",
+        "description": "Address to listen on for SSE mode",
+        "type": "string",
+        "default": ":8080",
+        "required": false
+      },
+      {
+        "name": "otel-endpoint",
+        "shorthand": "",
+        "description": "Optional OTLP/gRPC endpoint for OpenTelemetry tracing (e.g. localhost:4317)",
+        "type": "string",
+        "default": "",
+        "required": false
+      },
+      {
+        "name": "tls-cert",
+        "shorthand": "",
+        "description": "Path to TLS certificate for SSE HTTPS",
+        "type": "string",
+        "default": "",
+        "required": false
+      },
+      {
+        "name": "tls-key",
+        "shorthand": "",
+        "description": "Path to TLS private key for SSE HTTPS",
+        "type": "string",
+        "default": "",
+        "required": false
+      },
+      {
+        "name": "transport",
+        "shorthand": "",
+        "description": "Transport mode (stdio, sse)",
+        "type": "string",
+        "default": "stdio",
+        "required": false
+      }
+    ]
+  },
+  {
+    "name": "mcp",
+    "path": "maknoon mcp",
+    "description": "Start the Model Context Protocol (MCP) server for AI Agent integration",
+    "arguments": null,
+    "flags": [
+      {
+        "name": "address",
+        "shorthand": "",
+        "description": "Address to listen on for SSE mode",
+        "type": "string",
+        "default": ":8080",
+        "required": false
+      },
+      {
+        "name": "otel-endpoint",
+        "shorthand": "",
+        "description": "Optional OTLP/gRPC endpoint for OpenTelemetry tracing (e.g. localhost:4317)",
+        "type": "string",
+        "default": "",
+        "required": false
+      },
+      {
+        "name": "tls-cert",
+        "shorthand": "",
+        "description": "Path to TLS certificate for SSE HTTPS",
+        "type": "string",
+        "default": "",
+        "required": false
+      },
+      {
+        "name": "tls-key",
+        "shorthand": "",
+        "description": "Path to TLS private key for SSE HTTPS",
+        "type": "string",
+        "default": "",
+        "required": false
+      },
+      {
+        "name": "transport",
+        "shorthand": "",
+        "description": "Transport mode (stdio, sse)",
+        "type": "string",
+        "default": "stdio",
+        "required": false
+      }
+    ]
+  },
+  {
+    "name": "net",
+    "path": "maknoon net",
+    "description": "Manage network and P2P connectivity",
+    "arguments": null,
+    "flags": null,
+    "subcommands": [
+      {
+        "name": "status",
+        "path": "maknoon net status",
+        "description": "Display P2P network health and tunnel status",
+        "arguments": null,
+        "flags": null
+      }
+    ]
+  },
+  {
+    "name": "policy",
+    "path": "maknoon policy",
+    "description": "Manage and sign governance policy files",
+    "arguments": null,
+    "flags": null,
+    "subcommands": [
+      {
+        "name": "sign",
+        "path": "maknoon policy sign",
+        "description": "Sign a governance policy file using an ML-DSA private key",
+        "arguments": [
+          {
+            "name": "policy.json",
+            "required": false
+          }
+        ],
+        "flags": [
+          {
+            "name": "passphrase",
+            "shorthand": "s",
+            "description": "Passphrase to unlock the private key",
+            "type": "string",
+            "default": "",
+            "required": false
+          },
+          {
+            "name": "private-key",
+            "shorthand": "k",
+            "description": "Path to the ML-DSA private key for governance signing",
+            "type": "string",
+            "default": "",
+            "required": false
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "profiles",
+    "path": "maknoon profiles",
+    "description": "Manage and list cryptographic profiles",
+    "arguments": null,
+    "flags": null,
+    "subcommands": [
+      {
+        "name": "gen",
+        "path": "maknoon profiles gen",
+        "description": "Generate a new random, validated profile and save it to config",
+        "arguments": [
+          {
+            "name": "name",
+            "required": true
+          }
+        ],
+        "flags": null
+      },
+      {
+        "name": "list",
+        "path": "maknoon profiles list",
+        "description": "List all available profiles with detailed parameters",
+        "arguments": null,
+        "flags": [
+          {
+            "name": "verbose",
+            "shorthand": "v",
+            "description": "Show detailed parameters",
+            "type": "bool",
+            "default": "false",
+            "required": false
+          }
+        ]
+      },
+      {
+        "name": "rm",
+        "path": "maknoon profiles rm",
+        "description": "Remove a custom profile from config",
+        "arguments": [
+          {
+            "name": "name",
+            "required": true
+          }
+        ],
+        "flags": null
+      }
+    ]
+  },
+  {
+    "name": "reassemble",
+    "path": "maknoon reassemble",
+    "description": "Reconstruct a file from fragments",
+    "arguments": [
+      {
+        "name": "dir",
+        "required": false
+      }
+    ],
+    "flags": [
+      {
+        "name": "authorized-key",
+        "shorthand": "",
+        "description": "ML-DSA public key to verify fragment integrity",
+        "type": "string",
+        "default": "",
+        "required": false
+      },
+      {
+        "name": "output",
+        "shorthand": "o",
+        "description": "Path to save the reconstructed file",
+        "type": "string",
+        "default": "",
+        "required": false
+      }
+    ]
+  },
+  {
+    "name": "receive",
+    "path": "maknoon receive",
+    "description": "Receive a file, directory, or text via secure P2P",
+    "arguments": [
+      {
+        "name": "peer_id/file_name",
+        "required": false
+      }
+    ],
+    "flags": [
+      {
+        "name": "fragment",
+        "shorthand": "",
+        "description": "Enable automated fragment retrieval",
+        "type": "bool",
+        "default": "false",
+        "required": false
+      },
+      {
+        "name": "from",
+        "shorthand": "",
+        "description": "Comma-separated list of sources (@petname or PeerID)",
+        "type": "string",
+        "default": "",
+        "required": false
+      },
+      {
+        "name": "identity",
+        "shorthand": "",
+        "description": "Identity name to use (default: active identity)",
+        "type": "string",
+        "default": "",
+        "required": false
+      },
+      {
+        "name": "output",
+        "shorthand": "o",
+        "description": "Output path or directory",
+        "type": "string",
+        "default": "",
+        "required": false
+      },
+      {
+        "name": "p2p",
+        "shorthand": "",
+        "description": "Use identity-first P2P (libp2p)",
+        "type": "bool",
+        "default": "true",
+        "required": false
+      },
+      {
+        "name": "passphrase",
+        "shorthand": "s",
+        "description": "Session passphrase",
+        "type": "string",
+        "default": "",
+        "required": false
+      },
+      {
+        "name": "private-key",
+        "shorthand": "k",
+        "description": "Path to your private key",
+        "type": "string",
+        "default": "",
+        "required": false
+      },
+      {
+        "name": "quiet",
+        "shorthand": "q",
+        "description": "Suppress informational messages",
+        "type": "bool",
+        "default": "false",
+        "required": false
+      },
+      {
+        "name": "sender-sig-pub",
+        "shorthand": "",
+        "description": "Sender's ML-DSA public key (hex) for fragment integrity verification",
+        "type": "string",
+        "default": "",
+        "required": false
+      },
+      {
+        "name": "stealth",
+        "shorthand": "",
+        "description": "Decrypt as stealth mode",
+        "type": "bool",
+        "default": "false",
+        "required": false
+      }
+    ]
+  },
+  {
+    "name": "reencrypt",
+    "path": "maknoon reencrypt",
+    "description": "Re-encrypt a file with a different cryptographic profile",
+    "arguments": [
+      {
+        "name": "file",
+        "required": true
+      }
+    ],
+    "flags": [
+      {
+        "name": "output",
+        "shorthand": "o",
+        "description": "Output file path (default: overwrite input in-place)",
+        "type": "string",
+        "default": "",
+        "required": false
+      },
+      {
+        "name": "passphrase",
+        "shorthand": "",
+        "description": "Passphrase (omit for interactive prompt)",
+        "type": "string",
+        "default": "",
+        "required": false
+      },
+      {
+        "name": "profile",
+        "shorthand": "p",
+        "description": "Target profile ID (1=NIST, 3=Conservative/FrodoKEM)",
+        "type": "int",
+        "default": "3",
+        "required": false
+      }
+    ]
+  },
+  {
+    "name": "send",
+    "path": "maknoon send",
+    "description": "Send a file, directory, or text via secure P2P",
+    "arguments": [
+      {
+        "name": "file/dir",
+        "required": false
+      }
+    ],
+    "flags": [
+      {
+        "name": "fragment",
+        "shorthand": "",
+        "description": "Enable fragmented dispersal (e.g. 5/3 for 5 data + 3 parity shards)",
+        "type": "string",
+        "default": "",
+        "required": false
+      },
+      {
+        "name": "identity",
+        "shorthand": "",
+        "description": "Identity name to use (default: active identity)",
+        "type": "string",
+        "default": "",
+        "required": false
+      },
+      {
+        "name": "p2p",
+        "shorthand": "",
+        "description": "Use identity-first P2P (libp2p)",
+        "type": "bool",
+        "default": "true",
+        "required": false
+      },
+      {
+        "name": "passphrase",
+        "shorthand": "s",
+        "description": "Session passphrase (optional)",
+        "type": "string",
+        "default": "",
+        "required": false
+      },
+      {
+        "name": "public-key",
+        "shorthand": "p",
+        "description": "Encrypt for a specific recipient's identity",
+        "type": "string",
+        "default": "",
+        "required": false
+      },
+      {
+        "name": "quiet",
+        "shorthand": "q",
+        "description": "Suppress informational messages",
+        "type": "bool",
+        "default": "false",
+        "required": false
+      },
+      {
+        "name": "stealth",
+        "shorthand": "",
+        "description": "Use stealth mode (headerless)",
+        "type": "bool",
+        "default": "false",
+        "required": false
+      },
+      {
+        "name": "text",
+        "shorthand": "",
+        "description": "Send raw text instead of a file",
+        "type": "string",
+        "default": "",
+        "required": false
+      },
+      {
+        "name": "to",
+        "shorthand": "",
+        "description": "Recipient @petname or PeerID",
+        "type": "string",
+        "default": "",
+        "required": false
+      },
+      {
+        "name": "trust-on-first-use",
+        "shorthand": "",
+        "description": "Automatically add unknown signers to contacts",
+        "type": "bool",
+        "default": "false",
+        "required": false
+      }
+    ]
+  },
+  {
+    "name": "serve",
+    "path": "maknoon serve",
+    "description": "Start the Maknoon PQC API Server",
+    "arguments": null,
+    "flags": [
+      {
+        "name": "address",
+        "shorthand": "",
+        "description": "Address to listen on",
+        "type": "string",
+        "default": ":8081",
+        "required": false
+      },
+      {
+        "name": "backend",
+        "shorthand": "",
+        "description": "Vault storage backend (bbolt or badger)",
+        "type": "string",
+        "default": "bbolt",
+        "required": false
+      },
+      {
+        "name": "tls-cert",
+        "shorthand": "",
+        "description": "Path to TLS certificate (REQUIRED)",
+        "type": "string",
+        "default": "",
+        "required": false
+      },
+      {
+        "name": "tls-key",
+        "shorthand": "",
+        "description": "Path to TLS private key (REQUIRED)",
+        "type": "string",
+        "default": "",
+        "required": false
+      }
+    ]
+  },
+  {
+    "name": "sign",
+    "path": "maknoon sign",
+    "description": "Sign a file using an ML-DSA private key",
+    "arguments": [
+      {
+        "name": "file",
+        "required": false
+      }
+    ],
+    "flags": [
+      {
+        "name": "passphrase",
+        "shorthand": "s",
+        "description": "Passphrase to unlock the private key",
+        "type": "string",
+        "default": "",
+        "required": false
+      },
+      {
+        "name": "private-key",
+        "shorthand": "k",
+        "description": "Path to the ML-DSA private key",
+        "type": "string",
+        "default": "",
+        "required": false
+      }
+    ],
+    "subcommands": [
+      {
+        "name": "aggregate",
+        "path": "maknoon sign aggregate",
+        "description": "Aggregate multiple signatures into a threshold signature",
+        "arguments": [
+          {
+            "name": "sig1",
+            "required": false
+          },
+          {
+            "name": "sig2",
+            "required": false
+          },
+          {
+            "name": "...",
+            "required": true
+          }
+        ],
+        "flags": [
+          {
+            "name": "output",
+            "shorthand": "o",
+            "description": "Output path for the aggregate signature",
+            "type": "string",
+            "default": "multi.sig",
+            "required": false
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "tunnel",
+    "path": "maknoon tunnel",
+    "description": "Post-Quantum L4 Tunnel Gateway",
+    "arguments": null,
+    "flags": null,
+    "subcommands": [
+      {
+        "name": "listen",
+        "path": "maknoon tunnel listen",
+        "description": "Start a Post-Quantum Tunnel Server (Gateway Receiver)",
+        "arguments": null,
+        "flags": [
+          {
+            "name": "address",
+            "shorthand": "",
+            "description": "Address to listen on",
+            "type": "string",
+            "default": ":4433",
+            "required": false
+          },
+          {
+            "name": "identity",
+            "shorthand": "",
+            "description": "Identity to use for P2P",
+            "type": "string",
+            "default": "",
+            "required": false
+          },
+          {
+            "name": "p2p",
+            "shorthand": "",
+            "description": "Use libp2p for P2P/NAT traversal",
+            "type": "bool",
+            "default": "false",
+            "required": false
+          },
+          {
+            "name": "tls-cert",
+            "shorthand": "",
+            "description": "Path to TLS certificate",
+            "type": "string",
+            "default": "",
+            "required": false
+          },
+          {
+            "name": "tls-key",
+            "shorthand": "",
+            "description": "Path to TLS private key",
+            "type": "string",
+            "default": "",
+            "required": false
+          },
+          {
+            "name": "yamux",
+            "shorthand": "",
+            "description": "Use TCP+Yamux mode",
+            "type": "bool",
+            "default": "false",
+            "required": false
+          }
+        ]
+      },
+      {
+        "name": "start",
+        "path": "maknoon tunnel start",
+        "description": "Start a local Post-Quantum SOCKS5 Gateway",
+        "arguments": null,
+        "flags": [
+          {
+            "name": "bind",
+            "shorthand": "",
+            "description": "Interface to bind the SOCKS5 proxy to",
+            "type": "string",
+            "default": "127.0.0.1",
+            "required": false
+          },
+          {
+            "name": "data-lanes",
+            "shorthand": "",
+            "description": "Number of data lanes for Reed-Solomon resilience",
+            "type": "int",
+            "default": "0",
+            "required": false
+          },
+          {
+            "name": "identity",
+            "shorthand": "",
+            "description": "Identity to use for P2P",
+            "type": "string",
+            "default": "",
+            "required": false
+          },
+          {
+            "name": "insecure",
+            "shorthand": "",
+            "description": "Disable TLS certificate verification (DANGEROUS)",
+            "type": "bool",
+            "default": "false",
+            "required": false
+          },
+          {
+            "name": "p2p",
+            "shorthand": "",
+            "description": "Use libp2p for P2P mode",
+            "type": "bool",
+            "default": "false",
+            "required": false
+          },
+          {
+            "name": "p2p-addr",
+            "shorthand": "",
+            "description": "Remote P2P Multiaddr",
+            "type": "string",
+            "default": "",
+            "required": false
+          },
+          {
+            "name": "parity-lanes",
+            "shorthand": "",
+            "description": "Number of parity lanes for Reed-Solomon resilience",
+            "type": "int",
+            "default": "0",
+            "required": false
+          },
+          {
+            "name": "port",
+            "shorthand": "p",
+            "description": "Local SOCKS5 proxy port",
+            "type": "int",
+            "default": "1080",
+            "required": false
+          },
+          {
+            "name": "remote",
+            "shorthand": "",
+            "description": "Remote PQC Tunnel endpoint (host:port)",
+            "type": "string",
+            "default": "",
+            "required": false
+          },
+          {
+            "name": "yamux",
+            "shorthand": "",
+            "description": "Use TCP+Yamux mode",
+            "type": "bool",
+            "default": "false",
+            "required": false
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "vault",
+    "path": "maknoon vault",
+    "description": "Manage secure password vaults",
+    "arguments": null,
+    "flags": null,
+    "subcommands": [
+      {
+        "name": "check-shards",
+        "path": "maknoon vault check-shards",
+        "description": "Validate the integrity of vault shards",
+        "arguments": [
+          {
+            "name": "shards...",
+            "required": false
+          }
+        ],
+        "flags": null
+      },
+      {
+        "name": "delete",
+        "path": "maknoon vault delete",
+        "description": "Permanently delete a vault file",
+        "arguments": [
+          {
+            "name": "name",
+            "required": false
+          }
+        ],
+        "flags": null
+      },
+      {
+        "name": "get",
+        "path": "maknoon vault get",
+        "description": "Retrieve a secret from the vault",
+        "arguments": [
+          {
+            "name": "service",
+            "required": false
+          }
+        ],
+        "flags": null
+      },
+      {
+        "name": "get-blob",
+        "path": "maknoon vault get-blob",
+        "description": "Retrieve encrypted blob data from the vault",
+        "arguments": [
+          {
+            "name": "key",
+            "required": false
+          }
+        ],
+        "flags": null
+      },
+      {
+        "name": "init-institutional",
+        "path": "maknoon vault init-institutional",
+        "description": "Initialize a new institutional vault governed by a quorum of peers",
+        "arguments": [
+          {
+            "name": "name",
+            "required": false
+          }
+        ],
+        "flags": [
+          {
+            "name": "peers",
+            "shorthand": "p",
+            "description": "Authorized PeerIDs or aliases for quorum (comma-separated)",
+            "type": "stringSlice",
+            "default": "[]",
+            "required": false
+          },
+          {
+            "name": "shares",
+            "shorthand": "n",
+            "description": "Total number of shards to generate",
+            "type": "int",
+            "default": "3",
+            "required": false
+          },
+          {
+            "name": "threshold",
+            "shorthand": "m",
+            "description": "Minimum number of approvals required to unlock",
+            "type": "int",
+            "default": "2",
+            "required": false
+          }
+        ]
+      },
+      {
+        "name": "list",
+        "path": "maknoon vault list",
+        "description": "List all services stored in the vault",
+        "arguments": null,
+        "flags": null
+      },
+      {
+        "name": "recover",
+        "path": "maknoon vault recover",
+        "description": "Recover vault contents using shards and optionally save to a new vault",
+        "arguments": [
+          {
+            "name": "shards...",
+            "required": false
+          }
+        ],
+        "flags": [
+          {
+            "name": "output",
+            "shorthand": "o",
+            "description": "Path to save recovered entries as a new vault",
+            "type": "string",
+            "default": "",
+            "required": false
+          }
+        ]
+      },
+      {
+        "name": "rename",
+        "path": "maknoon vault rename",
+        "description": "Rename a local vault file",
+        "arguments": [
+          {
+            "name": "old_name",
+            "required": false
+          },
+          {
+            "name": "new_name",
+            "required": false
+          }
+        ],
+        "flags": null
+      },
+      {
+        "name": "rotate",
+        "path": "maknoon vault rotate",
+        "description": "Change the master passphrase of a vault",
+        "arguments": null,
+        "flags": [
+          {
+            "name": "new-passphrase",
+            "shorthand": "n",
+            "description": "New master passphrase (unsafe for CLI history)",
+            "type": "string",
+            "default": "",
+            "required": false
+          }
+        ]
+      },
+      {
+        "name": "set",
+        "path": "maknoon vault set",
+        "description": "Store a secret in the vault",
+        "arguments": [
+          {
+            "name": "service",
+            "required": false
+          }
+        ],
+        "flags": [
+          {
+            "name": "note",
+            "shorthand": "n",
+            "description": "Optional note",
+            "type": "string",
+            "default": "",
+            "required": false
+          },
+          {
+            "name": "overwrite",
+            "shorthand": "",
+            "description": "Overwrite existing service without prompting",
+            "type": "bool",
+            "default": "false",
+            "required": false
+          },
+          {
+            "name": "user",
+            "shorthand": "u",
+            "description": "Username",
+            "type": "string",
+            "default": "",
+            "required": false
+          }
+        ]
+      },
+      {
+        "name": "set-blob",
+        "path": "maknoon vault set-blob",
+        "description": "Store arbitrary encrypted data (blob) in the vault",
+        "arguments": [
+          {
+            "name": "key",
+            "required": false
+          }
+        ],
+        "flags": [
+          {
+            "name": "data",
+            "shorthand": "d",
+            "description": "Blob data to store (direct string)",
+            "type": "string",
+            "default": "",
+            "required": false
+          },
+          {
+            "name": "overwrite",
+            "shorthand": "",
+            "description": "Overwrite existing key",
+            "type": "bool",
+            "default": "false",
+            "required": false
+          },
+          {
+            "name": "user",
+            "shorthand": "u",
+            "description": "Owner/User for the blob",
+            "type": "string",
+            "default": "agent",
+            "required": false
+          }
+        ]
+      },
+      {
+        "name": "split",
+        "path": "maknoon vault split",
+        "description": "Shard the vault's master access key",
+        "arguments": null,
+        "flags": [
+          {
+            "name": "shares",
+            "shorthand": "n",
+            "description": "Total number of shares to generate",
+            "type": "int",
+            "default": "3",
+            "required": false
+          },
+          {
+            "name": "threshold",
+            "shorthand": "m",
+            "description": "Minimum shares required for reconstruction",
+            "type": "int",
+            "default": "2",
+            "required": false
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "verify",
+    "path": "maknoon verify",
+    "description": "Verify a file's integrity and signature",
+    "arguments": [
+      {
+        "name": "file",
+        "required": false
+      }
+    ],
+    "flags": [
+      {
+        "name": "public-key",
+        "shorthand": "p",
+        "description": "Path(s) to the ML-DSA public key(s), comma-separated for threshold",
+        "type": "string",
+        "default": "",
+        "required": false
+      },
+      {
+        "name": "signature",
+        "shorthand": "g",
+        "description": "Path to the signature file (defaults to file.sig)",
+        "type": "string",
+        "default": "",
+        "required": false
+      },
+      {
+        "name": "threshold",
+        "shorthand": "t",
+        "description": "Minimum number of valid signatures required",
+        "type": "int",
+        "default": "1",
+        "required": false
+      }
+    ]
+  },
+  {
+    "name": "workspace",
+    "path": "maknoon workspace",
+    "description": "Manage ephemeral, forensically-audited sandbox environments",
+    "arguments": null,
+    "flags": null,
+    "subcommands": [
+      {
+        "name": "create",
+        "path": "maknoon workspace create",
+        "description": "Create a new ephemeral workspace",
+        "arguments": null,
+        "flags": [
+          {
+            "name": "name",
+            "shorthand": "n",
+            "description": "Logical name for the workspace",
+            "type": "string",
+            "default": "session",
+            "required": false
+          }
+        ]
+      },
+      {
+        "name": "shred",
+        "path": "maknoon workspace shred",
+        "description": "Securely delete and zeroize an ephemeral workspace",
+        "arguments": [
+          {
+            "name": "path",
+            "required": false
+          }
+        ],
+        "flags": null
+      }
+    ]
+  }
+]

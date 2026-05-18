@@ -47,6 +47,9 @@ type AuditConfig struct {
 	LogFile         string `json:"log_file" mapstructure:"log_file"`
 	SigningKey      string `json:"signing_key,omitempty" mapstructure:"signing_key"`
 	HardwareSigning bool   `json:"hardware_signing" mapstructure:"hardware_signing"`
+	MaxSizeKB       int    `json:"max_size_kb" mapstructure:"max_size_kb"`     // rotate when log exceeds this size (0 = disabled)
+	MaxAgeHours     int    `json:"max_age_hours" mapstructure:"max_age_hours"` // rotate after N hours since file creation (0 = disabled)
+	MaxBackups      int    `json:"max_backups" mapstructure:"max_backups"`     // number of rotated files to keep (default 3)
 }
 
 type AgentLimitsConfig struct {

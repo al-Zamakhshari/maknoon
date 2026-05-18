@@ -3,6 +3,7 @@ package commands
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"os"
 	"strings"
@@ -351,4 +352,49 @@ func registerCryptoTools(s *server.MCPServer, engine crypto.MaknoonEngine) {
 			outData, _ := json.Marshal(res)
 			return mcp.NewToolResultText(string(outData)), nil
 		})
+
+	s.AddTool(mcp.NewTool("reencrypt_file",
+		mcp.WithDescription("Re-encrypt a .makn file with a different cryptographic profile"),
+		mcp.WithString("input", mcp.Required(), mcp.Description("Path to the encrypted .makn file")),
+		mcp.WithString("output", mcp.Description("Output path (default: overwrite input)")),
+		mcp.WithString("passphrase", mcp.Required(), mcp.Description("Current file passphrase")),
+		mcp.WithNumber("profile", mcp.Description("Target profile ID (1=NIST, 3=Conservative/FrodoKEM)")),
+	), func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		args := getArgs(request)
+		inputPath, _ := args["input"].(string)
+		outputPath, _ := args["output"].(string)
+		passphrase := []byte(getString(args, "passphrase", ""))
+		targetProfile := byte(getInt(args, "profile", 3))
+
+		if inputPath == "" {
+			return crypto.FormatMCPError(fmt.Errorf("input is required"), "reencrypt_file")
+		}
+		if outputPath == "" {
+			outputPath = inputPath
+		}
+
+		f, err := os.Open(inputPath)
+		if err != nil {
+			return crypto.FormatMCPError(err, "reencrypt_file")
+		}
+		defer f.Close()
+
+		result, err := reencryptReader(f, passphrase, targetProfile)
+		if err != nil {
+			return crypto.FormatMCPError(err, "reencrypt_file")
+		}
+
+		outFile, err := os.Create(outputPath)
+		if err != nil {
+			return crypto.FormatMCPError(err, "reencrypt_file")
+		}
+		defer outFile.Close()
+		if _, err := io.Copy(outFile, result); err != nil {
+			return crypto.FormatMCPError(err, "reencrypt_file")
+		}
+
+		res := map[string]any{"status": "success", "output": outputPath, "to_profile": targetProfile}
+		outData, _ := json.Marshal(res)
+		return mcp.NewToolResultText(string(outData)), nil
+	})
 }

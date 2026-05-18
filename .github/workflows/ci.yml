@@ -69,6 +69,15 @@ jobs:
           cache: true
       - name: Verify Man Page Sync
         run: go run ./cmd/maknoon man --verify
+      - name: Verify MCP Tool Reference is up to date
+        run: |
+          go run ./cmd/maknoon schema > /tmp/tool-reference-current.json
+          if ! diff -q /tmp/tool-reference-current.json docs/integration/TOOL-REFERENCE.json > /dev/null 2>&1; then
+            echo "❌ docs/integration/TOOL-REFERENCE.json is stale — run: go run ./cmd/maknoon schema > docs/integration/TOOL-REFERENCE.json"
+            diff /tmp/tool-reference-current.json docs/integration/TOOL-REFERENCE.json | head -20
+            exit 1
+          fi
+          echo "✅ MCP Tool Reference is up to date"
       - name: Verify Doc Links
         run: |
           # Extract markdown links from docs/ and README.md, verify each target file exists.

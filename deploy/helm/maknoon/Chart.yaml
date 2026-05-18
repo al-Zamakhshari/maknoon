@@ -1,0 +1,17 @@
+apiVersion: v2
+name: maknoon
+description: Post-Quantum Cryptographic Engine — REST API, MCP Server, and P2P tunneling
+type: application
+version: 0.1.0
+appVersion: "4.1.0"
+keywords:
+  - cryptography
+  - post-quantum
+  - pqc
+  - security
+home: https://github.com/al-Zamakhshari/maknoon
+sources:
+  - https://github.com/al-Zamakhshari/maknoon
+maintainers:
+  - name: al-Zamakhshari
+    url: https://github.com/al-Zamakhshari

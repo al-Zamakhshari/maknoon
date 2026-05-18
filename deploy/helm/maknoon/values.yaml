@@ -1,0 +1,56 @@
+replicaCount: 1
+
+image:
+  repository: ghcr.io/al-zamakhshari/maknoon
+  pullPolicy: IfNotPresent
+  tag: ""  # defaults to chart appVersion
+
+service:
+  type: ClusterIP
+  port: 8080
+  nodePort: ""  # only used when type=NodePort
+
+resources:
+  requests:
+    cpu: "100m"
+    memory: "128Mi"
+  limits:
+    cpu: "500m"
+    memory: "512Mi"
+
+# Maknoon REST server flags
+serve:
+  port: 8080
+  # TLS certificate paths (mount via secret)
+  tlsCert: ""
+  tlsKey: ""
+
+# Persistent storage for vault files
+persistence:
+  enabled: true
+  storageClass: ""
+  size: "1Gi"
+  accessMode: ReadWriteOnce
+  mountPath: /home/maknoon/.maknoon
+
+# Environment variables injected into the container
+env: {}
+# Example:
+#   MAKNOON_AUDIT_ENABLED: "true"
+#   MAKNOON_AUDIT_LOG_FILE: /home/maknoon/.maknoon/audit.log
+
+podAnnotations: {}
+podSecurityContext:
+  runAsUser: 1000
+  runAsNonRoot: true
+  fsGroup: 1000
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: false
+  capabilities:
+    drop: ["ALL"]
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

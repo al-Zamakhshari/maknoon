@@ -105,17 +105,25 @@ smoke-full: build
 	[ -z "$$FAILED" ] || { echo "❌ Failed:$$FAILED"; exit 1; }
 	@echo "✅ All smoke scripts passed."
 
+# Build minimal binary without BEP-44 DHT (anacrolix deps excluded)
+build-minimal:
+	@echo "🛠️  Building minimal binary (no BEP-44 DHT)..."
+	CGO_ENABLED=0 go build -tags minimal -ldflags="$(LDFLAGS)" -o maknoon-minimal $(PKG)
+	@ls -lh maknoon-minimal
+
 # Build-tag matrix: verify all conditional compilation paths compile cleanly.
 # Platform tags (linux/!linux) gate the TPM backend.
-# Feature tags (nostr, fido2, minimal) gate optional dependencies when they land.
+# Feature tags (minimal) gate optional dependencies.
 build-matrix:
 	@echo "🔬 Verifying build-tag matrix..."
-	@echo "  [1/3] linux (TPM backend enabled)..."
+	@echo "  [1/4] linux (TPM backend enabled)..."
 	@GOOS=linux CGO_ENABLED=0 go build ./... || (echo "❌ linux build failed"; exit 1)
-	@echo "  [2/3] darwin (!linux stub)..."
+	@echo "  [2/4] darwin (!linux stub)..."
 	@GOOS=darwin CGO_ENABLED=0 go build ./... || (echo "❌ darwin build failed"; exit 1)
-	@echo "  [3/3] windows (!linux stub)..."
+	@echo "  [3/4] windows (!linux stub)..."
 	@GOOS=windows CGO_ENABLED=0 go build ./... || (echo "❌ windows build failed"; exit 1)
+	@echo "  [4/4] linux minimal (no BEP-44 DHT)..."
+	@GOOS=linux CGO_ENABLED=0 go build -tags minimal ./... || (echo "❌ minimal build failed"; exit 1)
 	@echo "✅ All platform build paths verified."
 
 # Cleanup build artifacts

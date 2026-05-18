@@ -342,6 +342,38 @@ func TestMissionAuditLogExport(t *testing.T) {
 	}
 }
 
+// TestMissionReencryptProfile verifies that reencrypt changes the profile ID of a file.
+func TestMissionReencryptProfile(t *testing.T) {
+	tmpDir := setupMissionEnv(t)
+
+	// 1. Encrypt a file with default profile (1)
+	payload := filepath.Join(tmpDir, "mission-reenc.txt")
+	os.WriteFile(payload, []byte("MAKNOON-REENCRYPT-MISSION"), 0644)
+	encrypted := payload + ".makn"
+	runCommand(t, EncryptCmd(), payload, "-o", encrypted, "-s", "reenc-pass")
+
+	// 2. Re-encrypt to profile 3 (non-interactive via passphrase flag)
+	reencCmd := ReencryptCmd()
+	out, err := runMissionCommand(reencCmd, encrypted, "--profile", "3", "--passphrase", "reenc-pass")
+	if err != nil {
+		t.Fatalf("reencrypt failed: %v\noutput: %s", err, out)
+	}
+
+	// 3. Verify the file can still be decrypted with the original passphrase
+	restored := filepath.Join(tmpDir, "restored-reenc.txt")
+	_, decErr := runMissionCommand(DecryptCmd(), encrypted, "-o", restored, "-s", "reenc-pass")
+	if decErr != nil {
+		t.Fatalf("decrypt after reencrypt failed: %v", decErr)
+	}
+	data, err := os.ReadFile(restored)
+	if err != nil {
+		t.Fatalf("restored file not found: %v", err)
+	}
+	if string(data) != "MAKNOON-REENCRYPT-MISSION" {
+		t.Errorf("content mismatch after reencrypt: got %q", data)
+	}
+}
+
 // TestMissionOTELTracingFlag verifies the --otel-endpoint flag is present on mcp command.
 func TestMissionOTELTracingFlag(t *testing.T) {
 	cmd := MCPServerCmd()

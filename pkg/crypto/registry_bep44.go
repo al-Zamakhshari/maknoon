@@ -1,3 +1,5 @@
+//go:build !minimal
+
 package crypto
 
 import (
@@ -13,11 +15,11 @@ import (
 	dht "github.com/anacrolix/dht/v2"
 	"github.com/anacrolix/dht/v2/bep44"
 	"github.com/anacrolix/dht/v2/exts/getput"
-	"github.com/anacrolix/torrent/bencode"
 	"github.com/cloudflare/circl/sign/mldsa/mldsa87"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	ma "github.com/multiformats/go-multiaddr"
+	"github.com/zeebo/bencode"
 
 	"github.com/al-Zamakhshari/maknoon/pkg/tunnel"
 )
@@ -126,7 +128,7 @@ func (r *BEP44Registry) PublishWithSIGKey(ctx context.Context, record *IdentityR
 	}
 
 	mini := bep44MiniRecord{Handle: record.Handle, Multiaddrs: addrs}
-	value, err := bencode.Marshal(mini)
+	value, err := bencode.EncodeBytes(mini)
 	if err != nil {
 		return fmt.Errorf("bep44: failed to bencode mini-record: %w", err)
 	}
@@ -148,7 +150,7 @@ func (r *BEP44Registry) PublishWithSIGKey(ctx context.Context, record *IdentityR
 			seq = existingSeq + 1
 		}
 		put := bep44.Put{
-			V:   bencode.Bytes(value),
+			V:   value, // raw []byte — bep44.Put.V is interface{}
 			Seq: seq,
 		}
 		copy(put.K[:], pubKey[:])
@@ -187,7 +189,8 @@ func (r *BEP44Registry) Resolve(ctx context.Context, handle string) (*IdentityRe
 	}
 
 	var mini bep44MiniRecord
-	if err := bencode.Unmarshal(result.V, &mini); err != nil {
+	rawBytes, _ := bencode.EncodeBytes(result.V) // re-encode interface{} back to []byte
+	if err := bencode.DecodeBytes(rawBytes, &mini); err != nil {
 		return nil, fmt.Errorf("bep44: failed to decode mini-record: %w", err)
 	}
 
