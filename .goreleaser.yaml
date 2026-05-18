@@ -40,20 +40,12 @@ archives:
 checksum:
   name_template: 'checksums.txt'
 
-# Sign the checksum file with cosign (keyless, OIDC-based) when COSIGN_KEY is set.
-# On GitHub Actions this uses the ambient OIDC token — no private key needed.
-signs:
-  - cmd: cosign
-    env:
-      - COSIGN_EXPERIMENTAL=1
-    args:
-      - sign-blob
-      - "--output-signature=${signature}"
-      - "--output-certificate=${certificate}"
-      - "${artifact}"
-    artifacts: checksum
-    ids:
-      - checksum
+# cosign signing placeholder — add back once cosign is configured in CI:
+# signs:
+#   - cmd: cosign
+#     env: [COSIGN_EXPERIMENTAL=1]
+#     args: [sign-blob, --output-signature=${signature}, --output-certificate=${certificate}, ${artifact}]
+#     artifacts: checksum
 
 snapshot:
   version_template: "{{ incpatch .Version }}-next"
