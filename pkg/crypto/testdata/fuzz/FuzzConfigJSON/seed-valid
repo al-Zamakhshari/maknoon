@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("{\"default_identity\":\"default\",\"security\":{\"argon_time\":3,\"argon_memory\":65536,\"argon_threads\":4},\"performance\":{\"concurrency\":0,\"compression_level\":3},\"vault_backend\":\"bbolt\",\"paths\":{\"keys_dir\":\"/tmp/keys\",\"vaults_dir\":\"/tmp/vaults\"}}")

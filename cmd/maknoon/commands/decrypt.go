@@ -19,6 +19,7 @@ func DecryptCmd() *cobra.Command {
 	var keyPath string
 	var senderKeyPath string
 	var passphrase string
+	var sessionKeyHex string
 	var concurrency int
 	var useFido2 bool
 	var quiet bool
@@ -145,6 +146,13 @@ func DecryptCmd() *cobra.Command {
 				TotalSize:       totalSize,
 				EventStream:     events,
 			}
+			if sessionKeyHex != "" {
+				key, err := decodeHexKey(sessionKeyHex)
+				if err != nil {
+					return fmt.Errorf("--session-key: %w", err)
+				}
+				opts.SessionKey = key
+			}
 
 			if cmd.Flags().Changed("concurrency") {
 				opts.Concurrency = crypto.IntPtr(concurrency)
@@ -242,6 +250,7 @@ func DecryptCmd() *cobra.Command {
 	_ = cmd.RegisterFlagCompletionFunc("sender-key", completeIdentities)
 
 	cmd.Flags().StringVarP(&passphrase, "passphrase", "s", "", "Passphrase for decryption")
+	cmd.Flags().StringVar(&sessionKeyHex, "session-key", "", "Pre-derived 64-char hex key (bypasses KDF)")
 	cmd.Flags().IntVarP(&concurrency, "concurrency", "j", 0, "Number of parallel workers (0 for auto)")
 	cmd.Flags().BoolVarP(&useFido2, "fido2", "f", false, "Use FIDO2 security key for authentication")
 	cmd.Flags().BoolVarP(&quiet, "quiet", "q", false, "Suppress progress bars and informational messages")

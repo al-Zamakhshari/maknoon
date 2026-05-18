@@ -26,8 +26,15 @@ type IdentityRecord struct {
 	SIGPubKey  []byte    `json:"sig_pub"`
 	Multiaddrs []string  `json:"multiaddrs,omitempty"`
 	Timestamp  time.Time `json:"timestamp"`
+	ExpiresAt  time.Time `json:"expires_at,omitempty"` // zero = no expiry (backwards-compatible)
 	Signature  []byte    `json:"signature,omitempty"`
 	Revoked    bool      `json:"revoked,omitempty"`
+}
+
+// IsExpired returns true if the record has a non-zero ExpiresAt that is in the past.
+// Records with zero ExpiresAt are treated as never expiring (legacy compatibility).
+func (r *IdentityRecord) IsExpired() bool {
+	return !r.ExpiresAt.IsZero() && time.Now().After(r.ExpiresAt)
 }
 
 // Sign signs the record using the user's ML-DSA private key.
@@ -156,9 +163,14 @@ func NewIdentityRegistry(conf *Config) IdentityRegistry {
 
 func (r *MultiRegistry) Resolve(ctx context.Context, handle string) (*IdentityRecord, error) {
 	for _, reg := range r.Registries {
-		if record, err := reg.Resolve(ctx, handle); err == nil {
-			return record, nil
+		record, err := reg.Resolve(ctx, handle)
+		if err != nil {
+			continue
 		}
+		if record.IsExpired() {
+			continue // record is stale; try next registry for a fresher one
+		}
+		return record, nil
 	}
 	return nil, fmt.Errorf("could not resolve identity for %s", handle)
 }

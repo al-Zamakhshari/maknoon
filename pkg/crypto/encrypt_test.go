@@ -78,3 +78,92 @@ func TestNonceUniqueness(t *testing.T) {
 	}
 	t.Logf("10,000 encryptions produced unique nonces (no birthday collision)")
 }
+
+// TestSessionKeyRoundtrip verifies that a key derived once via DeriveSessionKey
+// can encrypt and decrypt 100 files without running KDF each time.
+func TestSessionKeyRoundtrip(t *testing.T) {
+	password := []byte("session-test-password")
+
+	key, salt, err := DeriveSessionKey(password)
+	if err != nil {
+		t.Fatalf("DeriveSessionKey: %v", err)
+	}
+	defer SafeClear(key)
+
+	const numFiles = 100
+	for i := 0; i < numFiles; i++ {
+		plaintext := make([]byte, 1024)
+		if _, err := rand.Read(plaintext); err != nil {
+			t.Fatalf("rand: %v", err)
+		}
+
+		var cipherBuf bytes.Buffer
+		if err := EncryptStreamWithKey(bytes.NewReader(plaintext), &cipherBuf, key, salt, 0, 0, 0); err != nil {
+			t.Fatalf("file %d: EncryptStreamWithKey: %v", i, err)
+		}
+
+		var plainBuf bytes.Buffer
+		if _, _, err := DecryptStreamWithKey(bytes.NewReader(cipherBuf.Bytes()), &plainBuf, key, 0, false); err != nil {
+			t.Fatalf("file %d: DecryptStreamWithKey: %v", i, err)
+		}
+
+		if !bytes.Equal(plainBuf.Bytes(), plaintext) {
+			t.Fatalf("file %d: roundtrip mismatch", i)
+		}
+	}
+	t.Logf("Session key roundtrip: %d files OK", numFiles)
+}
+
+// TestRederiveSessionKey verifies that RederiveSessionKey reproduces the same key.
+func TestRederiveSessionKey(t *testing.T) {
+	password := []byte("rederive-test")
+	key1, salt, err := DeriveSessionKey(password)
+	if err != nil {
+		t.Fatalf("DeriveSessionKey: %v", err)
+	}
+	defer SafeClear(key1)
+
+	key2, err := RederiveSessionKey(password, salt)
+	if err != nil {
+		t.Fatalf("RederiveSessionKey: %v", err)
+	}
+	defer SafeClear(key2)
+
+	if !bytes.Equal(key1, key2) {
+		t.Error("rederived key does not match original")
+	}
+}
+
+// BenchmarkSessionKeySmallFiles measures encrypt throughput for 1KB files
+// with and without session key, exposing the KDF cliff.
+func BenchmarkSessionKeySmallFiles(b *testing.B) {
+	password := []byte("bench-password")
+	key, salt, err := DeriveSessionKey(password)
+	if err != nil {
+		b.Fatalf("DeriveSessionKey: %v", err)
+	}
+	defer SafeClear(key)
+
+	plaintext := make([]byte, 1024)
+	if _, err := rand.Read(plaintext); err != nil {
+		b.Fatalf("rand: %v", err)
+	}
+
+	b.Run("WithKDF", func(b *testing.B) {
+		b.SetBytes(int64(len(plaintext)))
+		for range b.N {
+			if err := EncryptStream(io.NopCloser(bytes.NewReader(plaintext)), io.Discard, password, 0, 0, 0); err != nil {
+				b.Fatal(err)
+			}
+		}
+	})
+
+	b.Run("SessionKey", func(b *testing.B) {
+		b.SetBytes(int64(len(plaintext)))
+		for range b.N {
+			if err := EncryptStreamWithKey(bytes.NewReader(plaintext), io.Discard, key, salt, 0, 0, 0); err != nil {
+				b.Fatal(err)
+			}
+		}
+	})
+}

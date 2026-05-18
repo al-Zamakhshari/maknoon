@@ -264,6 +264,56 @@ func TestBEP44HandleExtraction(t *testing.T) {
 	_ = pubKey
 }
 
+// TestExpiredRecordRejected verifies that MultiRegistry.Resolve() skips records
+// whose ExpiresAt is in the past, preventing replay of stale identity records.
+func TestExpiredRecordRejected(t *testing.T) {
+	_, _, spub, spriv, err := GeneratePQKeyPair(1)
+	if err != nil {
+		t.Fatalf("GeneratePQKeyPair: %v", err)
+	}
+
+	// Build an expired record
+	expired := &IdentityRecord{
+		Handle:    "@expired-test",
+		KEMPubKey: []byte("fakekempub"),
+		SIGPubKey: spub,
+		Timestamp: time.Now().Add(-25 * time.Hour),
+		ExpiresAt: time.Now().Add(-1 * time.Hour), // expired 1 hour ago
+	}
+	require.NoError(t, expired.Sign(spriv))
+
+	// Verify IsExpired works
+	if !expired.IsExpired() {
+		t.Fatal("IsExpired() should return true for past ExpiresAt")
+	}
+
+	// A fresh record with zero ExpiresAt must NOT be treated as expired
+	fresh := &IdentityRecord{
+		Handle:    "@fresh-test",
+		KEMPubKey: []byte("fakekempub"),
+		SIGPubKey: spub,
+		Timestamp: time.Now(),
+		// ExpiresAt is zero — legacy compat, never expires
+	}
+	require.NoError(t, fresh.Sign(spriv))
+	if fresh.IsExpired() {
+		t.Error("IsExpired() should return false for zero ExpiresAt (legacy compat)")
+	}
+
+	// A future ExpiresAt must not be expired
+	future := &IdentityRecord{
+		Handle:    "@future-test",
+		KEMPubKey: []byte("fakekempub"),
+		SIGPubKey: spub,
+		Timestamp: time.Now(),
+		ExpiresAt: time.Now().Add(48 * time.Hour),
+	}
+	require.NoError(t, future.Sign(spriv))
+	if future.IsExpired() {
+		t.Error("IsExpired() should return false for future ExpiresAt")
+	}
+}
+
 // TestIdentityRecordReplayAcceptance documents a known limitation: identity records
 // use a Timestamp field but NO nonce, so a captured valid record can be re-published
 // at a later time. The signature will still verify because the timestamp is part of

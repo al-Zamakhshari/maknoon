@@ -219,3 +219,65 @@ func TestConcurrentVaultAccess(t *testing.T) {
 		t.Error(err)
 	}
 }
+
+// TestVaultLockoutAfterMaxAttempts verifies that the vault rejects access after
+// too many consecutive failed authentication attempts.
+func TestVaultLockoutAfterMaxAttempts(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("HOME", tmpDir)
+	ResetGlobalConfig()
+
+	conf := DefaultConfig()
+	conf.VaultMaxFailAttempts = 3
+	conf.VaultLockoutMinutes = 15
+	conf.Paths.KeysDir = filepath.Join(tmpDir, "keys")
+	conf.Paths.VaultsDir = filepath.Join(tmpDir, "vaults")
+
+	engine, err := NewEngine(&HumanPolicy{}, nil, conf, nil, slog.Default())
+	require.NoError(t, err)
+	defer engine.Close()
+
+	ectx := &EngineContext{Context: context.Background(), Policy: &HumanPolicy{}}
+	vaultPath := "locktest"
+	correctPass := []byte("CorrectHorseBattery")
+
+	// Set a secret with the correct passphrase.
+	require.NoError(t, engine.VaultSet(ectx, vaultPath, &VaultEntry{
+		Service:  "mysvc",
+		Username: "user",
+		Password: []byte("secret"),
+	}, correctPass, "", false))
+
+	wrongPass := []byte("WrongPassword")
+
+	// Three wrong attempts should trigger lockout on the 4th call.
+	for i := 0; i < 3; i++ {
+		_, err := engine.VaultGet(ectx, vaultPath, "mysvc", wrongPass, "")
+		if err == nil {
+			t.Fatalf("attempt %d: expected authentication error with wrong passphrase", i+1)
+		}
+	}
+
+	// 4th attempt — even with the correct passphrase — must be locked out.
+	_, err = engine.VaultGet(ectx, vaultPath, "mysvc", correctPass, "")
+	if err == nil {
+		t.Fatal("expected lockout error on 4th attempt, got nil")
+	}
+	var authErr *ErrAuthentication
+	if !isErrAuthentication(err, &authErr) {
+		t.Fatalf("expected ErrAuthentication, got: %v", err)
+	}
+	if authErr.Reason == "" || len(authErr.Reason) < 10 {
+		t.Errorf("unexpected lockout reason: %q", authErr.Reason)
+	}
+
+	// Correct passphrase succeeds when no lockout sidecar exists (simulate expiry by clearing it).
+	resolvedPath := filepath.Join(conf.Paths.VaultsDir, vaultPath+".vault")
+	_ = os.Remove(resolvedPath + ".attempts")
+
+	got, err := engine.VaultGet(ectx, vaultPath, "mysvc", correctPass, "")
+	require.NoError(t, err)
+	if string(got.Password) != "secret" {
+		t.Errorf("expected 'secret', got %q", string(got.Password))
+	}
+}

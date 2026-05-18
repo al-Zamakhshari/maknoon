@@ -1,0 +1,4 @@
+go test fuzz v1
+[]byte("password123")
+[]byte("XXXX\x00\x00\x00\x00plaintext")
+byte(0)

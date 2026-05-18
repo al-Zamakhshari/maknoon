@@ -282,6 +282,10 @@ jobs:
         run: make missions
         timeout-minutes: 30
 
+      - name: Large File Stress Tests
+        run: go test -run TestLargeFileRoundtrip -timeout 120s -v ./pkg/crypto/
+        timeout-minutes: 5
+
       - name: Upload Mission Reports
         uses: actions/upload-artifact@v4
         if: always()

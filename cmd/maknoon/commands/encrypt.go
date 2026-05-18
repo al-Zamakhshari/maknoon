@@ -17,6 +17,7 @@ func EncryptCmd() *cobra.Command {
 	var pubKeyPaths []string
 	var signKeyPath string
 	var passphrase string
+	var sessionKeyHex string
 	var compress bool
 	var concurrency int
 	var quiet bool
@@ -99,6 +100,14 @@ func EncryptCmd() *cobra.Command {
 				opts.ProfileID = crypto.BytePtr(profileID)
 			}
 
+			if sessionKeyHex != "" {
+				key, err := decodeHexKey(sessionKeyHex)
+				if err != nil {
+					return fmt.Errorf("--session-key: %w", err)
+				}
+				opts.SessionKey = key
+			}
+
 			if err := resolveEncryptionKeysMulti(&opts, pubKeyPaths, passphrase, inputPath, tofu); err != nil {
 				p.RenderError(err)
 				return err
@@ -158,6 +167,7 @@ func EncryptCmd() *cobra.Command {
 	cmd.Flags().StringSliceVarP(&pubKeyPaths, "public-key", "p", []string{}, "Path to recipient public key(s)")
 	cmd.Flags().StringVar(&signKeyPath, "sign-key", "", "Path to your private ML-DSA key for integrated signing")
 	cmd.Flags().StringVarP(&passphrase, "passphrase", "s", "", "Passphrase for symmetric encryption")
+	cmd.Flags().StringVar(&sessionKeyHex, "session-key", "", "Pre-derived 64-char hex key (bypasses KDF — use 'maknoon session derive' to generate)")
 	cmd.Flags().BoolVarP(&compress, "compress", "c", false, "Enable Zstd compression")
 	cmd.Flags().IntVarP(&concurrency, "concurrency", "j", 0, "Number of parallel workers (0 for auto)")
 	cmd.Flags().BoolVarP(&quiet, "quiet", "q", false, "Suppress progress bars and informational messages")

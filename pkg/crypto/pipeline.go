@@ -32,6 +32,8 @@ type Options struct {
 	Verbose         *bool              // Enables internal slog tracing
 	Stealth         *bool              // Enables fingerprint resistance (headerless)
 	TraceID         string             // Correlation ID for distributed observability
+	SessionKey      SecretBytes        // Pre-derived 32-byte key; when set, KDF is skipped
+	SessionSalt     []byte             // Salt used to derive SessionKey (stored in header for self-description)
 }
 
 func (o *Options) Emit(ev EngineEvent) {
@@ -135,6 +137,8 @@ func (e *Engine) ProtectStream(ectx *EngineContext, inputName string, r io.Reade
 	var err error
 	if len(allPublicKeys) > 0 {
 		err = EncryptStreamWithPublicKeysAndEvents(sourceReader, w, allPublicKeys, opts.SigningKey, flags, *opts.Concurrency, *opts.ProfileID, ectx)
+	} else if len(opts.SessionKey) > 0 {
+		err = EncryptStreamWithKey(sourceReader, w, opts.SessionKey, opts.SessionSalt, flags, *opts.Concurrency, *opts.ProfileID)
 	} else {
 		err = EncryptStreamWithEvents(sourceReader, w, opts.Passphrase, flags, *opts.Concurrency, *opts.ProfileID, ectx)
 	}
@@ -239,6 +243,8 @@ func (e *Engine) unprotectInternal(ectx *EngineContext, r io.Reader, w io.Writer
 		var dErr error
 		if magic == MagicHeaderAsym {
 			_, _, dErr = DecryptStreamWithPrivateKeyAndEvents(fullIn, pw, opts.LocalPrivateKey, opts.PublicKey, concurrency, stealth, ectx)
+		} else if len(opts.SessionKey) > 0 {
+			_, _, dErr = DecryptStreamWithKey(fullIn, pw, opts.SessionKey, concurrency, stealth)
 		} else {
 			_, _, dErr = DecryptStreamWithEvents(fullIn, pw, opts.Passphrase, concurrency, stealth, ectx)
 		}

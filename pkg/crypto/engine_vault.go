@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 // --- Engine Wrappers ---
@@ -212,6 +213,71 @@ func (s *VaultService) Set(ectx *EngineContext, vaultPath string, entry *VaultEn
 	})
 }
 
+// vaultAttempts is the sidecar data persisted alongside a vault to track failed auth attempts.
+type vaultAttempts struct {
+	Count int       `json:"count"`
+	Since time.Time `json:"since"`
+}
+
+func vaultSidecarPath(vaultPath string) string { return vaultPath + ".attempts" }
+
+func (s *VaultService) readAttempts(vaultPath string) vaultAttempts {
+	data, err := os.ReadFile(vaultSidecarPath(vaultPath))
+	if err != nil {
+		return vaultAttempts{}
+	}
+	var a vaultAttempts
+	_ = json.Unmarshal(data, &a)
+	return a
+}
+
+func (s *VaultService) writeAttempts(vaultPath string, a vaultAttempts) {
+	data, _ := json.Marshal(a)
+	tmp := vaultSidecarPath(vaultPath) + ".tmp"
+	if err := os.WriteFile(tmp, data, 0600); err == nil {
+		_ = os.Rename(tmp, vaultSidecarPath(vaultPath))
+	}
+}
+
+func (s *VaultService) clearAttempts(vaultPath string) {
+	_ = os.Remove(vaultSidecarPath(vaultPath))
+}
+
+func (s *VaultService) checkLockout(vaultPath string) error {
+	conf := s.engine.Config
+	if conf == nil || conf.VaultMaxFailAttempts <= 0 {
+		return nil
+	}
+	a := s.readAttempts(vaultPath)
+	if a.Count < conf.VaultMaxFailAttempts {
+		return nil
+	}
+	lockoutDur := time.Duration(conf.VaultLockoutMinutes) * time.Minute
+	if lockoutDur <= 0 {
+		lockoutDur = 15 * time.Minute
+	}
+	if time.Since(a.Since) < lockoutDur {
+		return &ErrAuthentication{Reason: fmt.Sprintf("vault locked: too many failed attempts (%d/%d) — retry after %s",
+			a.Count, conf.VaultMaxFailAttempts, a.Since.Add(lockoutDur).Format(time.RFC3339))}
+	}
+	// Lockout window has expired; clear and allow
+	s.clearAttempts(vaultPath)
+	return nil
+}
+
+func (s *VaultService) recordFailedAttempt(vaultPath string) {
+	conf := s.engine.Config
+	if conf == nil || conf.VaultMaxFailAttempts <= 0 {
+		return
+	}
+	a := s.readAttempts(vaultPath)
+	if a.Count == 0 {
+		a.Since = time.Now()
+	}
+	a.Count++
+	s.writeAttempts(vaultPath, a)
+}
+
 func (s *VaultService) Get(ectx *EngineContext, vaultPath string, service string, passphrase []byte, pin string) (*VaultEntry, error) {
 	ectx = s.engine.context(ectx)
 	if err := s.engine.enforce(ectx, CapVaultRead); err != nil {
@@ -226,6 +292,10 @@ func (s *VaultService) Get(ectx *EngineContext, vaultPath string, service string
 	}
 
 	if err := ectx.Policy.ValidatePath(path); err != nil {
+		return nil, err
+	}
+
+	if err := s.checkLockout(path); err != nil {
 		return nil, err
 	}
 
@@ -298,6 +368,13 @@ func (s *VaultService) Get(ectx *EngineContext, vaultPath string, service string
 		entry, err = OpenEntry(payload, key)
 		return err
 	})
+
+	var authErr *ErrAuthentication
+	if isErrAuthentication(err, &authErr) {
+		s.recordFailedAttempt(path)
+	} else if err == nil {
+		s.clearAttempts(path)
+	}
 
 	return entry, err
 }

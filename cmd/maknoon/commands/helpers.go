@@ -3,6 +3,7 @@ package commands
 import (
 	"bufio"
 	"crypto/tls"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -706,4 +707,17 @@ func downloadResource(url string) ([]byte, error) {
 	}
 
 	return io.ReadAll(resp.Body)
+}
+
+// decodeHexKey decodes a 64-char hex string into a 32-byte session key.
+func decodeHexKey(hexStr string) ([]byte, error) {
+	hexStr = strings.TrimSpace(hexStr)
+	key, err := hex.DecodeString(hexStr)
+	if err != nil {
+		return nil, fmt.Errorf("invalid hex key: %w", err)
+	}
+	if len(key) != 32 {
+		return nil, fmt.Errorf("session key must be 32 bytes (64 hex chars), got %d bytes", len(key))
+	}
+	return key, nil
 }
