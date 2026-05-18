@@ -219,16 +219,26 @@ type vaultAttempts struct {
 	Since time.Time `json:"since"`
 }
 
-// vaultSidecarPath returns the .attempts sidecar path for a vault file.
-// vaultPath must be an already-resolved absolute path (output of resolveVaultPath).
-// We re-clean it here to break the CodeQL taint chain and guard against any
-// remaining ../  sequences.
-func vaultSidecarPath(vaultPath string) string {
-	return filepath.Clean(vaultPath) + ".attempts"
+// sidecarPath returns the .attempts file path for a vault, validating that it
+// stays within the configured vaults directory to prevent path traversal.
+// Returns "" if the path is outside the allowed directory.
+func (s *VaultService) sidecarPath(resolvedVaultPath string) string {
+	vaultsDir := filepath.Clean(s.engine.Config.Paths.VaultsDir)
+	clean := filepath.Clean(resolvedVaultPath)
+	// Ensure the vault path is inside the configured vaults directory.
+	rel, err := filepath.Rel(vaultsDir, clean)
+	if err != nil || strings.HasPrefix(rel, "..") || filepath.IsAbs(rel) {
+		return "" // outside allowed directory — refuse to create sidecar
+	}
+	return clean + ".attempts"
 }
 
 func (s *VaultService) readAttempts(vaultPath string) vaultAttempts {
-	data, err := os.ReadFile(vaultSidecarPath(vaultPath))
+	p := s.sidecarPath(vaultPath)
+	if p == "" {
+		return vaultAttempts{}
+	}
+	data, err := os.ReadFile(p) // #nosec G304 — path validated by sidecarPath
 	if err != nil {
 		return vaultAttempts{}
 	}
@@ -238,16 +248,21 @@ func (s *VaultService) readAttempts(vaultPath string) vaultAttempts {
 }
 
 func (s *VaultService) writeAttempts(vaultPath string, a vaultAttempts) {
-	sidecar := vaultSidecarPath(vaultPath)
+	sidecar := s.sidecarPath(vaultPath)
+	if sidecar == "" {
+		return
+	}
 	data, _ := json.Marshal(a)
 	tmp := sidecar + ".tmp"
-	if err := os.WriteFile(tmp, data, 0600); err == nil {
+	if err := os.WriteFile(tmp, data, 0600); err == nil { // #nosec G306
 		_ = os.Rename(tmp, sidecar)
 	}
 }
 
 func (s *VaultService) clearAttempts(vaultPath string) {
-	_ = os.Remove(vaultSidecarPath(vaultPath))
+	if p := s.sidecarPath(vaultPath); p != "" {
+		_ = os.Remove(p)
+	}
 }
 
 func (s *VaultService) checkLockout(vaultPath string) error {
