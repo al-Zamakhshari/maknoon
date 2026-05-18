@@ -159,8 +159,11 @@ func (e *Engine) enforce(ectx *EngineContext, cap Capability) error {
 	return nil
 }
 
-// newShimEngine creates a minimal engine for use as a one-shot shim (e.g. pipeline package-level
-// helpers). All services that may be called are initialized; vault/identity/network are left nil.
+// newShimEngine returns a minimal engine for legacy package-level Protect/Unprotect shims
+// (used by pipeline.go). Only Crypto and Workspace services are initialized.
+// Vault, Identity, Network, and Contacts are nil — do not call methods that require them.
+// This exists solely so that the pipeline package-level helpers can share policy/config
+// without a full engine initialization.
 func newShimEngine() *Engine {
 	e := &Engine{
 		Policy: &HumanPolicy{},

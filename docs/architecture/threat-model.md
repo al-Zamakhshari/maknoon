@@ -78,6 +78,18 @@ While Maknoon provides tools for secure data disposal, it adheres to a factual a
 
 ---
 
+## Identity Registry Architecture
+
+Maknoon uses a three-tier identity discovery chain:
+
+1. **Nostr (primary)** — decentralized relays, identity records signed with ML-DSA-87, no single point of failure
+2. **BEP-44 (opt-in)** — BitTorrent DHT mutable items, fully peer-to-peer
+3. **DNS (tertiary)** — standard TXT record lookup for handle resolution
+
+`libp2p-kad-dht` was removed in favour of Nostr as the primary layer. This eliminates the GO-2024-3218 vulnerability (content censorship via Kademlia DHT routing) while maintaining decentralized identity discovery. P2P tunneling continues to use `go-libp2p` core (unaffected).
+
+---
+
 ## Security Compliance and Auditability
 Maknoon supports enterprise-level governance through its pluggable audit decorator architecture.
 

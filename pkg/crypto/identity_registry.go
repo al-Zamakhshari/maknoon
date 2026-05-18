@@ -13,7 +13,7 @@ type IdentityPublishOptions struct {
 	Name       string   // Local identity name
 	Passphrase string   // Passphrase to unlock local identity
 	Local      bool     // Add to local contacts
-	LibP2P     bool     // Publish to libp2p DHT (default when no registry flag is set)
+	LibP2P     bool     // Deprecated: libp2p-kad-dht was removed; this field is ignored
 	Nostr      bool     // Publish to Nostr relays
 	DNS        bool     // Publish to DNS (via DHT)
 	Desec      bool     // Publish to deSEC
@@ -93,15 +93,9 @@ func (m *IdentityManager) IdentityPublish(ctx context.Context, handle string, op
 		}
 	}
 
-	// Default to libp2p DHT when no specific registry is selected.
-	if opts.LibP2P || (!opts.DNS && !opts.Desec && !opts.BEP44 && !opts.Nostr && !opts.Local) {
-		libp2pReg := NewLibP2PDHTRegistry(m.Config)
-		if err := libp2pReg.Publish(ctx, record); err != nil {
-			return fmt.Errorf("libp2p DHT publish failed: %w", err)
-		}
-	}
-
-	if opts.Nostr {
+	// Default to Nostr when no specific registry is selected.
+	// libp2p-kad-dht was removed (GO-2024-3218); Nostr is now the primary registry.
+	if opts.Nostr || (!opts.DNS && !opts.Desec && !opts.BEP44 && !opts.Local) {
 		nostrPriv, err := DeriveNostrKeypair(id.SIGPriv)
 		if err != nil {
 			return fmt.Errorf("nostr key derivation failed: %w", err)

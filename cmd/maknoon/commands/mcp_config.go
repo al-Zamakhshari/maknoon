@@ -34,15 +34,7 @@ func registerConfigTools(s *server.MCPServer, engine crypto.MaknoonEngine) {
 			if val, ok := args["stealth_mode"].(bool); ok {
 				conf.Performance.DefaultStealth = val
 			}
-			if val, ok := args["libp2p_bootstrap_peers"].([]any); ok {
-				var peers []string
-				for _, v := range val {
-					if s, ok := v.(string); ok {
-						peers = append(peers, s)
-					}
-				}
-				conf.LibP2P.BootstrapPeers = peers
-			}
+			// libp2p_bootstrap_peers: removed (libp2p-kad-dht dependency dropped)
 			if val, ok := args["nostr_relays"].([]any); ok {
 				var relays []string
 				for _, v := range val {

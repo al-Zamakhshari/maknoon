@@ -42,18 +42,18 @@ jobs:
         run: go install golang.org/x/vuln/cmd/govulncheck@latest
       - name: Check Vulnerabilities
         run: |
-          # Allow known unfixable vulns (GO-2024-3218: libp2p-kad-dht content
-          # censorship, no upstream fix). All others fail the build.
-          # Parse only "finding" objects — the "osv" database entries also carry
-          # an "id" field but represent the full checked DB, not actual findings.
+          # Parse only "finding" objects from the NDJSON output — the "osv"
+          # database entries also contain "id" fields but are not actual findings.
+          # Note: GO-2024-3218 (libp2p-kad-dht censorship) was eliminated by
+          # removing the dependency entirely; no allowlist entries remain.
           VULN_OUT=$($(go env GOPATH)/bin/govulncheck -json ./... 2>&1) || true
-          NEW=$(echo "$VULN_OUT" | grep '"finding"' | grep -o '"osv":"GO-[0-9-]*"' | grep -oE 'GO-[0-9-]+' | sort -u | grep -vF "GO-2024-3218" || true)
+          NEW=$(echo "$VULN_OUT" | grep '"finding"' | grep -o '"osv":"GO-[0-9-]*"' | grep -oE 'GO-[0-9-]+' | sort -u || true)
           if [ -n "$NEW" ]; then
             echo "$VULN_OUT"
-            echo "❌ govulncheck: new vulnerabilities detected: $NEW"
+            echo "❌ govulncheck: vulnerabilities detected: $NEW"
             exit 1
           fi
-          echo "✅ govulncheck: no new vulnerabilities (accepted: GO-2024-3218)"
+          echo "✅ govulncheck: no vulnerabilities found"
 
   docs:
     name: Documentation
@@ -195,6 +195,7 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
+      id-token: write   # required for cosign keyless signing
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -206,6 +207,11 @@ jobs:
         with:
           go-version-file: 'go.mod'
           cache: true
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+        with:
+          cosign-release: 'v2.4.0'
 
       - name: Get Next Version
         id: next_version

@@ -26,7 +26,6 @@ type Config struct {
 	Security           SecurityConfig             `json:"security" mapstructure:"security"`
 	Performance        PerformanceConfig          `json:"performance" mapstructure:"performance"`
 	AgentLimits        AgentLimitsConfig          `json:"agent_limits" mapstructure:"agent_limits"`
-	LibP2P             LibP2PRegistryConfig       `json:"libp2p" mapstructure:"libp2p"`
 	BEP44              BEP44Config                `json:"bep44" mapstructure:"bep44"`
 	Nostr              NostrConfig                `json:"nostr" mapstructure:"nostr"`
 	Tunnel             tunnel.TunnelConfig        `json:"tunnel" mapstructure:"tunnel"`
@@ -113,7 +112,7 @@ func DefaultConfig() *Config {
 	home := GetUserHomeDir()
 	return &Config{
 		DefaultIdentity:    "default",
-		IdentityRegistries: []string{"libp2p", "nostr", "dns"},
+		IdentityRegistries: []string{"nostr", "bep44", "dns"},
 		Audit: AuditConfig{
 			Enabled: false,
 			LogFile: filepath.Join(home, MaknoonDir, "audit.log"),

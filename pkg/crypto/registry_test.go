@@ -49,12 +49,6 @@ func TestIdentityRecordSerializationRoundtrip(t *testing.T) {
 func TestRegistryConstructors(t *testing.T) {
 	conf := DefaultConfig()
 
-	// libp2p registry should be constructable without error.
-	libp2pReg := NewLibP2PDHTRegistry(conf)
-	if libp2pReg == nil {
-		t.Error("NewLibP2PDHTRegistry returned nil")
-	}
-
 	// BEP44 registry should be constructable without error.
 	bep44Reg := NewBEP44Registry(conf)
 	if bep44Reg == nil {
@@ -70,7 +64,7 @@ func TestRegistryConstructors(t *testing.T) {
 		t.Error("NostrRegistry should have default relays")
 	}
 
-	// MultiRegistry should include all three in the default order.
+	// MultiRegistry default chain: nostr → bep44 → dns.
 	multi := NewIdentityRegistry(conf)
 	if multi == nil {
 		t.Error("NewIdentityRegistry returned nil")
