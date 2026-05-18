@@ -46,6 +46,7 @@ func (m *IdentityManager) IdentityPublish(ctx context.Context, handle string, op
 		KEMPubKey:  id.KEMPub,
 		SIGPubKey:  id.SIGPub,
 		Timestamp:  time.Now(),
+		ExpiresAt:  time.Now().Add(m.Config.IdentityTTL()),
 		Multiaddrs: opts.Multiaddrs,
 	}
 

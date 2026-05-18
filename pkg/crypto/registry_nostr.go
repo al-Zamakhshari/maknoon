@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/nbd-wtf/go-nostr"
 	"github.com/nbd-wtf/go-nostr/nip19"
@@ -248,6 +249,50 @@ func (r *NostrRegistry) PublishWithKey(ctx context.Context, record *IdentityReco
 func (r *NostrRegistry) Revoke(ctx context.Context, handle string, proof []byte) error {
 	// In Nostr, we'd probably just publish a new event with revoked=true or deleted
 	return fmt.Errorf("nostr revocation not implemented in POC")
+}
+
+// RelayHealth holds the connectivity result for a single Nostr relay.
+type RelayHealth struct {
+	URL       string `json:"url"`
+	Reachable bool   `json:"reachable"`
+	LatencyMs int64  `json:"latency_ms"`
+	Error     string `json:"error,omitempty"`
+}
+
+// HealthCheck probes each configured relay and returns connectivity results.
+// Each relay gets a 5-second connection timeout.
+func (r *NostrRegistry) HealthCheck(ctx context.Context) []RelayHealth {
+	results := make([]RelayHealth, len(r.Relays))
+	type pair struct {
+		idx int
+		h   RelayHealth
+	}
+	ch := make(chan pair, len(r.Relays))
+
+	for i, relayURL := range r.Relays {
+		go func(idx int, u string) {
+			h := RelayHealth{URL: u}
+			dialCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+			defer cancel()
+
+			start := time.Now()
+			relay, err := nostr.RelayConnect(dialCtx, u)
+			h.LatencyMs = time.Since(start).Milliseconds()
+			if err != nil {
+				h.Error = err.Error()
+			} else {
+				h.Reachable = true
+				relay.Close()
+			}
+			ch <- pair{idx, h}
+		}(i, relayURL)
+	}
+
+	for range r.Relays {
+		p := <-ch
+		results[p.idx] = p.h
+	}
+	return results
 }
 
 // isValidDomain ensures the domain resolves to a legitimate public address, not a local or

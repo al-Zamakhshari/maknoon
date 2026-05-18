@@ -1,0 +1,4 @@
+go test fuzz v1
+[]byte("long-password-for-testing-purposes-only")
+[]byte("The quick brown fox jumps over the lazy dog. This is a longer plaintext for testing streaming encryption.")
+byte(0)

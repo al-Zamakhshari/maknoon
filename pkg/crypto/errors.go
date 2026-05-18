@@ -74,6 +74,21 @@ func (e *ErrAuthentication) Error() string {
 
 func (e *ErrAuthentication) IsSecurityViolation() bool { return false }
 
+// isErrAuthentication unwraps err as *ErrAuthentication, setting target if non-nil. Returns true on match.
+func isErrAuthentication(err error, target **ErrAuthentication) bool {
+	if err == nil {
+		return false
+	}
+	var ae *ErrAuthentication
+	if errors.As(err, &ae) {
+		if target != nil {
+			*target = ae
+		}
+		return true
+	}
+	return false
+}
+
 // ErrCrypto occurs during low-level cryptographic failures (MAC mismatch, bad header).
 type ErrCrypto struct {
 	Reason string

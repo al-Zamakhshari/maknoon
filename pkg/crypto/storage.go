@@ -190,7 +190,7 @@ func (s *FileSystemVaultStore) Open(path string) (Store, error) {
 		}
 		return &BadgerStore{db: db}, nil
 	default:
-		db, err := bbolt.Open(fullPath, 0600, &bbolt.Options{Timeout: 1 * time.Second})
+		db, err := bbolt.Open(fullPath, 0600, &bbolt.Options{Timeout: 10 * time.Second})
 		if err != nil {
 			return nil, &ErrIO{Path: fullPath, Reason: err.Error()}
 		}
