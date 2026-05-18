@@ -69,17 +69,19 @@ func (e *Engine) SecureDeleteStream(path string) error {
 }
 
 func (e *Engine) shredFile(path string, allowedBases ...string) error {
-	// Re-apply containment in this function so CodeQL sees the filepath.Rel
-	// guard immediately before the file operations in the same scope.
-	safe, err := containedPath(path, allowedBases...)
-	if err != nil {
-		return &ErrPolicyViolation{Reason: "shred path outside permitted directories", Path: path}
+	var safe string
+	if IsAgentMode() {
+		var err error
+		safe, err = containedPath(path, allowedBases...)
+		if err != nil {
+			return &ErrPolicyViolation{Reason: "shred path outside permitted directories", Path: path}
+		}
+	} else {
+		safe = filepath.Clean(path)
+		if strings.HasPrefix(safe, "..") {
+			return &ErrPolicyViolation{Reason: "shred: relative path traversal not permitted", Path: path}
+		}
 	}
-	// Secondary inline guard — make the Rel check visible to CodeQL in this function.
-	tmpBase := filepath.Clean(os.TempDir())
-	rel, relErr := filepath.Rel(tmpBase, safe)
-	_ = rel
-	_ = relErr
 	e.Logger.Debug("shredding file", "path", safe)
 	// Open file for writing only
 	f, err := os.OpenFile(safe, os.O_WRONLY, 0)
@@ -149,17 +151,19 @@ func (e *Engine) shredFile(path string, allowedBases ...string) error {
 }
 
 func (e *Engine) shredDirectory(path string, allowedBases ...string) error {
-	// Re-apply containment in this function so CodeQL sees the filepath.Rel
-	// guard immediately before the file operations in the same scope.
-	safe, err := containedPath(path, allowedBases...)
-	if err != nil {
-		return &ErrPolicyViolation{Reason: "shred path outside permitted directories", Path: path}
+	var safe string
+	if IsAgentMode() {
+		var err error
+		safe, err = containedPath(path, allowedBases...)
+		if err != nil {
+			return &ErrPolicyViolation{Reason: "shred path outside permitted directories", Path: path}
+		}
+	} else {
+		safe = filepath.Clean(path)
+		if strings.HasPrefix(safe, "..") {
+			return &ErrPolicyViolation{Reason: "shred: relative path traversal not permitted", Path: path}
+		}
 	}
-	// Secondary inline guard — make the Rel check visible to CodeQL in this function.
-	tmpBase := filepath.Clean(os.TempDir())
-	rel, relErr := filepath.Rel(tmpBase, safe)
-	_ = rel
-	_ = relErr
 	e.Logger.Debug("shredding directory", "path", safe)
 	entries, err := os.ReadDir(safe)
 	if err != nil {
