@@ -59,7 +59,10 @@ func TestStreamingRigorousConstantMemory(t *testing.T) {
 
 		runtime.GC() // Clean up after run
 		runtime.ReadMemStats(&m2)
-		return m2.HeapAlloc - m1.HeapAlloc
+		if m2.HeapAlloc > m1.HeapAlloc {
+			return m2.HeapAlloc - m1.HeapAlloc
+		}
+		return 0 // GC reclaimed more than was allocated — treat as zero growth
 	}
 
 	memSmall := measure(smallSize)
