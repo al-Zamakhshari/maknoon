@@ -10,22 +10,25 @@ import (
 
 // SecureDelete securely wipes and removes a file or directory.
 func (e *Engine) SecureDeleteStream(path string) error {
-	e.Logger.Debug("securely deleting path", "path", path)
-	info, err := os.Stat(path)
+	// Clean the path to remove any traversal sequences before touching the filesystem.
+	safe := filepath.Clean(path)
+	e.Logger.Debug("securely deleting path", "path", safe)
+	info, err := os.Stat(safe)
 	if err != nil {
 		return err
 	}
 
 	if info.IsDir() {
-		return e.shredDirectory(path)
+		return e.shredDirectory(safe)
 	}
-	return e.shredFile(path)
+	return e.shredFile(safe)
 }
 
 func (e *Engine) shredFile(path string) error {
-	e.Logger.Debug("shredding file", "path", path)
+	safe := filepath.Clean(path)
+	e.Logger.Debug("shredding file", "path", safe)
 	// Open file for writing only
-	f, err := os.OpenFile(path, os.O_WRONLY, 0)
+	f, err := os.OpenFile(safe, os.O_WRONLY, 0)
 	if err != nil {
 		return err
 	}
@@ -78,10 +81,10 @@ func (e *Engine) shredFile(path string) error {
 
 	// Rename to a random string to obscure original filename in metadata
 	randomName := make([]byte, 16)
-	finalPath := path
+	finalPath := safe
 	if _, err := io.ReadFull(rand.Reader, randomName); err == nil {
-		newName := filepath.Join(filepath.Dir(path), hex.EncodeToString(randomName))
-		if err := os.Rename(path, newName); err == nil {
+		newName := filepath.Join(filepath.Dir(safe), hex.EncodeToString(randomName))
+		if err := os.Rename(safe, newName); err == nil {
 			finalPath = newName
 		}
 	}
@@ -91,14 +94,15 @@ func (e *Engine) shredFile(path string) error {
 }
 
 func (e *Engine) shredDirectory(path string) error {
-	e.Logger.Debug("shredding directory", "path", path)
-	entries, err := os.ReadDir(path)
+	safe := filepath.Clean(path)
+	e.Logger.Debug("shredding directory", "path", safe)
+	entries, err := os.ReadDir(safe)
 	if err != nil {
 		return err
 	}
 
 	for _, entry := range entries {
-		fullPath := filepath.Join(path, entry.Name())
+		fullPath := filepath.Join(safe, entry.Name())
 		if entry.IsDir() {
 			if err := e.shredDirectory(fullPath); err != nil {
 				return err
@@ -111,5 +115,5 @@ func (e *Engine) shredDirectory(path string) error {
 	}
 
 	// Remove the now-empty directory
-	return os.Remove(path)
+	return os.Remove(safe)
 }

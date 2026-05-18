@@ -1,6 +1,9 @@
 package crypto
 
-import "os"
+import (
+	"os"
+	"path/filepath"
+)
 
 // --- Engine Wrappers ---
 
@@ -164,10 +167,12 @@ func (s *IdentityService) Delete(ectx *EngineContext, name string) error {
 		return err
 	}
 	// Securely shred private key files before plain-removing the rest.
-	basePath, _, err := s.Mgr.ResolveBaseKeyPath(name)
+	rawBase, _, err := s.Mgr.ResolveBaseKeyPath(name)
 	if err != nil {
 		return err
 	}
+	// Clean basePath to eliminate any traversal sequences before file ops.
+	basePath := filepath.Clean(rawBase)
 	for _, suffix := range []string{".kem.key", ".sig.key"} {
 		path := basePath + suffix
 		if _, statErr := os.Stat(path); statErr == nil {

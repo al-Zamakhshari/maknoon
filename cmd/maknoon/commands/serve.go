@@ -36,19 +36,24 @@ func decodeHex(s string) ([]byte, error) {
 
 // sanitizeRESTPath cleans a user-supplied file path and confirms it stays within
 // one of the explicitly allowed base directories. Returns an error on any traversal attempt.
+//
+// The implementation uses filepath.Clean + filepath.Rel which is the canonical
+// sanitiser pattern recognised by static analysers (including CodeQL go/path-injection).
 func sanitizeRESTPath(raw string, allowedBases ...string) (string, error) {
 	if raw == "" {
 		return "", fmt.Errorf("path must not be empty")
 	}
 	clean := filepath.Clean(raw)
-	// Reject absolute paths that don't match any allowed base, and all relative escape attempts.
+	// Verify containment using filepath.Rel — this is the pattern recognised by
+	// CodeQL as a path-injection sanitiser.
 	for _, base := range allowedBases {
-		base = filepath.Clean(base)
-		if strings.HasPrefix(clean, base+string(filepath.Separator)) || clean == base {
+		cleanBase := filepath.Clean(base)
+		rel, err := filepath.Rel(cleanBase, clean)
+		if err == nil && !strings.HasPrefix(rel, "..") && !filepath.IsAbs(rel) {
 			return clean, nil
 		}
 	}
-	// If no allowed bases given, reject absolute paths but allow relative names in cwd.
+	// If no allowed bases given, reject absolute paths but allow non-escaping relative names.
 	if len(allowedBases) == 0 && !filepath.IsAbs(clean) && !strings.HasPrefix(clean, "..") {
 		return clean, nil
 	}
@@ -474,7 +479,6 @@ func handleFragment(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("invalid input path: %v", err), http.StatusBadRequest)
 		return
 	}
-	req.Input = inputPath
 
 	if req.DataShards == 0 {
 		req.DataShards = 5
@@ -482,23 +486,23 @@ func handleFragment(w http.ResponseWriter, r *http.Request) {
 	if req.ParityShards == 0 {
 		req.ParityShards = 3
 	}
-	if req.Output == "" {
-		req.Output = req.Input + "_fragments"
+	rawOutput := req.Output
+	if rawOutput == "" {
+		rawOutput = inputPath + "_fragments"
 	}
-	outputPath, err := sanitizeRESTPath(req.Output, os.TempDir())
+	outputPath, err := sanitizeRESTPath(rawOutput, os.TempDir())
 	if err != nil {
 		http.Error(w, fmt.Sprintf("invalid output path: %v", err), http.StatusBadRequest)
 		return
 	}
-	req.Output = outputPath
 
-	fi, err := os.Stat(req.Input)
+	fi, err := os.Stat(inputPath)
 	if err != nil {
 		renderAPIError(w, err)
 		return
 	}
 
-	in, err := os.Open(req.Input)
+	in, err := os.Open(inputPath)
 	if err != nil {
 		renderAPIError(w, err)
 		return
@@ -518,7 +522,7 @@ func handleFragment(w http.ResponseWriter, r *http.Request) {
 	opts := crypto.FragmentOptions{
 		DataShards:   req.DataShards,
 		ParityShards: req.ParityShards,
-		TargetDir:    req.Output,
+		TargetDir:    outputPath,
 		OriginalSize: fi.Size(),
 		SigningKey:   sigKey,
 	}
@@ -538,7 +542,7 @@ func handleFragment(w http.ResponseWriter, r *http.Request) {
 	renderAPISuccess(w, map[string]any{
 		"status":    "success",
 		"shards":    req.DataShards + req.ParityShards,
-		"directory": req.Output,
+		"directory": outputPath,
 	})
 }
 
@@ -563,33 +567,32 @@ func handleReassemble(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("invalid input_dir: %v", err), http.StatusBadRequest)
 		return
 	}
-	req.InputDir = inputDir
 
-	if req.Output == "" {
-		req.Output = "restored.data"
+	rawOutput := req.Output
+	if rawOutput == "" {
+		rawOutput = "restored.data"
 	}
-	outputPath, err := sanitizeRESTPath(req.Output, os.TempDir())
+	outputPath, err := sanitizeRESTPath(rawOutput, os.TempDir())
 	if err != nil {
 		http.Error(w, fmt.Sprintf("invalid output path: %v", err), http.StatusBadRequest)
 		return
 	}
-	req.Output = outputPath
 
-	f, err := os.Create(req.Output)
+	f, err := os.Create(outputPath)
 	if err != nil {
 		renderAPIError(w, err)
 		return
 	}
 	defer f.Close()
 
-	if err := GlobalContext.Engine.ReassembleFragments(req.InputDir, f, req.AuthorizedKey); err != nil {
+	if err := GlobalContext.Engine.ReassembleFragments(inputDir, f, req.AuthorizedKey); err != nil {
 		renderAPIError(w, err)
 		return
 	}
 
 	renderAPISuccess(w, map[string]any{
 		"status": "success",
-		"file":   req.Output,
+		"file":   outputPath,
 	})
 }
 

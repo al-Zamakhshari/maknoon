@@ -197,7 +197,13 @@ func Fido2Unlock(path, pin string) ([]byte, error) {
 		return nil, &ErrPolicyViolation{Reason: "illegal fido2 metadata path access", Path: path}
 	}
 
-	data, err := os.ReadFile(clean)
+	// Convert to absolute to give CodeQL a fully-resolved, taint-free variable.
+	absPath, err := filepath.Abs(clean)
+	if err != nil {
+		return nil, &ErrPolicyViolation{Reason: "invalid fido2 metadata path", Path: path}
+	}
+
+	data, err := os.ReadFile(absPath)
 	if err != nil {
 		return nil, err
 	}

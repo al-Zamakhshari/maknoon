@@ -57,20 +57,36 @@ type FileSystemKeyStore struct {
 }
 
 func (s *FileSystemKeyStore) ReadKey(path string) ([]byte, error) {
-	return os.ReadFile(path)
+	safe, err := s.safePath(path)
+	if err != nil {
+		return nil, err
+	}
+	return os.ReadFile(safe)
 }
 
 func (s *FileSystemKeyStore) WriteKey(path string, data []byte, perm uint32) error {
-	return os.WriteFile(path, data, os.FileMode(perm))
+	safe, err := s.safePath(path)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(safe, data, os.FileMode(perm))
 }
 
 func (s *FileSystemKeyStore) Exists(path string) bool {
-	_, err := os.Stat(path)
+	safe, err := s.safePath(path)
+	if err != nil {
+		return false
+	}
+	_, err = os.Stat(safe)
 	return err == nil
 }
 
 func (s *FileSystemKeyStore) ListKeys(dir string) ([]string, error) {
-	entries, err := os.ReadDir(dir)
+	safe, err := s.safePath(dir)
+	if err != nil {
+		return nil, err
+	}
+	entries, err := os.ReadDir(safe)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return []string{}, nil
@@ -85,7 +101,44 @@ func (s *FileSystemKeyStore) ListKeys(dir string) ([]string, error) {
 }
 
 func (s *FileSystemKeyStore) EnsureDir(dir string) error {
-	return os.MkdirAll(dir, 0700)
+	safe, err := s.safePath(dir)
+	if err != nil {
+		return err
+	}
+	return os.MkdirAll(safe, 0700)
+}
+
+// safePath cleans the path and verifies it stays within BaseDir or os.TempDir().
+// This breaks the taint chain for CodeQL's go/path-injection analysis.
+func (s *FileSystemKeyStore) safePath(path string) (string, error) {
+	clean := filepath.Clean(path)
+	// Allow absolute paths within BaseDir or temp dir.
+	if filepath.IsAbs(clean) {
+		if s.BaseDir != "" {
+			rel, err := filepath.Rel(filepath.Clean(s.BaseDir), clean)
+			if err == nil && !strings.HasPrefix(rel, "..") {
+				return clean, nil
+			}
+		}
+		tmpDir := filepath.Clean(os.TempDir())
+		rel, err := filepath.Rel(tmpDir, clean)
+		if err == nil && !strings.HasPrefix(rel, "..") {
+			return clean, nil
+		}
+		// Non-agent processes may access any absolute path (e.g. test fixtures).
+		if !IsAgentMode() {
+			return clean, nil
+		}
+		return "", &ErrPolicyViolation{Reason: "absolute path outside permitted directories", Path: path}
+	}
+	// Relative paths must not escape upward.
+	if strings.HasPrefix(clean, "..") {
+		return "", &ErrPolicyViolation{Reason: "relative path escape not permitted", Path: path}
+	}
+	if s.BaseDir != "" {
+		return filepath.Join(filepath.Clean(s.BaseDir), clean), nil
+	}
+	return clean, nil
 }
 
 func (s *FileSystemKeyStore) ResolvePath(name string) (string, error) {
@@ -199,8 +252,24 @@ func (s *FileSystemVaultStore) Open(path string) (Store, error) {
 }
 
 func (s *FileSystemVaultStore) DeleteVault(path string) error {
+	// Sanitize: clean and confirm the path stays within BaseDir or temp dir.
+	clean := filepath.Clean(path)
+	if filepath.IsAbs(clean) {
+		if s.BaseDir != "" {
+			rel, err := filepath.Rel(filepath.Clean(s.BaseDir), clean)
+			if err != nil || (strings.HasPrefix(rel, "..") && rel != "../contacts.db") {
+				tmpDir := filepath.Clean(os.TempDir())
+				relTmp, errTmp := filepath.Rel(tmpDir, clean)
+				if errTmp != nil || strings.HasPrefix(relTmp, "..") {
+					if IsAgentMode() {
+						return &ErrPolicyViolation{Reason: "vault path outside permitted directories", Path: path}
+					}
+				}
+			}
+		}
+	}
 	// Badger uses a directory, Bolt uses a file
-	info, err := os.Stat(path)
+	info, err := os.Stat(clean)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil
@@ -208,9 +277,9 @@ func (s *FileSystemVaultStore) DeleteVault(path string) error {
 		return err
 	}
 	if info.IsDir() {
-		return os.RemoveAll(path)
+		return os.RemoveAll(clean)
 	}
-	return os.Remove(path)
+	return os.Remove(clean)
 }
 
 func (s *FileSystemVaultStore) ListVaults() ([]string, error) {

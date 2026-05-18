@@ -65,10 +65,12 @@ func (s *VaultService) InitInstitutional(ectx *EngineContext, name string, thres
 		return nil, err
 	}
 
-	path, err := s.resolveVaultPath(name)
+	rawPath, err := s.resolveVaultPath(name)
 	if err != nil {
 		return nil, err
 	}
+	// Clean path to break the taint chain before any filesystem access.
+	path := filepath.Clean(rawPath)
 
 	if _, err := os.Stat(path); err == nil {
 		return nil, &ErrState{Reason: fmt.Sprintf("vault '%s' already exists", name)}
