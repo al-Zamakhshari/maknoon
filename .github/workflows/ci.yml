@@ -80,18 +80,26 @@ jobs:
           echo "✅ MCP Tool Reference is up to date"
       - name: Verify Doc Links
         run: |
-          # Extract markdown links from docs/ and README.md, verify each target file exists.
+          # For each doc file, resolve relative .md links from that file's directory.
           BROKEN=0
-          while IFS= read -r link; do
-            # Strip anchor fragment
-            target="${link%%#*}"
-            [ -z "$target" ] && continue
-            if [ ! -f "$target" ] && [ ! -d "$target" ]; then
-              echo "❌ Broken link target: $target"
-              BROKEN=$((BROKEN + 1))
-            fi
-          done < <(grep -roh '\[.*\](\./[^)]*\.md[^)]*)' docs/ README.md \
-                    | grep -oP '\(\K[^)]+' | sed 's|^\./||' | sort -u)
+          while IFS= read -r srcfile; do
+            dir=$(dirname "$srcfile")
+            while IFS= read -r rawlink; do
+              # Strip anchor fragment
+              link="${rawlink%%#*}"
+              [ -z "$link" ] && continue
+              # Resolve relative to the source file's directory
+              if [[ "$link" == ./* ]]; then
+                target="$dir/${link#./}"
+              else
+                target="$link"
+              fi
+              if [ ! -f "$target" ] && [ ! -d "$target" ]; then
+                echo "❌ Broken link in $srcfile: $link → $target"
+                BROKEN=$((BROKEN + 1))
+              fi
+            done < <(grep -oh '\[.*\](\./[^)]*\.md[^)]*)' "$srcfile" | grep -oP '\(\K[^)]+')
+          done < <(find docs/ -name "*.md"; echo "README.md")
           if [ "$BROKEN" -gt 0 ]; then
             echo "❌ $BROKEN broken doc link(s) found"
             exit 1

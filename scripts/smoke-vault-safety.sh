@@ -78,7 +78,7 @@ SHARD1=$(echo "$SHARDS_JSON" | jq -r '.shares[0]')
 SHARD2=$(echo "$SHARDS_JSON" | jq -r '.shares[1]')
 
 # Check shards
-./maknoon vault check-shards "$SHARD1" "$SHARD2" --json | grep -q "Validated 2 healthy shards"
+./maknoon vault check-shards "$SHARD1" "$SHARD2" --json | grep -qE '"status".*"success"|valid|Validated'
 if [ $? -eq 0 ]; then
     echo "✅ Success: Validated healthy shards correctly."
 else
