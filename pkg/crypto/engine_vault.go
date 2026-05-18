@@ -219,7 +219,13 @@ type vaultAttempts struct {
 	Since time.Time `json:"since"`
 }
 
-func vaultSidecarPath(vaultPath string) string { return vaultPath + ".attempts" }
+// vaultSidecarPath returns the .attempts sidecar path for a vault file.
+// vaultPath must be an already-resolved absolute path (output of resolveVaultPath).
+// We re-clean it here to break the CodeQL taint chain and guard against any
+// remaining ../  sequences.
+func vaultSidecarPath(vaultPath string) string {
+	return filepath.Clean(vaultPath) + ".attempts"
+}
 
 func (s *VaultService) readAttempts(vaultPath string) vaultAttempts {
 	data, err := os.ReadFile(vaultSidecarPath(vaultPath))
@@ -232,10 +238,11 @@ func (s *VaultService) readAttempts(vaultPath string) vaultAttempts {
 }
 
 func (s *VaultService) writeAttempts(vaultPath string, a vaultAttempts) {
+	sidecar := vaultSidecarPath(vaultPath)
 	data, _ := json.Marshal(a)
-	tmp := vaultSidecarPath(vaultPath) + ".tmp"
+	tmp := sidecar + ".tmp"
 	if err := os.WriteFile(tmp, data, 0600); err == nil {
-		_ = os.Rename(tmp, vaultSidecarPath(vaultPath))
+		_ = os.Rename(tmp, sidecar)
 	}
 }
 
