@@ -175,6 +175,15 @@ func DefaultConfig() *Config {
 	}
 }
 
+// Clone returns a deep copy of the Config so callers receive a snapshot
+// rather than a reference to the live singleton.
+func (c *Config) Clone() *Config {
+	data, _ := json.Marshal(c)
+	var clone Config
+	_ = json.Unmarshal(data, &clone)
+	return &clone
+}
+
 // Validate checks for logical errors in the configuration.
 func (c *Config) Validate() error {
 	if c.Security.ArgonMemory < 1024 {
@@ -268,13 +277,14 @@ func (c *Config) Save() error {
 	return os.WriteFile(path, data, 0600)
 }
 
-// GetGlobalConfig is a thread-safe helper to get the active config.
+// GetGlobalConfig is a thread-safe helper to get a snapshot of the active config.
+// It returns a deep copy so callers cannot mutate the live singleton.
 func GetGlobalConfig() *Config {
 	c, _ := LoadConfig()
 	if c == nil {
 		return DefaultConfig()
 	}
-	return c
+	return c.Clone()
 }
 
 // ResetGlobalConfig clears the cached config, forcing a reload on next use.

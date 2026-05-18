@@ -63,7 +63,67 @@ func (e *Engine) ProtectStream(ectx *EngineContext, inputName string, r io.Reade
 		}
 	}
 
-	// Merge options with configuration defaults
+	// Merge options with configuration defaults.
+	profileWasNil := opts.ProfileID == nil
+	e.resolvePipelineOptions(ectx, &opts)
+	if profileWasNil {
+		log.Debug("using default profile from config", "profile_id", *opts.ProfileID)
+	}
+
+	// Governance: Validate the profile selection.
+	if err := ectx.Policy.ValidateProfile(*opts.ProfileID); err != nil {
+		log.Error("profile validation failed", "err", err, "profile_id", *opts.ProfileID)
+		return EncryptResult{}, err
+	}
+
+	flags := buildEncryptFlags(opts)
+	log.Debug("pipeline initializing", "flags", flags, "concurrency", *opts.Concurrency, "profile_id", *opts.ProfileID)
+
+	// Measure input size for progress events.
+	var totalBytes int64
+	if inputName != "-" && inputName != "" {
+		safeInput := filepath.Clean(inputName)
+		// Reject paths that escape upward regardless of form.
+		if strings.HasPrefix(safeInput, "..") {
+			return EncryptResult{}, &ErrIO{Path: inputName, Reason: "path traversal not permitted"}
+		}
+		if fi, err := os.Stat(safeInput); err == nil && !fi.IsDir() {
+			totalBytes = fi.Size()
+		}
+	}
+	ectx.Emit(EventEncryptionStarted{TotalBytes: totalBytes})
+
+	// Open the source reader (file, stdin, archive wrap, or caller-provided).
+	sourceReader, closeSource, err := openSourceReader(inputName, r, opts)
+	if err != nil {
+		return EncryptResult{}, err
+	}
+	if closeSource != nil {
+		defer closeSource()
+	}
+
+	if *opts.Compress {
+		sourceReader = wrapWithCompressor(sourceReader, nil)
+	}
+
+	if err := dispatchEncrypt(sourceReader, w, flags, opts, ectx); err != nil {
+		return EncryptResult{}, err
+	}
+
+	return EncryptResult{
+		Status:     "success",
+		Output:     inputName,
+		Flags:      flags,
+		ProfileID:  *opts.ProfileID,
+		Compressed: *opts.Compress,
+		IsArchive:  opts.IsArchive,
+		IsSigned:   len(opts.SigningKey) > 0,
+		IsStealth:  *opts.Stealth,
+	}, nil
+}
+
+// resolvePipelineOptions fills in nil option fields from engine configuration defaults.
+func (e *Engine) resolvePipelineOptions(ectx *EngineContext, opts *Options) {
 	if opts.Concurrency == nil {
 		opts.Concurrency = &e.Config.Performance.Concurrency
 	}
@@ -79,15 +139,34 @@ func (e *Engine) ProtectStream(ectx *EngineContext, inputName string, r io.Reade
 
 	if opts.ProfileID == nil {
 		opts.ProfileID = &e.Config.Performance.DefaultProfile
-		log.Debug("using default profile from config", "profile_id", *opts.ProfileID)
 	}
+}
 
-	// Governance: Validate the profile selection
-	if err := ectx.Policy.ValidateProfile(*opts.ProfileID); err != nil {
-		log.Error("profile validation failed", "err", err, "profile_id", *opts.ProfileID)
-		return EncryptResult{}, err
+// openSourceReader resolves the io.Reader for encryption from inputName or r.
+// When a file is opened internally, the returned closer must be called to release it.
+func openSourceReader(inputName string, r io.Reader, opts Options) (io.Reader, func(), error) {
+	if r != nil {
+		return r, nil, nil
 	}
+	if opts.IsArchive {
+		return wrapWithArchiver(inputName, nil), nil, nil
+	}
+	if inputName == "-" {
+		return os.Stdin, nil, nil
+	}
+	safeInput := filepath.Clean(inputName)
+	if strings.HasPrefix(safeInput, "..") {
+		return nil, nil, &ErrIO{Path: inputName, Reason: "path traversal not permitted"}
+	}
+	f, err := os.Open(safeInput)
+	if err != nil {
+		return nil, nil, &ErrIO{Path: safeInput, Reason: err.Error()}
+	}
+	return f, func() { _ = f.Close() }, nil
+}
 
+// buildEncryptFlags assembles the flags byte from resolved options.
+func buildEncryptFlags(opts Options) byte {
 	var flags byte
 	if opts.IsArchive {
 		flags |= FlagArchive
@@ -98,74 +177,23 @@ func (e *Engine) ProtectStream(ectx *EngineContext, inputName string, r io.Reade
 	if *opts.Stealth {
 		flags |= FlagStealth
 	}
+	return flags
+}
 
-	log.Debug("pipeline initializing", "flags", flags, "concurrency", *opts.Concurrency, "profile_id", *opts.ProfileID)
-
-	var totalBytes int64
-	if inputName != "-" && inputName != "" {
-		safeInput := filepath.Clean(inputName)
-		// Reject paths that escape upward regardless of form.
-		if strings.HasPrefix(safeInput, "..") {
-			return EncryptResult{}, &ErrIO{Path: inputName, Reason: "path traversal not permitted"}
-		}
-		if fi, err := os.Stat(safeInput); err == nil && !fi.IsDir() {
-			totalBytes = fi.Size()
-		}
-	}
-	ectx.Emit(EventEncryptionStarted{TotalBytes: totalBytes})
-
-	sourceReader := r
-	if sourceReader == nil {
-		if opts.IsArchive {
-			sourceReader = wrapWithArchiver(inputName, nil)
-		} else if inputName == "-" {
-			sourceReader = os.Stdin
-		} else {
-			safeInput := filepath.Clean(inputName)
-			if strings.HasPrefix(safeInput, "..") {
-				return EncryptResult{}, &ErrIO{Path: inputName, Reason: "path traversal not permitted"}
-			}
-			f, err := os.Open(safeInput)
-			if err != nil {
-				return EncryptResult{}, &ErrIO{Path: safeInput, Reason: err.Error()}
-			}
-			defer f.Close()
-			sourceReader = f
-		}
-	}
-
-	if *opts.Compress {
-		sourceReader = wrapWithCompressor(sourceReader, nil)
-	}
-
+// dispatchEncrypt routes to the correct encrypt function based on key material in opts.
+func dispatchEncrypt(r io.Reader, w io.Writer, flags byte, opts Options, ectx *EngineContext) error {
 	allPublicKeys := opts.Recipients
 	if len(opts.PublicKey) > 0 {
 		allPublicKeys = append(allPublicKeys, opts.PublicKey)
 	}
 
-	var err error
 	if len(allPublicKeys) > 0 {
-		err = EncryptStreamWithPublicKeysAndEvents(sourceReader, w, allPublicKeys, opts.SigningKey, flags, *opts.Concurrency, *opts.ProfileID, ectx)
-	} else if len(opts.SessionKey) > 0 {
-		err = EncryptStreamWithKey(sourceReader, w, opts.SessionKey, opts.SessionSalt, flags, *opts.Concurrency, *opts.ProfileID)
-	} else {
-		err = EncryptStreamWithEvents(sourceReader, w, opts.Passphrase, flags, *opts.Concurrency, *opts.ProfileID, ectx)
+		return EncryptStreamWithPublicKeysAndEvents(r, w, allPublicKeys, opts.SigningKey, flags, *opts.Concurrency, *opts.ProfileID, ectx)
 	}
-
-	if err != nil {
-		return EncryptResult{}, err
+	if len(opts.SessionKey) > 0 {
+		return EncryptStreamWithKey(r, w, opts.SessionKey, opts.SessionSalt, flags, *opts.Concurrency, *opts.ProfileID)
 	}
-
-	return EncryptResult{
-		Status:     "success",
-		Output:     inputName,
-		Flags:      flags,
-		ProfileID:  *opts.ProfileID,
-		Compressed: *opts.Compress,
-		IsArchive:  opts.IsArchive,
-		IsSigned:   len(opts.SigningKey) > 0,
-		IsStealth:  *opts.Stealth,
-	}, nil
+	return EncryptStreamWithEvents(r, w, opts.Passphrase, flags, *opts.Concurrency, *opts.ProfileID, ectx)
 }
 
 // Unprotect handles the full decryption pipeline: Handshake -> Decrypt -> Decompress -> Extract.
@@ -281,7 +309,8 @@ func BytePtr(b byte) *byte { return &b }
 // --- Legacy Shims ---
 
 // Protect handles the full encryption pipeline for a source (file, directory, or reader).
-// This is a shim that uses a default HumanPolicy engine.
+// This is a package-level shim that uses a crypto-only engine (no vault/identity/network).
+// Prefer constructing an Engine via NewStreamEngine and calling Protect directly.
 func Protect(inputName string, r io.Reader, w io.Writer, opts Options) (byte, error) {
 	ectx := &EngineContext{
 		Context: context.Background(),
@@ -297,14 +326,14 @@ func Protect(inputName string, r io.Reader, w io.Writer, opts Options) (byte, er
 		}
 	}
 
-	// Create a minimal engine to call the method
-	e := newShimEngine()
+	e := NewStreamEngine(nil)
 	res, err := e.Protect(ectx, inputName, r, w, opts)
 	return res.Flags, err
 }
 
 // Unprotect handles the full decryption pipeline: Handshake -> Decrypt -> Decompress -> Extract.
-// This is a shim that uses a default HumanPolicy engine.
+// This is a package-level shim that uses a crypto-only engine (no vault/identity/network).
+// Prefer constructing an Engine via NewStreamEngine and calling Unprotect directly.
 func Unprotect(r io.Reader, w io.Writer, outPath string, opts Options) (byte, error) {
 	ectx := &EngineContext{
 		Context: context.Background(),
@@ -312,7 +341,7 @@ func Unprotect(r io.Reader, w io.Writer, outPath string, opts Options) (byte, er
 		Policy:  &HumanPolicy{},
 	}
 
-	e := newShimEngine()
+	e := NewStreamEngine(nil)
 	res, err := e.Unprotect(ectx, r, w, outPath, opts)
 	return res.Flags, err
 }
