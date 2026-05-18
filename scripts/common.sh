@@ -7,7 +7,7 @@ fail_trap() {
     local exit_code=$?
     local mission_name=$1
     local compose_file=$2
-    local project_name=$3
+    local project_name=${3:-""}
 
     if [ $exit_code -ne 0 ]; then
         echo ""
