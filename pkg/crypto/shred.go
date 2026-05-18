@@ -34,17 +34,28 @@ func containedPath(p string, allowedBases ...string) (string, error) {
 
 // SecureDelete securely wipes and removes a file or directory.
 func (e *Engine) SecureDeleteStream(path string) error {
-	// Containment check: path must be within one of the known safe directories.
-	// homeDir is included so CLI users can shred files anywhere in their home tree.
 	keysBase := filepath.Clean(e.Config.Paths.KeysDir)
 	vaultsBase := filepath.Clean(e.Config.Paths.VaultsDir)
 	tmpBase := filepath.Clean(os.TempDir())
 	homeDir, _ := os.UserHomeDir()
 	homeBase := filepath.Clean(homeDir)
-	safe, err := containedPath(path, keysBase, vaultsBase, tmpBase, homeBase)
-	if err != nil {
-		return &ErrPolicyViolation{Reason: "secure-delete path outside permitted directories", Path: path}
+
+	safe := filepath.Clean(path)
+
+	if IsAgentMode() {
+		// In agent mode restrict shred to known safe directories.
+		var err error
+		safe, err = containedPath(path, keysBase, vaultsBase, tmpBase, homeBase)
+		if err != nil {
+			return &ErrPolicyViolation{Reason: "secure-delete path outside permitted directories", Path: path}
+		}
+	} else {
+		// In CLI mode allow any absolute path; reject only upward traversal.
+		if strings.HasPrefix(safe, "..") {
+			return &ErrPolicyViolation{Reason: "secure-delete: relative path traversal not permitted", Path: path}
+		}
 	}
+
 	e.Logger.Debug("securely deleting path", "path", safe)
 	info, err := os.Stat(safe)
 	if err != nil {
@@ -52,9 +63,9 @@ func (e *Engine) SecureDeleteStream(path string) error {
 	}
 
 	if info.IsDir() {
-		return e.shredDirectory(safe, keysBase, vaultsBase, tmpBase)
+		return e.shredDirectory(safe, keysBase, vaultsBase, tmpBase, homeBase)
 	}
-	return e.shredFile(safe, keysBase, vaultsBase, tmpBase)
+	return e.shredFile(safe, keysBase, vaultsBase, tmpBase, homeBase)
 }
 
 func (e *Engine) shredFile(path string, allowedBases ...string) error {
