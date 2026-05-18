@@ -1,0 +1,651 @@
+package crypto
+
+import (
+	"fmt"
+	"io"
+	"log/slog"
+	"path/filepath"
+	"strings"
+	"time"
+
+	"github.com/al-Zamakhshari/maknoon/pkg/tunnel"
+)
+
+// AuditEngine wraps the core Engine to provide transparent, zero-overhead auditing
+// via the decorator pattern. Every method delegates to the inner engine and logs
+// the outcome with timing metadata.
+type AuditEngine struct {
+	BaseEngine
+	Logger AuditLogger
+}
+
+func (e *AuditEngine) sanitizePath(path string) string {
+	if path == "-" || path == "" {
+		return path
+	}
+	home := GetUserHomeDir()
+	if strings.HasPrefix(path, home) {
+		return "~" + strings.TrimPrefix(path, home)
+	}
+	return filepath.Base(path)
+}
+
+func (e *AuditEngine) sanitizeMetadata(metadata map[string]any) map[string]any {
+	if insecure, ok := metadata["insecure"].(bool); ok && insecure {
+		metadata["SECURITY_WARNING"] = "transport security disabled"
+	}
+	return metadata
+}
+
+func (e *AuditEngine) Protect(ectx *EngineContext, inputName string, r io.Reader, w io.Writer, opts Options) (EncryptResult, error) {
+	start := time.Now()
+	res, err := e.Engine.Protect(ectx, inputName, r, w, opts)
+	duration := time.Since(start)
+
+	metadata := map[string]any{
+		"input":       e.sanitizePath(inputName),
+		"duration_ms": duration.Milliseconds(),
+		"flags":       res.Flags,
+	}
+	if opts.ProfileID != nil {
+		metadata["profile_id"] = *opts.ProfileID
+	}
+	if opts.Concurrency != nil {
+		metadata["concurrency"] = *opts.Concurrency
+	}
+	e.Logger.LogEvent("protect", e.sanitizeMetadata(metadata), err)
+	return res, err
+}
+
+func (e *AuditEngine) Unprotect(ectx *EngineContext, r io.Reader, w io.Writer, outPath string, opts Options) (DecryptResult, error) {
+	start := time.Now()
+	res, err := e.Engine.Unprotect(ectx, r, w, outPath, opts)
+	duration := time.Since(start)
+	e.Logger.LogEvent("unprotect", e.sanitizeMetadata(map[string]any{
+		"output":      e.sanitizePath(outPath),
+		"duration_ms": duration.Milliseconds(),
+		"flags":       res.Flags,
+	}), err)
+	return res, err
+}
+
+func (e *AuditEngine) FinalizeRestoration(ectx *EngineContext, pr io.Reader, w io.Writer, flags byte, outPath string, logger *slog.Logger) error {
+	return e.Engine.FinalizeRestoration(ectx, pr, w, flags, outPath, logger)
+}
+
+func (e *AuditEngine) LoadCustomProfile(ectx *EngineContext, path string) (*DynamicProfile, error) {
+	return e.Engine.LoadCustomProfile(ectx, path)
+}
+
+func (e *AuditEngine) GenerateRandomProfile(ectx *EngineContext, id byte) *DynamicProfile {
+	return e.Engine.GenerateRandomProfile(ectx, id)
+}
+
+func (e *AuditEngine) ValidateProfile(ectx *EngineContext, p *DynamicProfile) error {
+	return e.Engine.ValidateProfile(ectx, p)
+}
+
+func (e *AuditEngine) ValidateWormholeURL(ectx *EngineContext, u string) error {
+	return e.Engine.ValidateWormholeURL(ectx, u)
+}
+
+func (e *AuditEngine) VaultInitInstitutional(ectx *EngineContext, name string, threshold, shares int, peerIDs []string, passphrase []byte) (*VaultResult, error) {
+	start := time.Now()
+	res, err := e.Engine.VaultInitInstitutional(ectx, name, threshold, shares, peerIDs, passphrase)
+	duration := time.Since(start)
+	e.Logger.LogEvent("vault_init_institutional", map[string]any{
+		"name":        name,
+		"threshold":   threshold,
+		"shares":      shares,
+		"peer_count":  len(peerIDs),
+		"duration_ms": duration.Milliseconds(),
+	}, err)
+	return res, err
+}
+
+func (e *AuditEngine) VaultStatus(ectx *EngineContext, name string) (*VaultResult, error) {
+	return e.Engine.VaultStatus(ectx, name)
+}
+
+func (e *AuditEngine) VaultGet(ectx *EngineContext, vaultPath string, service string, passphrase []byte, pin string) (*VaultEntry, error) {
+	start := time.Now()
+	entry, err := e.Engine.VaultGet(ectx, vaultPath, service, passphrase, pin)
+	duration := time.Since(start)
+	e.Logger.LogEvent("vault_get", map[string]any{
+		"vault":       e.sanitizePath(vaultPath),
+		"service":     service,
+		"duration_ms": duration.Milliseconds(),
+	}, err)
+	return entry, err
+}
+
+func (e *AuditEngine) VaultSet(ectx *EngineContext, vaultPath string, entry *VaultEntry, passphrase []byte, pin string, overwrite bool) error {
+	start := time.Now()
+	err := e.Engine.VaultSet(ectx, vaultPath, entry, passphrase, pin, overwrite)
+	duration := time.Since(start)
+	var service string
+	if entry != nil {
+		service = entry.Service
+	}
+	e.Logger.LogEvent("vault_set", map[string]any{
+		"vault":       e.sanitizePath(vaultPath),
+		"service":     service,
+		"overwrite":   overwrite,
+		"duration_ms": duration.Milliseconds(),
+	}, err)
+	return err
+}
+
+func (e *AuditEngine) VaultRename(ectx *EngineContext, oldName, newName string) error {
+	start := time.Now()
+	err := e.Engine.VaultRename(ectx, oldName, newName)
+	duration := time.Since(start)
+	e.Logger.LogEvent("vault_rename", map[string]any{
+		"old":         e.sanitizePath(oldName),
+		"new":         e.sanitizePath(newName),
+		"duration_ms": duration.Milliseconds(),
+	}, err)
+	return err
+}
+
+func (e *AuditEngine) VaultDelete(ectx *EngineContext, name string) error {
+	start := time.Now()
+	err := e.Engine.VaultDelete(ectx, name)
+	duration := time.Since(start)
+	e.Logger.LogEvent("vault_delete", map[string]any{
+		"name":        e.sanitizePath(name),
+		"duration_ms": duration.Milliseconds(),
+	}, err)
+	return err
+}
+
+func (e *AuditEngine) VaultList(ectx *EngineContext, vaultPath string, passphrase []byte) ([]VaultListEntry, error) {
+	start := time.Now()
+	res, err := e.Engine.VaultList(ectx, vaultPath, passphrase)
+	duration := time.Since(start)
+	e.Logger.LogEvent("vault_list", map[string]any{
+		"vault":       e.sanitizePath(vaultPath),
+		"duration_ms": duration.Milliseconds(),
+		"count":       len(res),
+	}, err)
+	return res, err
+}
+
+func (e *AuditEngine) VaultSplit(ectx *EngineContext, vaultPath string, threshold, shares int, passphrase string) ([]string, error) {
+	start := time.Now()
+	shards, err := e.Engine.VaultSplit(ectx, vaultPath, threshold, shares, passphrase)
+	duration := time.Since(start)
+	e.Logger.LogEvent("vault_split", map[string]any{
+		"vault":       e.sanitizePath(vaultPath),
+		"duration_ms": duration.Milliseconds(),
+	}, err)
+	return shards, err
+}
+
+func (e *AuditEngine) VaultRecover(ectx *EngineContext, mnemonics []string, vaultPath string, output string, passphrase string) (string, error) {
+	start := time.Now()
+	path, err := e.Engine.VaultRecover(ectx, mnemonics, vaultPath, output, passphrase)
+	duration := time.Since(start)
+	e.Logger.LogEvent("vault_recover", map[string]any{
+		"vault":       e.sanitizePath(vaultPath),
+		"duration_ms": duration.Milliseconds(),
+	}, err)
+	return path, err
+}
+
+func (e *AuditEngine) P2PSend(ectx *EngineContext, identityName, inputName string, r io.Reader, opts P2PSendOptions) (string, <-chan P2PStatus, error) {
+	start := time.Now()
+	code, status, err := e.Engine.P2PSend(ectx, identityName, inputName, r, opts)
+	duration := time.Since(start)
+	e.Logger.LogEvent("p2p_send", map[string]any{
+		"identity":    identityName,
+		"input":       inputName,
+		"target":      opts.To,
+		"duration_ms": duration.Milliseconds(),
+	}, err)
+	return code, status, err
+}
+
+func (e *AuditEngine) P2PReceive(ectx *EngineContext, identityName, code string, opts P2PReceiveOptions) (<-chan P2PStatus, error) {
+	start := time.Now()
+	status, err := e.Engine.P2PReceive(ectx, identityName, code, opts)
+	duration := time.Since(start)
+	e.Logger.LogEvent("p2p_receive", map[string]any{
+		"identity":    identityName,
+		"code":        code,
+		"duration_ms": duration.Milliseconds(),
+	}, err)
+	return status, err
+}
+
+func (e *AuditEngine) IdentityActive(ectx *EngineContext) ([]string, error) {
+	return e.Engine.IdentityActive(ectx)
+}
+
+func (e *AuditEngine) IdentityInfo(ectx *EngineContext, name string) (*IdentityInfoResult, error) {
+	start := time.Now()
+	res, err := e.Engine.IdentityInfo(ectx, name)
+	duration := time.Since(start)
+	e.Logger.LogEvent("identity_info", map[string]any{
+		"name":        name,
+		"duration_ms": duration.Milliseconds(),
+	}, err)
+	return res, err
+}
+
+func (e *AuditEngine) IdentityDelete(ectx *EngineContext, name string) error {
+	start := time.Now()
+	err := e.Engine.IdentityDelete(ectx, name)
+	duration := time.Since(start)
+	e.Logger.LogEvent("identity_delete", map[string]any{
+		"name":        e.sanitizePath(name),
+		"duration_ms": duration.Milliseconds(),
+	}, err)
+	return err
+}
+
+func (e *AuditEngine) IdentityRename(ectx *EngineContext, oldName, newName string) error {
+	start := time.Now()
+	err := e.Engine.IdentityRename(ectx, oldName, newName)
+	duration := time.Since(start)
+	e.Logger.LogEvent("identity_rename", map[string]any{
+		"old":         e.sanitizePath(oldName),
+		"new":         e.sanitizePath(newName),
+		"duration_ms": duration.Milliseconds(),
+	}, err)
+	return err
+}
+
+func (e *AuditEngine) IdentitySplit(ectx *EngineContext, name string, threshold, shares int, passphrase string) ([]string, error) {
+	start := time.Now()
+	shards, err := e.Engine.IdentitySplit(ectx, name, threshold, shares, passphrase)
+	duration := time.Since(start)
+	e.Logger.LogEvent("identity_split", map[string]any{
+		"name":        e.sanitizePath(name),
+		"threshold":   threshold,
+		"shares":      shares,
+		"duration_ms": duration.Milliseconds(),
+	}, err)
+	return shards, err
+}
+
+func (e *AuditEngine) IdentityPublish(ectx *EngineContext, handle string, opts IdentityPublishOptions) error {
+	start := time.Now()
+	err := e.Engine.IdentityPublish(ectx, handle, opts)
+	duration := time.Since(start)
+	e.Logger.LogEvent("identity_publish", map[string]any{
+		"handle":      handle,
+		"duration_ms": duration.Milliseconds(),
+	}, err)
+	return err
+}
+
+func (e *AuditEngine) CreateIdentity(ectx *EngineContext, output string, passphrase []byte, pin string, agent bool, profile string) (*IdentityResult, error) {
+	start := time.Now()
+	res, err := e.Engine.CreateIdentity(ectx, output, passphrase, pin, agent, profile)
+	duration := time.Since(start)
+	e.Logger.LogEvent("identity_create", map[string]any{
+		"output":      output,
+		"profile":     profile,
+		"duration_ms": duration.Milliseconds(),
+	}, err)
+	return res, err
+}
+
+func (e *AuditEngine) IdentityCombine(ectx *EngineContext, mnemonics []string, output, passphrase string, noPassword bool) (string, error) {
+	start := time.Now()
+	path, err := e.Engine.IdentityCombine(ectx, mnemonics, output, passphrase, noPassword)
+	duration := time.Since(start)
+	e.Logger.LogEvent("identity_combine", map[string]any{
+		"output":      e.sanitizePath(output),
+		"duration_ms": duration.Milliseconds(),
+	}, err)
+	return path, err
+}
+
+func (e *AuditEngine) ContactAdd(ectx *EngineContext, petname, kemPub, sigPub, note string) error {
+	start := time.Now()
+	err := e.Engine.ContactAdd(ectx, petname, kemPub, sigPub, note)
+	duration := time.Since(start)
+	e.Logger.LogEvent("contact_add", map[string]any{
+		"petname":     petname,
+		"duration_ms": duration.Milliseconds(),
+	}, err)
+	return err
+}
+
+func (e *AuditEngine) ContactList(ectx *EngineContext) ([]*Contact, error) {
+	return e.Engine.ContactList(ectx)
+}
+
+func (e *AuditEngine) ContactDelete(ectx *EngineContext, petname string) error {
+	start := time.Now()
+	err := e.Engine.ContactDelete(ectx, petname)
+	duration := time.Since(start)
+	e.Logger.LogEvent("contact_delete", map[string]any{
+		"petname":     petname,
+		"duration_ms": duration.Milliseconds(),
+	}, err)
+	return err
+}
+
+func (e *AuditEngine) ResolvePublicKey(ectx *EngineContext, input string, tofu bool) ([]byte, error) {
+	return e.Engine.ResolvePublicKey(ectx, input, tofu)
+}
+
+func (e *AuditEngine) LoadPrivateKey(ectx *EngineContext, path string, passphrase []byte, pin string, agent bool) ([]byte, error) {
+	start := time.Now()
+	key, err := e.Engine.LoadPrivateKey(ectx, path, passphrase, pin, agent)
+	duration := time.Since(start)
+	e.Logger.LogEvent("load_private_key", map[string]any{
+		"path":        e.sanitizePath(path),
+		"duration_ms": duration.Milliseconds(),
+	}, err)
+	return key, err
+}
+
+func (e *AuditEngine) LoadIdentity(ectx *EngineContext, name string, passphrase []byte, pin string, agent bool) (*Identity, error) {
+	start := time.Now()
+	id, err := e.Engine.LoadIdentity(ectx, name, passphrase, pin, agent)
+	duration := time.Since(start)
+	e.Logger.LogEvent("load_identity", map[string]any{
+		"name":        name,
+		"duration_ms": duration.Milliseconds(),
+	}, err)
+	return id, err
+}
+
+func (e *AuditEngine) ResolveKeyPath(ectx *EngineContext, path, envVar string) string {
+	return e.Engine.ResolveKeyPath(ectx, path, envVar)
+}
+
+func (e *AuditEngine) ResolveBaseKeyPath(ectx *EngineContext, name string) (string, string, error) {
+	return e.Engine.ResolveBaseKeyPath(ectx, name)
+}
+
+func (e *AuditEngine) GeneratePassword(ectx *EngineContext, length int, noSymbols bool) (string, error) {
+	return e.Engine.GeneratePassword(ectx, length, noSymbols)
+}
+
+func (e *AuditEngine) GeneratePassphrase(ectx *EngineContext, words int, separator string) (string, error) {
+	return e.Engine.GeneratePassphrase(ectx, words, separator)
+}
+
+func (e *AuditEngine) SecureDelete(path string) error {
+	start := time.Now()
+	err := e.Engine.SecureDelete(path)
+	duration := time.Since(start)
+	e.Logger.LogEvent("secure_delete", map[string]any{
+		"path":        e.sanitizePath(path),
+		"duration_ms": duration.Milliseconds(),
+	}, err)
+	return err
+}
+
+func (e *AuditEngine) GetPolicy() SecurityPolicy {
+	return e.Engine.GetPolicy()
+}
+
+func (e *AuditEngine) GetConfig() *Config {
+	return e.Engine.GetConfig()
+}
+
+func (e *AuditEngine) UpdateConfig(ectx *EngineContext, newConf *Config) error {
+	start := time.Now()
+	err := e.Engine.UpdateConfig(ectx, newConf)
+	duration := time.Since(start)
+	e.Logger.LogEvent("update_config", map[string]any{
+		"duration_ms": duration.Milliseconds(),
+	}, err)
+	return err
+}
+
+func (e *AuditEngine) RegisterProfile(ectx *EngineContext, name string, dp *DynamicProfile) error {
+	start := time.Now()
+	err := e.Engine.RegisterProfile(ectx, name, dp)
+	duration := time.Since(start)
+	e.Logger.LogEvent("register_profile", map[string]any{
+		"name":        name,
+		"profile_id":  dp.ID(),
+		"duration_ms": duration.Milliseconds(),
+	}, err)
+	return err
+}
+
+func (e *AuditEngine) RemoveProfile(ectx *EngineContext, name string) error {
+	start := time.Now()
+	err := e.Engine.RemoveProfile(ectx, name)
+	duration := time.Since(start)
+	e.Logger.LogEvent("remove_profile", map[string]any{
+		"name":        name,
+		"duration_ms": duration.Milliseconds(),
+	}, err)
+	return err
+}
+
+func (e *AuditEngine) Diagnostic() DiagnosticResult {
+	return e.Engine.Diagnostic()
+}
+
+func (e *AuditEngine) NetworkStatus(ectx *EngineContext) (NetStatusResult, error) {
+	return e.Engine.NetworkStatus(ectx)
+}
+
+func (e *AuditEngine) AuditExport(ectx *EngineContext) ([]AuditEntry, error) {
+	return e.Engine.AuditExport(ectx)
+}
+
+func (e *AuditEngine) Inspect(ectx *EngineContext, in io.Reader, stealth bool) (*HeaderInfo, error) {
+	return e.Engine.Inspect(ectx, in, stealth)
+}
+
+func (e *AuditEngine) TunnelStart(ectx *EngineContext, opts tunnel.TunnelOptions) (tunnel.TunnelStatus, error) {
+	start := time.Now()
+	status, err := e.Engine.TunnelStart(ectx, opts)
+	duration := time.Since(start)
+	e.Logger.LogEvent("tunnel_start", e.sanitizeMetadata(map[string]any{
+		"remote":      opts.RemoteEndpoint,
+		"proxy_port":  opts.LocalProxyPort,
+		"insecure":    opts.Insecure,
+		"duration_ms": duration.Milliseconds(),
+	}), err)
+	return status, err
+}
+
+func (e *AuditEngine) TunnelListen(ectx *EngineContext, addr string, mode string, identity string) (NetworkResult, error) {
+	start := time.Now()
+	res, err := e.Engine.TunnelListen(ectx, addr, mode, identity)
+	duration := time.Since(start)
+	e.Logger.LogEvent("tunnel_listen", map[string]any{
+		"addr":        addr,
+		"mode":        mode,
+		"identity":    identity,
+		"duration_ms": duration.Milliseconds(),
+	}, err)
+	return res, err
+}
+
+func (e *AuditEngine) TunnelStop(ectx *EngineContext) error {
+	start := time.Now()
+	err := e.Engine.TunnelStop(ectx)
+	duration := time.Since(start)
+	e.Logger.LogEvent("tunnel_stop", map[string]any{
+		"duration_ms": duration.Milliseconds(),
+	}, err)
+	return err
+}
+
+func (e *AuditEngine) TunnelStatus(ectx *EngineContext) (tunnel.TunnelStatus, error) {
+	return e.Engine.TunnelStatus(ectx)
+}
+
+func (e *AuditEngine) ChatStart(ectx *EngineContext, identityName string, target string) (*P2PChatSession, error) {
+	start := time.Now()
+	sess, err := e.Engine.ChatStart(ectx, identityName, target)
+	duration := time.Since(start)
+	e.Logger.LogEvent("chat_start", map[string]any{
+		"identity":    identityName,
+		"target":      target,
+		"duration_ms": duration.Milliseconds(),
+	}, err)
+	return sess, err
+}
+
+func (e *AuditEngine) Sign(ectx *EngineContext, data []byte, privKey []byte) ([]byte, error) {
+	start := time.Now()
+	sig, err := e.Engine.Sign(ectx, data, privKey)
+	duration := time.Since(start)
+	e.Logger.LogEvent("sign", map[string]any{
+		"data_size":   len(data),
+		"duration_ms": duration.Milliseconds(),
+	}, err)
+	return sig, err
+}
+
+func (e *AuditEngine) Verify(ectx *EngineContext, data []byte, sig []byte, pubKey []byte) (bool, error) {
+	start := time.Now()
+	res, err := e.Engine.Verify(ectx, data, sig, pubKey)
+	duration := time.Since(start)
+	e.Logger.LogEvent("verify", map[string]any{
+		"data_size":   len(data),
+		"duration_ms": duration.Milliseconds(),
+		"verified":    res,
+	}, err)
+	return res, err
+}
+
+func (e *AuditEngine) Aggregate(ectx *EngineContext, signatures [][]byte) ([]byte, error) {
+	start := time.Now()
+	res, err := e.Engine.Aggregate(ectx, signatures)
+	duration := time.Since(start)
+	e.Logger.LogEvent("signature_aggregate", map[string]any{
+		"count":       len(signatures),
+		"duration_ms": duration.Milliseconds(),
+	}, err)
+	return res, err
+}
+
+func (e *AuditEngine) VerifyThreshold(ectx *EngineContext, data []byte, aggregateSig []byte, authorizedKeys [][]byte, threshold int) (bool, error) {
+	start := time.Now()
+	res, err := e.Engine.VerifyThreshold(ectx, data, aggregateSig, authorizedKeys, threshold)
+	duration := time.Since(start)
+	e.Logger.LogEvent("verify_threshold", map[string]any{
+		"data_size":   len(data),
+		"key_count":   len(authorizedKeys),
+		"threshold":   threshold,
+		"duration_ms": duration.Milliseconds(),
+		"verified":    res,
+	}, err)
+	return res, err
+}
+
+func (e *AuditEngine) Wrap(ectx *EngineContext, pubKey []byte) (DataKey, error) {
+	start := time.Now()
+	res, err := e.Engine.Wrap(ectx, pubKey)
+	duration := time.Since(start)
+	e.Logger.LogEvent("kms_wrap", map[string]any{
+		"duration_ms": duration.Milliseconds(),
+	}, err)
+	return res, err
+}
+
+func (e *AuditEngine) Unwrap(ectx *EngineContext, wrappedKey []byte, privKey []byte) ([]byte, error) {
+	start := time.Now()
+	res, err := e.Engine.Unwrap(ectx, wrappedKey, privKey)
+	duration := time.Since(start)
+	e.Logger.LogEvent("kms_unwrap", map[string]any{
+		"duration_ms": duration.Milliseconds(),
+	}, err)
+	return res, err
+}
+
+func (e *AuditEngine) ReassembleFragments(srcDir string, w io.Writer, authorizedPubKey []byte) error {
+	start := time.Now()
+	err := e.Engine.ReassembleFragments(srcDir, w, authorizedPubKey)
+	duration := time.Since(start)
+	e.Logger.LogEvent("fragment_reassemble", map[string]any{
+		"src_dir":     e.sanitizePath(srcDir),
+		"duration_ms": duration.Milliseconds(),
+	}, err)
+	return err
+}
+
+func (e *AuditEngine) WorkspaceCreate(ectx *EngineContext, name string) (string, error) {
+	start := time.Now()
+	path, err := e.Engine.WorkspaceCreate(ectx, name)
+	duration := time.Since(start)
+	e.Logger.LogEvent("workspace_create", map[string]any{
+		"name":        name,
+		"path":        e.sanitizePath(path),
+		"duration_ms": duration.Milliseconds(),
+	}, err)
+	return path, err
+}
+
+func (e *AuditEngine) WorkspaceShred(ectx *EngineContext, path string) error {
+	start := time.Now()
+	err := e.Engine.WorkspaceShred(ectx, path)
+	duration := time.Since(start)
+	e.Logger.LogEvent("workspace_shred", map[string]any{
+		"path":        e.sanitizePath(path),
+		"duration_ms": duration.Milliseconds(),
+	}, err)
+	return err
+}
+
+func (e *AuditEngine) VaultRotate(ectx *EngineContext, vaultPath string, oldPassphrase, newPassphrase []byte) error {
+	start := time.Now()
+	err := e.Engine.VaultRotate(ectx, vaultPath, oldPassphrase, newPassphrase)
+	duration := time.Since(start)
+	e.Logger.LogEvent("vault_rotate", map[string]any{
+		"vault":       e.sanitizePath(vaultPath),
+		"duration_ms": duration.Milliseconds(),
+	}, err)
+	return err
+}
+
+func (e *AuditEngine) VaultCheckShards(ectx *EngineContext, mnemonics []string) (*VaultResult, error) {
+	start := time.Now()
+	res, err := e.Engine.VaultCheckShards(ectx, mnemonics)
+	duration := time.Since(start)
+	e.Logger.LogEvent("vault_check_shards", map[string]any{
+		"shard_count": len(mnemonics),
+		"duration_ms": duration.Milliseconds(),
+	}, err)
+	return res, err
+}
+
+func (e *AuditEngine) QuorumRequest(ectx *EngineContext, identityName string, targets []string, action QuorumAction, resource, purpose string) ([]QuorumResponse, error) {
+	start := time.Now()
+	resps, err := e.Engine.QuorumRequest(ectx, identityName, targets, action, resource, purpose)
+	duration := time.Since(start)
+
+	approved := 0
+	for _, r := range resps {
+		if r.Approved {
+			approved++
+		}
+	}
+	e.Logger.LogEvent("quorum_request_init", map[string]any{
+		"action":       action,
+		"resource":     resource,
+		"target_count": len(targets),
+		"approved":     approved,
+		"duration_ms":  duration.Milliseconds(),
+	}, err)
+	return resps, err
+}
+
+func (e *AuditEngine) Close() error {
+	var errs []string
+	if err := e.Engine.Close(); err != nil {
+		errs = append(errs, err.Error())
+	}
+	if err := e.Logger.Close(); err != nil {
+		errs = append(errs, err.Error())
+	}
+	if len(errs) > 0 {
+		return fmt.Errorf("errors closing audit engine: %s", strings.Join(errs, "; "))
+	}
+	return nil
+}

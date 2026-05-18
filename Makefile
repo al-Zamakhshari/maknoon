@@ -1,4 +1,4 @@
-.PHONY: build test docker-build clean completion man build-matrix
+.PHONY: build test bench docker-build clean completion man build-matrix
 
 # Build parameters
 BINARY_NAME=maknoon
@@ -56,6 +56,10 @@ test-gateway: build
 	@./scripts/test-gateway.sh
 
 # Run all industrial smoke tests
+# Run crypto benchmarks — KDF, chunk pipeline, parallel encrypt/decrypt, data sizes
+bench:
+	go test -bench=. -benchmem -benchtime=10s ./pkg/crypto/
+
 smoke: build
 	@echo "🔥 Running Maknoon Industrial Smoke Suite..."
 	@chmod +x scripts/smoke-audit.sh scripts/smoke-resilience.sh scripts/smoke-vault-safety.sh scripts/smoke-governance.sh scripts/mission-orchestrated-quorum.sh

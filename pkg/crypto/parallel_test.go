@@ -117,6 +117,65 @@ func BenchmarkDecryption(b *testing.B) {
 	}
 }
 
+// BenchmarkKDF isolates Argon2id key derivation cost across the default profile.
+func BenchmarkKDF(b *testing.B) {
+	password := []byte("bench-kdf-password")
+	salt := make([]byte, 16)
+	_, _ = rand.Read(salt)
+
+	p := DefaultProfile()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = p.DeriveKey(password, salt)
+	}
+}
+
+// BenchmarkEncryptionDataSizes shows how throughput scales with payload size.
+func BenchmarkEncryptionDataSizes(b *testing.B) {
+	password := []byte("bench-size")
+	sizes := []struct {
+		label string
+		bytes int
+	}{
+		{"1MB", 1 * 1024 * 1024},
+		{"10MB", 10 * 1024 * 1024},
+		{"100MB", 100 * 1024 * 1024},
+	}
+
+	for _, s := range sizes {
+		data := make([]byte, s.bytes)
+		_, _ = rand.Read(data)
+		b.Run(s.label, func(b *testing.B) {
+			b.SetBytes(int64(s.bytes))
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				if err := EncryptStream(bytes.NewReader(data), io.Discard, password, FlagNone, 0, 0); err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+	}
+}
+
+// BenchmarkChunkPipeline measures the overhead of a single 64KB chunk encrypt+decrypt cycle.
+func BenchmarkChunkPipeline(b *testing.B) {
+	password := []byte("bench-chunk")
+	chunk := make([]byte, ChunkSize)
+	_, _ = rand.Read(chunk)
+
+	b.SetBytes(int64(ChunkSize))
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		var enc bytes.Buffer
+		if err := EncryptStream(bytes.NewReader(chunk), &enc, password, FlagNone, 1, 0); err != nil {
+			b.Fatal(err)
+		}
+		if _, _, err := DecryptStream(bytes.NewReader(enc.Bytes()), io.Discard, password, 1, false); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
 // faultyReader simulates a stream that breaks unexpectedly (e.g. network drop)
 type faultyReader struct {
 	data      []byte
