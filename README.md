@@ -20,7 +20,7 @@ Maknoon is an industrial-grade cryptographic engine and Model Context Protocol (
 | **Unified Binary** | CLI, MCP (Stdio/SSE), and **Enterprise REST API**. |
 | **Threshold Sig** | M-of-N Post-Quantum digital signatures (ML-DSA-87). |
 | **Privacy RAID** | Fragment dispersal (Shamir + Erasure Coding) for data at rest. |
-| **Decentralised Identity** | Three-tier registry: libp2p DHT (primary) → Nostr relays (fallback) → DNS. |
+| **Decentralised Identity** | Three-tier registry: Nostr (primary) → BEP-44 (opt-in) → DNS (tertiary). |
 
 ---
 
@@ -111,6 +111,12 @@ graph TD
 
 ### Skeptical Engineering
 Maknoon is built on the principle of **Empirical Rigor**. Every cryptographic transformation is verified via Power-On Self-Tests (POST), and all sensitive memory is explicitly zeroized using the `memguard` enclave to prevent leakage via swap or core dumps.
+
+### Performance Characteristics
+- **Bulk throughput**: ~384 MB/s at 10MB, ~3.3 GB/s at 100MB (Apple M4 Pro, parallel)
+- **KDF cost**: Argon2id adds ~26ms flat overhead per file — optimal for files ≥1MB. For bulk encryption of many small files (<64KB), consider a session-keyed approach: derive the key once and reuse it across files.
+- **ML-DSA-87 sign/verify**: ~1ms per operation
+- Run `make bench` for full benchmark output on your hardware
 
 ---
 

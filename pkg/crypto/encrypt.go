@@ -394,9 +394,9 @@ func encryptionSequencer(w io.Writer, results <-chan encryptResult, errChan <-ch
 }
 
 func writeChunk(w io.Writer, data []byte) error {
-	lenBuf := make([]byte, 4)
-	binary.LittleEndian.PutUint32(lenBuf, uint32(len(data)))
-	if _, err := w.Write(lenBuf); err != nil {
+	var lenBuf [4]byte // stack-allocated — avoids one heap alloc per 64KB chunk
+	binary.LittleEndian.PutUint32(lenBuf[:], uint32(len(data)))
+	if _, err := w.Write(lenBuf[:]); err != nil {
 		return err
 	}
 	if _, err := w.Write(data); err != nil {

@@ -7,6 +7,8 @@ import (
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestIdentityRecordSerializationRoundtrip(t *testing.T) {
@@ -260,4 +262,49 @@ func TestBEP44HandleExtraction(t *testing.T) {
 		t.Errorf("handle mismatch: got %s want %s", handle, expectedHandle)
 	}
 	_ = pubKey
+}
+
+// TestIdentityRecordReplayAcceptance documents a known limitation: identity records
+// use a Timestamp field but NO nonce, so a captured valid record can be re-published
+// at a later time. The signature will still verify because the timestamp is part of
+// the signed payload but there is no counter or challenge preventing re-use.
+//
+// This is an ACCEPTANCE TEST for a known gap — see docs/architecture/threat-model.md
+// under "Known Limitations". Mitigation: relying parties should check Timestamp
+// freshness and implement their own replay window.
+func TestIdentityRecordReplayAcceptance(t *testing.T) {
+	_, _, spub, spriv, err := GeneratePQKeyPair(1)
+	if err != nil {
+		t.Fatalf("GeneratePQKeyPair: %v", err)
+	}
+
+	// Create and sign a valid record
+	rec := &IdentityRecord{
+		Handle:    "@replay-test",
+		KEMPubKey: []byte("fakekempub"),
+		SIGPubKey: spub,
+		Timestamp: time.Now().Add(-24 * time.Hour), // 24 hours old
+	}
+	require.NoError(t, rec.Sign(spriv))
+
+	// The record verifies even though it is 24 hours old — no replay protection
+	if !rec.Verify() {
+		t.Fatal("record should still verify (documenting the lack of expiry)")
+	}
+
+	// Re-signing with the same key material produces a new valid record from old data
+	rec2 := &IdentityRecord{
+		Handle:    rec.Handle,
+		KEMPubKey: rec.KEMPubKey,
+		SIGPubKey: rec.SIGPubKey,
+		Timestamp: rec.Timestamp, // same old timestamp
+	}
+	require.NoError(t, rec2.Sign(spriv))
+	if !rec2.Verify() {
+		t.Fatal("replayed record should verify — documenting replay acceptance")
+	}
+
+	// KNOWN GAP: a resolver accepting this record cannot distinguish it from a
+	// fresh publish. Mitigation is documented in threat-model.md.
+	t.Log("KNOWN GAP: identity records have no nonce — replay within valid signature window is possible")
 }

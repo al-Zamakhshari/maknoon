@@ -3,6 +3,7 @@ package crypto
 import (
 	"bytes"
 	"crypto/rand"
+	"crypto/sha256"
 	"fmt"
 	"io"
 	"testing"
@@ -216,4 +217,39 @@ func TestPipelineCancellation(t *testing.T) {
 	if ioErr, ok := err.(*ErrIO); !ok || ioErr.Reason != "simulated stream failure" {
 		t.Fatalf("Expected ErrIO with 'simulated stream failure', got: %v", err)
 	}
+}
+
+// TestLargeFileRoundtrip encrypts a 1.5GB payload and verifies the decrypted
+// SHA-256 matches the original. Skipped in -short mode.
+func TestLargeFileRoundtrip(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping 1.5GB roundtrip in short mode")
+	}
+
+	const size = 1536 * 1024 * 1024 // 1.5GB
+	password := []byte("large-file-roundtrip-pass")
+
+	orig := make([]byte, size)
+	if _, err := io.ReadFull(rand.Reader, orig); err != nil {
+		t.Fatal(err)
+	}
+	origHash := sha256.Sum256(orig)
+
+	// Encrypt
+	var enc bytes.Buffer
+	if err := EncryptStream(bytes.NewReader(orig), &enc, password, FlagNone, 0, 0); err != nil {
+		t.Fatalf("EncryptStream failed: %v", err)
+	}
+
+	// Decrypt
+	var dec bytes.Buffer
+	if _, _, err := DecryptStream(bytes.NewReader(enc.Bytes()), &dec, password, 0, false); err != nil {
+		t.Fatalf("DecryptStream failed: %v", err)
+	}
+
+	decHash := sha256.Sum256(dec.Bytes())
+	if origHash != decHash {
+		t.Error("SHA-256 mismatch after 1.5GB roundtrip")
+	}
+	t.Logf("1.5GB roundtrip verified: encrypted=%d bytes, decrypted=%d bytes", enc.Len(), dec.Len())
 }

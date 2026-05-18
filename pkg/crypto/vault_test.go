@@ -2,9 +2,11 @@ package crypto
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -153,4 +155,67 @@ func TestVaultBlob(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, blobData, string(entryRetrieved.Blob))
 	assert.Empty(t, entryRetrieved.Password)
+}
+
+// TestConcurrentVaultAccess verifies that 10 goroutines can simultaneously set
+// and get different services in the same vault without data races or corruption.
+func TestConcurrentVaultAccess(t *testing.T) {
+	tempDir := t.TempDir()
+	cfg := DefaultConfig()
+	cfg.Paths.VaultsDir = tempDir
+
+	engine, err := NewEngine(&HumanPolicy{}, nil, cfg, nil, slog.Default())
+	require.NoError(t, err)
+	defer engine.Close()
+
+	vaultPath := filepath.Join(tempDir, "concurrent.vault")
+	passphrase := []byte("concurrent-test-pass")
+	ectx := &EngineContext{Context: context.Background(), Policy: &HumanPolicy{}}
+
+	const workers = 10
+	var wg sync.WaitGroup
+	errs := make(chan error, workers*2)
+
+	// Phase 1: all workers set their own service entry
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func(n int) {
+			defer wg.Done()
+			entry := &VaultEntry{
+				Service:  fmt.Sprintf("svc-%d", n),
+				Password: SecretBytes(fmt.Sprintf("pass-%d", n)),
+			}
+			if err := engine.VaultSet(ectx, vaultPath, entry, passphrase, "", false); err != nil {
+				errs <- fmt.Errorf("worker %d set: %w", n, err)
+			}
+		}(i)
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		t.Error(err)
+	}
+
+	// Phase 2: verify each entry is readable and correct
+	errs2 := make(chan error, workers)
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func(n int) {
+			defer wg.Done()
+			got, err := engine.VaultGet(ectx, vaultPath, fmt.Sprintf("svc-%d", n), passphrase, "")
+			if err != nil {
+				errs2 <- fmt.Errorf("worker %d get: %w", n, err)
+				return
+			}
+			expected := fmt.Sprintf("pass-%d", n)
+			if string(got.Password) != expected {
+				errs2 <- fmt.Errorf("worker %d: expected %q, got %q", n, expected, got.Password)
+			}
+		}(i)
+	}
+	wg.Wait()
+	close(errs2)
+	for err := range errs2 {
+		t.Error(err)
+	}
 }

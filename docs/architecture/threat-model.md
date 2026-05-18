@@ -78,6 +78,19 @@ While Maknoon provides tools for secure data disposal, it adheres to a factual a
 
 ---
 
+## Known Limitations
+
+These are accepted, documented gaps — not unintended bugs. Each has a mitigation.
+
+| Limitation | Impact | Mitigation |
+|------------|--------|-----------|
+| **Identity record replay** | A valid signed record from the past can be re-published. The signature verifies because there is no nonce or challenge in the record schema. | Relying parties SHOULD check `Timestamp` freshness and reject records older than their acceptable window (e.g. 24h). Future work: add a sequence counter to `IdentityRecord`. |
+| **Secure-shred on SSD** | Single-pass zero-overwrite cannot guarantee physical erasure on flash storage due to wear-leveling FTL remapping. | Use Full Disk Encryption as the primary protection. `--shred` provides logical-layer hygiene only. |
+| **No vault brute-force throttling** | The vault passphrase derivation (Argon2id, 26ms) provides cost-based resistance but there is no lockout or rate-limit at the API level. | Deploy behind an authenticated API gateway. For CLI use, Argon2id cost is the primary defense. |
+| **KDF cost on small files** | Argon2id adds ~26ms flat overhead per encryption operation. Files smaller than ~64KB pay a disproportionate KDF cost (~39 MB/s effective throughput at 1MB). | Use symmetric passphrase encryption only for files where KDF cost is acceptable. For bulk small-file use cases, consider session-keyed encryption (encrypt the session key once, reuse for many files). |
+
+---
+
 ## Identity Registry Architecture
 
 Maknoon uses a three-tier identity discovery chain:

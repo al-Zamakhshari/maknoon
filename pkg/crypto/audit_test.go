@@ -248,3 +248,35 @@ func TestAuditSignatureVerification(t *testing.T) {
 		}
 	}
 }
+
+// TestAuditChainTamperDetected writes 5 entries, corrupts entry 3, then verifies
+// that VerifyChain detects the break at entry 4.
+func TestAuditChainTamperDetected(t *testing.T) {
+	tmpLog := filepath.Join(t.TempDir(), "tamper_audit.log")
+	logger, err := NewJSONFileLogger(tmpLog)
+	if err != nil {
+		t.Fatalf("NewJSONFileLogger: %v", err)
+	}
+	for i := 0; i < 5; i++ {
+		logger.LogEvent("op", map[string]any{"i": i}, nil)
+	}
+	logger.Close()
+
+	// Read all lines, corrupt the 3rd (index 2), rewrite the file.
+	data, _ := os.ReadFile(tmpLog)
+	lines := bytes.Split(bytes.TrimRight(data, "\n"), []byte("\n"))
+	if len(lines) < 5 {
+		t.Fatalf("expected 5 entries, got %d", len(lines))
+	}
+	// Corrupt the raw JSON of entry index 2 — change "op" to "XX"
+	lines[2] = bytes.Replace(lines[2], []byte(`"op"`), []byte(`"XX"`), 1)
+	os.WriteFile(tmpLog, bytes.Join(lines, []byte("\n")), 0600)
+
+	// VerifyChain should detect the break at entry 3 (index 3's PrevHash won't match)
+	err = VerifyChain(tmpLog)
+	if err == nil {
+		t.Error("VerifyChain should have detected the tampered entry but returned nil")
+	} else {
+		t.Logf("Tamper correctly detected: %v", err)
+	}
+}

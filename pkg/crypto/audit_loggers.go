@@ -195,3 +195,37 @@ func (l *ConsoleAuditLogger) LogEvent(action string, metadata map[string]any, er
 func (l *ConsoleAuditLogger) SetSigningKey(key []byte) {}
 
 func (l *ConsoleAuditLogger) Close() error { return nil }
+
+// VerifyChain reads every JSONL entry in path and verifies that each entry's
+// PrevHash equals the SHA-256 of the previous raw line. Returns the first
+// chain break found, or nil if the log is intact.
+func VerifyChain(path string) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("VerifyChain: cannot read %s: %w", path, err)
+	}
+	lines := bytes.Split(bytes.TrimRight(data, "\n"), []byte("\n"))
+	if len(lines) == 0 {
+		return nil
+	}
+
+	var prevHash string
+	for i, line := range lines {
+		if len(bytes.TrimSpace(line)) == 0 {
+			continue
+		}
+		var entry AuditEntry
+		if err := json.Unmarshal(line, &entry); err != nil {
+			return fmt.Errorf("VerifyChain: entry %d is not valid JSON: %w", i, err)
+		}
+		if i > 0 {
+			if entry.PrevHash != prevHash {
+				return fmt.Errorf("VerifyChain: chain broken at entry %d: expected PrevHash %s, got %s",
+					i, prevHash, entry.PrevHash)
+			}
+		}
+		h := sha256.Sum256(line)
+		prevHash = hex.EncodeToString(h[:])
+	}
+	return nil
+}
