@@ -496,6 +496,23 @@ func handleFragment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Inline containment guard — filepath.Rel in the same function scope as the
+	// file operations breaks the CodeQL go/path-injection inter-procedural taint
+	// chain that sanitizeRESTPath alone does not break for the caller.
+	{
+		tmpBase := filepath.Clean(os.TempDir())
+		relIn, errIn := filepath.Rel(tmpBase, inputPath)
+		if errIn != nil || strings.HasPrefix(relIn, "..") || filepath.IsAbs(relIn) {
+			http.Error(w, "input path outside permitted directory", http.StatusBadRequest)
+			return
+		}
+		relOut, errOut := filepath.Rel(tmpBase, outputPath)
+		if errOut != nil || strings.HasPrefix(relOut, "..") || filepath.IsAbs(relOut) {
+			http.Error(w, "output path outside permitted directory", http.StatusBadRequest)
+			return
+		}
+	}
+
 	fi, err := os.Stat(inputPath)
 	if err != nil {
 		renderAPIError(w, err)
@@ -576,6 +593,17 @@ func handleReassemble(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, fmt.Sprintf("invalid output path: %v", err), http.StatusBadRequest)
 		return
+	}
+
+	// Inline containment guard — filepath.Rel in the same function scope as the
+	// file operation breaks the CodeQL inter-procedural taint chain.
+	{
+		tmpBase := filepath.Clean(os.TempDir())
+		relOut, errOut := filepath.Rel(tmpBase, outputPath)
+		if errOut != nil || strings.HasPrefix(relOut, "..") || filepath.IsAbs(relOut) {
+			http.Error(w, "output path outside permitted directory", http.StatusBadRequest)
+			return
+		}
 	}
 
 	f, err := os.Create(outputPath)
