@@ -42,6 +42,16 @@ func (e *Engine) shredFile(path string) error {
 		// While multiple passes with random data were standard for HDDs,
 		// a single pass is generally sufficient for modern flash controllers
 		// to mark blocks for garbage collection or just clear the logical mapping.
+		//
+		// IMPORTANT — SSD wear-leveling limitation: On SSDs and NVMe drives, the
+		// Flash Translation Layer (FTL) maps logical block addresses to physical NAND
+		// cells. When a block is overwritten, the FTL may write the new data to a
+		// *different* physical cell and mark the old cell for deferred erasure. This
+		// means the original data may remain physically present on the NAND until the
+		// garbage collector reclaims it — potentially days or weeks later.
+		// This overwrite operation provides logical-layer hygiene only.
+		// For true data destruction guarantees, use Full Disk Encryption (FDE) so
+		// that physically recovered data is still ciphertext without the disk key.
 		zeros := make([]byte, 64*1024) // 64KB buffer
 		for written := int64(0); written < size; {
 			todo := size - written

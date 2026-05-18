@@ -123,6 +123,8 @@ For detailed technical specifications and user guides, refer to the [Documentati
 *   **[Security Rationale](./docs/architecture/threat-model.md)**: Choice of Kyber, Dilithium, and AES-GCM.
 *   **[CLI Reference](./docs/integration/cli-reference.md)**: Full command and flag specification.
 *   **[AI Agent Integration](./docs/integration/mcp-server.md)**: Native MCP tool schemas.
+*   **[Roadmap](./docs/architecture/roadmap.md)**: Planned features and upcoming milestones.
+*   **[Changelog](./CHANGELOG.md)**: Release history and notable changes.
 
 ---
 

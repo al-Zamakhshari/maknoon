@@ -69,6 +69,25 @@ jobs:
           cache: true
       - name: Verify Man Page Sync
         run: go run ./cmd/maknoon man --verify
+      - name: Verify Doc Links
+        run: |
+          # Extract markdown links from docs/ and README.md, verify each target file exists.
+          BROKEN=0
+          while IFS= read -r link; do
+            # Strip anchor fragment
+            target="${link%%#*}"
+            [ -z "$target" ] && continue
+            if [ ! -f "$target" ] && [ ! -d "$target" ]; then
+              echo "❌ Broken link target: $target"
+              BROKEN=$((BROKEN + 1))
+            fi
+          done < <(grep -roh '\[.*\](\./[^)]*\.md[^)]*)' docs/ README.md \
+                    | grep -oP '\(\K[^)]+' | sed 's|^\./||' | sort -u)
+          if [ "$BROKEN" -gt 0 ]; then
+            echo "❌ $BROKEN broken doc link(s) found"
+            exit 1
+          fi
+          echo "✅ All doc links resolve"
 
   test:
     name: Test

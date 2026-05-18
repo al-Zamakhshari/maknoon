@@ -44,11 +44,27 @@ snapshot:
   version_template: "{{ incpatch .Version }}-next"
 
 changelog:
+  use: github
   sort: asc
+  groups:
+    - title: Features
+      regexp: '^feat'
+      order: 0
+    - title: Bug Fixes
+      regexp: '^fix'
+      order: 1
+    - title: Security
+      regexp: '^(sec|security)'
+      order: 2
+    - title: Other
+      order: 999
   filters:
     exclude:
       - '^docs:'
       - '^test:'
+      - '^chore:'
+      - Merge pull request
+      - Merge branch
 
 # Homebrew Tap configuration (Standard Formula for CLI tools)
 brews:

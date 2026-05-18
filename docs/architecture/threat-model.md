@@ -34,7 +34,7 @@ Maknoon utilizes a selection of high-performance, NIST-standardized primitives f
 | Function | Algorithm | Specification |
 | :--- | :--- | :--- |
 | **Symmetric Cipher** | AES-256-GCM | 256-bit key, 12-byte nonce, hardware-accelerated. |
-| **Digital Signatures** | ML-DSA-87 (Dilithium) | NIST-standardized quantum-resistant signatures. |
+| **Digital Signatures** | ML-DSA-87 (Dilithium) | NIST-standardized quantum-resistant signatures. Private keys are 4896 bytes — significantly larger than classical Ed25519 keys (64 bytes). Mitigation: private keys are never transmitted; only public keys (2592 bytes) are distributed via the identity registry. |
 | **Non-Lattice KEM** | FrodoKEM-640 | High-security hedging against lattice cryptanalysis. |
 | **Key Derivation** | Argon2id | Industrial Standard (3 iterations, 64MB RAM). |
 | **Hashing** | SHA-3 / SHA-256 | High-performance, collision-resistant digests. |

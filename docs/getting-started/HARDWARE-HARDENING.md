@@ -81,3 +81,42 @@ graph LR
 All hardware access attempts (success or failure) are recorded in the **Chained Forensic Audit Log**.
 *   **Action**: `load_identity`
 *   **Meta**: `tpm: true, pcrs: [7,14]`
+
+---
+
+## ⚠️ Secure Deletion Limitations (SSD / NVMe)
+
+Maknoon's `--shred` flag performs a single-pass zero-overwrite, random rename, and `unlink`. This provides **logical-layer hygiene** — the file is inaccessible through the filesystem — but **does not guarantee physical data erasure on flash storage**.
+
+### Why SSDs defeat logical overwrite
+
+SSDs and NVMe drives use a Flash Translation Layer (FTL) that maps logical block addresses (LBAs) to physical NAND cells for wear-leveling. When a block is overwritten, the FTL typically:
+1. Writes new data to a **different** physical cell
+2. Marks the old cell as available for deferred garbage collection
+
+The old cell — containing original plaintext — may remain physically readable for days to weeks until the internal garbage collector reclaims it. Specialized forensic hardware can read NAND chips directly, bypassing the FTL entirely.
+
+### Mitigation: Full Disk Encryption is the primary control
+
+| Storage Type | `--shred` effectiveness | Recommended primary control |
+| :--- | :--- | :--- |
+| HDD (spinning disk) | High — logical = physical sector overwrite | `--shred` sufficient; `hdparm --security-erase` for decommission |
+| SSD / NVMe | Low — FTL wear-leveling redirects writes | **FDE (LUKS2 / FileVault / BitLocker)** |
+| SD card / eMMC | Very low — aggressive wear-leveling | **FDE** + manufacturer Secure Erase if supported |
+
+With FDE active, any NAND cell recovered by an attacker contains only ciphertext — `--shred` residue is irrelevant because the disk key is not present.
+
+### ATA Secure Erase (decommissioning)
+
+For SSDs that correctly implement it, ATA Secure Erase instructs the drive firmware to cryptographically shred all user data:
+
+```bash
+# Check support
+hdparm -I /dev/sdX | grep -i "erase"
+
+# Issue Secure Erase (sets a temp password, erases, removes password)
+hdparm --security-set-pass maknoon /dev/sdX
+hdparm --security-erase maknoon /dev/sdX
+```
+
+> Not all SSDs implement ATA Secure Erase correctly. Verify with the manufacturer. Prefer FDE for production deployments.
