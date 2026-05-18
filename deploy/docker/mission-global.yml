@@ -3,6 +3,8 @@ services:
     image: scsibug/nostr-rs-relay:latest
     ports:
       - "8008:8080"
+    volumes:
+      - ./nostr-relay-config.toml:/usr/src/app/config.toml:ro
     networks:
       global-net:
         ipv4_address: 172.30.0.5

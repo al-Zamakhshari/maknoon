@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/klauspost/reedsolomon"
 )
@@ -38,17 +39,23 @@ func NewFragmentWriter(opts FragmentOptions) (*FragmentWriter, error) {
 	writers := make([]io.WriteCloser, totalShards)
 
 	if opts.TargetDir != "" {
-		if err := os.MkdirAll(opts.TargetDir, 0700); err != nil {
+		safeDir := filepath.Clean(opts.TargetDir)
+		// Reject any path that traverses upward.
+		if strings.HasPrefix(safeDir, "..") || strings.Contains(safeDir, string(filepath.Separator)+".."+string(filepath.Separator)) {
+			return nil, fmt.Errorf("fragment target dir contains path traversal: %q", opts.TargetDir)
+		}
+		if err := os.MkdirAll(safeDir, 0700); err != nil {
 			return nil, err
 		}
 		for i := 0; i < totalShards; i++ {
-			path := filepath.Join(opts.TargetDir, fmt.Sprintf("shard_%03d.maknf", i))
+			path := filepath.Join(safeDir, fmt.Sprintf("shard_%03d.maknf", i))
 			f, err := os.Create(path)
 			if err != nil {
 				return nil, err
 			}
 			writers[i] = f
 		}
+		opts.TargetDir = safeDir
 	}
 
 	return NewFragmentWriterWithWriters(opts, writers)
@@ -153,7 +160,12 @@ func (fw *FragmentWriter) Close() error {
 }
 
 func ReassembleFragments(srcDir string, w io.Writer, authorizedPubKey []byte) error {
-	files, err := os.ReadDir(srcDir)
+	safeDir := filepath.Clean(srcDir)
+	// Reject any path containing traversal sequences.
+	if strings.HasPrefix(safeDir, "..") || strings.Contains(safeDir, string(filepath.Separator)+".."+string(filepath.Separator)) {
+		return fmt.Errorf("source dir contains path traversal: %q", srcDir)
+	}
+	files, err := os.ReadDir(safeDir)
 	if err != nil {
 		return err
 	}
@@ -163,15 +175,16 @@ func ReassembleFragments(srcDir string, w io.Writer, authorizedPubKey []byte) er
 	var originalSize int64
 	for _, f := range files {
 		if !f.IsDir() && filepath.Ext(f.Name()) == ".maknf" {
+			shardPath := filepath.Join(safeDir, f.Name())
 			if dataShards == 0 {
-				data, err := os.ReadFile(filepath.Join(srcDir, f.Name()))
+				data, err := os.ReadFile(shardPath)
 				if err == nil && len(data) >= 16 && string(data[:4]) == FragmentMagic {
 					dataShards = int(data[6])
 					parityShards = int(data[7])
 					originalSize = int64(binary.LittleEndian.Uint64(data[8:16]))
 				}
 			}
-			shardPaths = append(shardPaths, filepath.Join(srcDir, f.Name()))
+			shardPaths = append(shardPaths, shardPath)
 		}
 	}
 

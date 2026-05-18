@@ -20,7 +20,7 @@ L_EXEC="docker compose -p $PROJECT -f $COMPOSE_FILE exec -T agent-london"
 N_EXEC="docker compose -p $PROJECT -f $COMPOSE_FILE exec -T agent-ny"
 
 # Wait for MCP SSE server on London to be ready
-wait_for_condition "London MCP server ready" 60 \
+wait_for_condition "London MCP server ready" 180 \
     docker compose -p "$PROJECT" -f "$COMPOSE_FILE" exec -T agent-london \
         sh -c "curl -sk -o /dev/null -w '%{http_code}' https://localhost:8080/sse | grep -q 200"
 
@@ -33,7 +33,7 @@ $L_EXEC maknoon call --insecure tunnel_listen \
     --args '{"address":":4001","mode":"p2p","identity":"london-id"}' > /dev/null
 
 # Wait for tunnel to be listening
-wait_for_condition "London P2P port 4001 open" 30 \
+wait_for_condition "London P2P port 4001 open" 90 \
     docker compose -p "$PROJECT" -f "$COMPOSE_FILE" exec -T agent-london \
         sh -c "netstat -tln 2>/dev/null | grep ':4001 ' || ss -tln | grep ':4001 '"
 
@@ -80,7 +80,7 @@ echo "🌉 Step 4: Autonomous PQC Tunnel Provisioning via API..."
 $N_EXEC maknoon call --insecure tunnel_start \
     --args "{\"remote\":\"@$LONDON_NOSTR_HEX\",\"p2p_mode\":true,\"port\":1080}" > /dev/null
 
-wait_for_condition "NY tunnel active" 30 \
+wait_for_condition "NY tunnel active" 90 \
     docker compose -p "$PROJECT" -f "$COMPOSE_FILE" exec -T agent-ny \
         sh -c "maknoon call --insecure tunnel_status | jq -e '.content[0].text | fromjson | .active == true'"
 

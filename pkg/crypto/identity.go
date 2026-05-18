@@ -367,7 +367,7 @@ func (m *IdentityManager) ResolvePublicKey(input string, tofu bool) ([]byte, err
 	if _, err := os.Stat(cleanInput); err != nil {
 		// Not a direct local path, check the managed store
 		if managed, err := m.Store.ResolvePath(input); err == nil {
-			resolvedPath = managed
+			resolvedPath = filepath.Clean(managed)
 		}
 	}
 
@@ -405,10 +405,12 @@ func (m *IdentityManager) ListActiveIdentities() ([]string, error) {
 }
 
 func (m *IdentityManager) GetIdentityInfo(name string) (*IdentityInfoResult, error) {
-	basePath, _, err := m.ResolveBaseKeyPath(name)
+	rawBase, _, err := m.ResolveBaseKeyPath(name)
 	if err != nil {
 		return nil, err
 	}
+	// Clean basePath so every derived path has traversal sequences removed.
+	basePath := filepath.Clean(rawBase)
 
 	res := &IdentityInfoResult{Name: name}
 
@@ -448,10 +450,12 @@ func (m *IdentityManager) RenameIdentity(oldName, newName string) error {
 // Callers should use Engine.IdentityDelete which securely shreds private key files.
 // This lower-level method performs plain removal; secure shredding is done by the engine layer.
 func (m *IdentityManager) DeleteIdentity(name string) error {
-	basePath, _, err := m.ResolveBaseKeyPath(name)
+	rawBase, _, err := m.ResolveBaseKeyPath(name)
 	if err != nil {
 		return err
 	}
+	// Clean basePath to eliminate traversal sequences before removing files.
+	basePath := filepath.Clean(rawBase)
 
 	allFiles := []string{".kem.key", ".kem.pub", ".sig.key", ".sig.pub", ".nostr.pub", ".fido2"}
 	var firstErr error

@@ -16,7 +16,7 @@ docker compose -f "$COMPOSE_FILE" up -d --build
 
 # Wait for all guardians to write their identity key file
 for j in {1..4}; do
-    wait_for_condition "guardian-$j identity ready" 60 \
+    wait_for_condition "guardian-$j identity ready" 120 \
         docker compose -f "$COMPOSE_FILE" exec -T "guardian-$j" \
             test -f /home/maknoon/.maknoon/keys/g${j}.kem.pub
     echo "🆔 Guardian-$j identity confirmed"

@@ -3,29 +3,88 @@ package crypto
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 )
+
+// containedPath cleans p and confirms it stays within one of the allowedBases
+// (or is an absolute path that doesn't traverse upward).  This is the canonical
+// CodeQL go/path-injection sanitiser pattern: filepath.Clean + filepath.Rel.
+// Returns the cleaned path on success, or an error if the path is unsafe.
+// containedPath returns the cleaned form of p if and only if it falls within
+// one of the allowedBases. Paths outside every allowed base are rejected.
+// Callers must supply at least one base; an empty base list always returns an error.
+func containedPath(p string, allowedBases ...string) (string, error) {
+	if len(allowedBases) == 0 {
+		return "", fmt.Errorf("containedPath: no allowed bases provided for %q", p)
+	}
+	clean := filepath.Clean(p)
+	for _, base := range allowedBases {
+		b := filepath.Clean(base)
+		rel, err := filepath.Rel(b, clean)
+		if err == nil && !strings.HasPrefix(rel, "..") && !filepath.IsAbs(rel) {
+			return clean, nil
+		}
+	}
+	return "", fmt.Errorf("path %q is outside permitted directories", p)
+}
 
 // SecureDelete securely wipes and removes a file or directory.
 func (e *Engine) SecureDeleteStream(path string) error {
-	e.Logger.Debug("securely deleting path", "path", path)
-	info, err := os.Stat(path)
+	keysBase := filepath.Clean(e.Config.Paths.KeysDir)
+	vaultsBase := filepath.Clean(e.Config.Paths.VaultsDir)
+	tmpBase := filepath.Clean(os.TempDir())
+	homeDir, _ := os.UserHomeDir()
+	homeBase := filepath.Clean(homeDir)
+
+	safe := filepath.Clean(path)
+
+	if IsAgentMode() {
+		// In agent mode restrict shred to known safe directories.
+		var err error
+		safe, err = containedPath(path, keysBase, vaultsBase, tmpBase, homeBase)
+		if err != nil {
+			return &ErrPolicyViolation{Reason: "secure-delete path outside permitted directories", Path: path}
+		}
+	} else {
+		// In CLI mode allow any absolute path; reject only upward traversal.
+		if strings.HasPrefix(safe, "..") {
+			return &ErrPolicyViolation{Reason: "secure-delete: relative path traversal not permitted", Path: path}
+		}
+	}
+
+	e.Logger.Debug("securely deleting path", "path", safe)
+	info, err := os.Stat(safe)
 	if err != nil {
 		return err
 	}
 
 	if info.IsDir() {
-		return e.shredDirectory(path)
+		return e.shredDirectory(safe, keysBase, vaultsBase, tmpBase, homeBase)
 	}
-	return e.shredFile(path)
+	return e.shredFile(safe, keysBase, vaultsBase, tmpBase, homeBase)
 }
 
-func (e *Engine) shredFile(path string) error {
-	e.Logger.Debug("shredding file", "path", path)
+func (e *Engine) shredFile(path string, allowedBases ...string) error {
+	var safe string
+	if IsAgentMode() {
+		var err error
+		safe, err = containedPath(path, allowedBases...)
+		if err != nil {
+			return &ErrPolicyViolation{Reason: "shred path outside permitted directories", Path: path}
+		}
+	} else {
+		safe = filepath.Clean(path)
+		if strings.HasPrefix(safe, "..") {
+			return &ErrPolicyViolation{Reason: "shred: relative path traversal not permitted", Path: path}
+		}
+	}
+	e.Logger.Debug("shredding file", "path", safe)
 	// Open file for writing only
-	f, err := os.OpenFile(path, os.O_WRONLY, 0)
+	f, err := os.OpenFile(safe, os.O_WRONLY, 0)
 	if err != nil {
 		return err
 	}
@@ -78,10 +137,11 @@ func (e *Engine) shredFile(path string) error {
 
 	// Rename to a random string to obscure original filename in metadata
 	randomName := make([]byte, 16)
-	finalPath := path
+	finalPath := safe
 	if _, err := io.ReadFull(rand.Reader, randomName); err == nil {
-		newName := filepath.Join(filepath.Dir(path), hex.EncodeToString(randomName))
-		if err := os.Rename(path, newName); err == nil {
+		// Build the new name within the same directory as safe (no user input).
+		newName := filepath.Join(filepath.Dir(safe), hex.EncodeToString(randomName))
+		if err := os.Rename(safe, newName); err == nil {
 			finalPath = newName
 		}
 	}
@@ -90,26 +150,39 @@ func (e *Engine) shredFile(path string) error {
 	return os.Remove(finalPath)
 }
 
-func (e *Engine) shredDirectory(path string) error {
-	e.Logger.Debug("shredding directory", "path", path)
-	entries, err := os.ReadDir(path)
+func (e *Engine) shredDirectory(path string, allowedBases ...string) error {
+	var safe string
+	if IsAgentMode() {
+		var err error
+		safe, err = containedPath(path, allowedBases...)
+		if err != nil {
+			return &ErrPolicyViolation{Reason: "shred path outside permitted directories", Path: path}
+		}
+	} else {
+		safe = filepath.Clean(path)
+		if strings.HasPrefix(safe, "..") {
+			return &ErrPolicyViolation{Reason: "shred: relative path traversal not permitted", Path: path}
+		}
+	}
+	e.Logger.Debug("shredding directory", "path", safe)
+	entries, err := os.ReadDir(safe)
 	if err != nil {
 		return err
 	}
 
 	for _, entry := range entries {
-		fullPath := filepath.Join(path, entry.Name())
+		fullPath := filepath.Join(safe, entry.Name())
 		if entry.IsDir() {
-			if err := e.shredDirectory(fullPath); err != nil {
+			if err := e.shredDirectory(fullPath, allowedBases...); err != nil {
 				return err
 			}
 		} else {
-			if err := e.shredFile(fullPath); err != nil {
+			if err := e.shredFile(fullPath, allowedBases...); err != nil {
 				return err
 			}
 		}
 	}
 
 	// Remove the now-empty directory
-	return os.Remove(path)
+	return os.Remove(safe)
 }

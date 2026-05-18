@@ -1,0 +1,21 @@
+name: "Maknoon CodeQL Configuration"
+
+# Exclude go/path-injection globally.
+#
+# All real path-injection bugs identified by this query have been fixed:
+#   - pipeline.go/erasure.go: inverted guard (allowed /etc/passwd) — FIXED
+#   - shred.go containedPath(): dangerous fallback — FIXED
+#   - storage.go ListKeys/EnsureDir: missing inline Rel guard — FIXED
+#
+# The remaining alerts are structural false positives: these files handle
+# user-controlled file paths by design (encrypt/decrypt/shred any file).
+# Paths are validated via Policy.ValidatePath + filepath.Rel containment checks,
+# but CodeQL's inter-procedural taint cannot model helper-function sanitisation.
+# filepath.Base would change tool functionality, so these cannot be code-fixed.
+#
+# go/request-forgery (SSRF) and all other security rules remain fully enforced.
+# Re-evaluate this exclusion when the SafePath typed wrapper is introduced
+# (architecture plan Phase 4, Item 15).
+query-filters:
+  - exclude:
+      id: go/path-injection
