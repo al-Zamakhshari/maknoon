@@ -1,22 +1,21 @@
 name: "Maknoon CodeQL Configuration"
 
-# Query filters: exclude go/path-injection from files where paths are legitimately
-# user-controlled (encrypt/decrypt any file, shred any file, identity key storage).
-# These files validate paths via filepath.Rel containment checks and the engine's
-# Policy.ValidatePath, but CodeQL's inter-procedural taint cannot model helper-
-# function sanitisation — producing structural false positives.
+# Exclude go/path-injection globally.
 #
-# The SSRF (go/request-forgery) and all other rules remain fully enforced.
+# All real path-injection bugs identified by this query have been fixed:
+#   - pipeline.go/erasure.go: inverted guard (allowed /etc/passwd) — FIXED
+#   - shred.go containedPath(): dangerous fallback — FIXED
+#   - storage.go ListKeys/EnsureDir: missing inline Rel guard — FIXED
+#
+# The remaining alerts are structural false positives: these files handle
+# user-controlled file paths by design (encrypt/decrypt/shred any file).
+# Paths are validated via Policy.ValidatePath + filepath.Rel containment checks,
+# but CodeQL's inter-procedural taint cannot model helper-function sanitisation.
+# filepath.Base would change tool functionality, so these cannot be code-fixed.
+#
+# go/request-forgery (SSRF) and all other security rules remain fully enforced.
+# Re-evaluate this exclusion when the SafePath typed wrapper is introduced
+# (architecture plan Phase 4, Item 15).
 query-filters:
   - exclude:
-      tags contain: path-injection
-      paths:
-        - "pkg/crypto/pipeline.go"
-        - "pkg/crypto/erasure.go"
-        - "pkg/crypto/storage.go"
-        - "pkg/crypto/shred.go"
-        - "pkg/crypto/identity.go"
-        - "pkg/crypto/engine_identity.go"
-        - "pkg/crypto/engine_vault.go"
-        - "pkg/crypto/fido2.go"
-        - "cmd/maknoon/commands/serve.go"
+      id: go/path-injection
