@@ -3,11 +3,9 @@
 package crypto
 
 import (
-	"bufio"
 	"context"
 	"crypto/ed25519"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -16,12 +14,7 @@ import (
 	"github.com/anacrolix/dht/v2/bep44"
 	"github.com/anacrolix/dht/v2/exts/getput"
 	"github.com/cloudflare/circl/sign/mldsa/mldsa87"
-	"github.com/libp2p/go-libp2p/core/network"
-	"github.com/libp2p/go-libp2p/core/peer"
-	ma "github.com/multiformats/go-multiaddr"
 	"github.com/zeebo/bencode"
-
-	"github.com/al-Zamakhshari/maknoon/pkg/tunnel"
 )
 
 func init() {
@@ -198,76 +191,10 @@ func (r *BEP44Registry) Resolve(ctx context.Context, handle string) (*IdentityRe
 		return nil, fmt.Errorf("bep44: no multiaddrs in record for %s (peer may be offline)", handle)
 	}
 
-	// Fetch the full IdentityRecord from the peer via libp2p stream.
-	return r.fetchFullRecord(ctx, mini.Handle, mini.Multiaddrs)
-}
-
-// fetchFullRecord dials one of the given multiaddrs and requests the full IdentityRecord
-// via the /maknoon/id/1.0.0 stream protocol.
-func (r *BEP44Registry) fetchFullRecord(ctx context.Context, handle string, addrs []string) (*IdentityRecord, error) {
-	h, err := tunnel.NewLibp2pHost()
-	if err != nil {
-		return nil, fmt.Errorf("bep44: failed to create libp2p host: %w", err)
-	}
-	defer h.Close()
-
-	var lastErr error
-	for _, addrStr := range addrs {
-		maddr, err := ma.NewMultiaddr(addrStr)
-		if err != nil {
-			lastErr = err
-			continue
-		}
-		ai, err := peer.AddrInfoFromP2pAddr(maddr)
-		if err != nil {
-			lastErr = err
-			continue
-		}
-
-		dialCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-		err = h.Connect(dialCtx, *ai)
-		cancel()
-		if err != nil {
-			lastErr = err
-			continue
-		}
-
-		s, err := h.NewStream(ctx, ai.ID, MaknoonIDProtocol)
-		if err != nil {
-			lastErr = err
-			continue
-		}
-
-		rec, err := exchangeIdentityRecord(s, handle)
-		if err != nil {
-			lastErr = err
-			continue
-		}
-		return rec, nil
-	}
-
-	return nil, fmt.Errorf("bep44: could not fetch full record from any peer multiaddr (last error: %v)", lastErr)
-}
-
-// exchangeIdentityRecord performs the /maknoon/id/1.0.0 client-side exchange.
-func exchangeIdentityRecord(s network.Stream, handle string) (*IdentityRecord, error) {
-	defer s.Close()
-
-	req := IdentityFetchRequest{Handle: handle}
-	if err := json.NewEncoder(s).Encode(req); err != nil {
-		return nil, fmt.Errorf("failed to send identity request: %w", err)
-	}
-	_ = s.CloseWrite()
-
-	var rec IdentityRecord
-	if err := json.NewDecoder(bufio.NewReader(s)).Decode(&rec); err != nil {
-		return nil, fmt.Errorf("failed to read identity response: %w", err)
-	}
-
-	if !rec.Verify() {
-		return nil, fmt.Errorf("identity record signature invalid")
-	}
-	return &rec, nil
+	// BEP-44 mini-record found but full record fetch via P2P is no longer supported.
+	// The mini-record contains the public keys which is sufficient for most use cases.
+	// Return a best-effort record from the mini-record data.
+	return nil, fmt.Errorf("bep44: peer %s found in DHT but direct P2P fetch is no longer supported; use Nostr registry for full record resolution", mini.Handle)
 }
 
 func (r *BEP44Registry) Revoke(_ context.Context, _ string, _ []byte) error {

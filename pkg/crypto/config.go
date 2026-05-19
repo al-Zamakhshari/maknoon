@@ -11,7 +11,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/al-Zamakhshari/maknoon/pkg/tunnel"
 	"github.com/spf13/viper"
 )
 
@@ -30,7 +29,7 @@ type Config struct {
 	AgentLimits          AgentLimitsConfig          `json:"agent_limits" mapstructure:"agent_limits"`
 	BEP44                BEP44Config                `json:"bep44" mapstructure:"bep44"`
 	Nostr                NostrConfig                `json:"nostr" mapstructure:"nostr"`
-	Tunnel               tunnel.TunnelConfig        `json:"tunnel" mapstructure:"tunnel"`
+	Tunnel               TunnelConfig               `json:"tunnel" mapstructure:"tunnel"`
 	Paths                PathConfig                 `json:"paths" mapstructure:"paths"`
 	VaultBackend         string                     `json:"vault_backend" mapstructure:"vault_backend"`                     // bbolt or badger
 	VaultMaxFailAttempts int                        `json:"vault_max_fail_attempts" mapstructure:"vault_max_fail_attempts"` // 0 = disabled, default 10
@@ -156,7 +155,7 @@ func DefaultConfig() *Config {
 			},
 			PublishMetadata: true,
 		},
-		Tunnel: tunnel.TunnelConfig{
+		Tunnel: TunnelConfig{
 			MaxStreams:       256,
 			IdleTimeout:      30,
 			HandshakeTimeout: 10,

@@ -80,11 +80,6 @@ Post-Quantum Cryptography (PQC).`,
 	// Assign Commands to Groups
 	addCommand(commands.EncryptCmd(), "core")
 	addCommand(commands.DecryptCmd(), "core")
-	addCommand(commands.SendCmd(), "core")
-	addCommand(commands.ReceiveCmd(), "core")
-	addCommand(commands.ChatCmd(), "core")
-	addCommand(commands.TunnelCmd(), "core")
-	addCommand(commands.NetCmd(), "core")
 	addCommand(commands.InfoCmd(), "core")
 	addCommand(commands.FragmentCmd(), "core")
 	addCommand(commands.ReassembleCmd(), "core")

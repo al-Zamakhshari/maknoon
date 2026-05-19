@@ -7,8 +7,6 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
-
-	"github.com/al-Zamakhshari/maknoon/pkg/tunnel"
 )
 
 // AuditEngine wraps the core Engine to provide transparent, zero-overhead auditing
@@ -83,10 +81,6 @@ func (e *AuditEngine) GenerateRandomProfile(ectx *EngineContext, id byte) *Dynam
 
 func (e *AuditEngine) ValidateProfile(ectx *EngineContext, p *DynamicProfile) error {
 	return e.Engine.ValidateProfile(ectx, p)
-}
-
-func (e *AuditEngine) ValidateWormholeURL(ectx *EngineContext, u string) error {
-	return e.Engine.ValidateWormholeURL(ectx, u)
 }
 
 func (e *AuditEngine) VaultInitInstitutional(ectx *EngineContext, name string, threshold, shares int, peerIDs []string, passphrase []byte) (*VaultResult, error) {
@@ -191,31 +185,6 @@ func (e *AuditEngine) VaultRecover(ectx *EngineContext, mnemonics []string, vaul
 		"duration_ms": duration.Milliseconds(),
 	}, err)
 	return path, err
-}
-
-func (e *AuditEngine) P2PSend(ectx *EngineContext, identityName, inputName string, r io.Reader, opts P2PSendOptions) (string, <-chan P2PStatus, error) {
-	start := time.Now()
-	code, status, err := e.Engine.P2PSend(ectx, identityName, inputName, r, opts)
-	duration := time.Since(start)
-	e.Logger.LogEvent("p2p_send", map[string]any{
-		"identity":    identityName,
-		"input":       inputName,
-		"target":      opts.To,
-		"duration_ms": duration.Milliseconds(),
-	}, err)
-	return code, status, err
-}
-
-func (e *AuditEngine) P2PReceive(ectx *EngineContext, identityName, code string, opts P2PReceiveOptions) (<-chan P2PStatus, error) {
-	start := time.Now()
-	status, err := e.Engine.P2PReceive(ectx, identityName, code, opts)
-	duration := time.Since(start)
-	e.Logger.LogEvent("p2p_receive", map[string]any{
-		"identity":    identityName,
-		"code":        code,
-		"duration_ms": duration.Milliseconds(),
-	}, err)
-	return status, err
 }
 
 func (e *AuditEngine) IdentityActive(ectx *EngineContext) ([]string, error) {
@@ -439,58 +408,6 @@ func (e *AuditEngine) Inspect(ectx *EngineContext, in io.Reader, stealth bool) (
 	return e.Engine.Inspect(ectx, in, stealth)
 }
 
-func (e *AuditEngine) TunnelStart(ectx *EngineContext, opts tunnel.TunnelOptions) (tunnel.TunnelStatus, error) {
-	start := time.Now()
-	status, err := e.Engine.TunnelStart(ectx, opts)
-	duration := time.Since(start)
-	e.Logger.LogEvent("tunnel_start", e.sanitizeMetadata(map[string]any{
-		"remote":      opts.RemoteEndpoint,
-		"proxy_port":  opts.LocalProxyPort,
-		"insecure":    opts.Insecure,
-		"duration_ms": duration.Milliseconds(),
-	}), err)
-	return status, err
-}
-
-func (e *AuditEngine) TunnelListen(ectx *EngineContext, addr string, mode string, identity string) (NetworkResult, error) {
-	start := time.Now()
-	res, err := e.Engine.TunnelListen(ectx, addr, mode, identity)
-	duration := time.Since(start)
-	e.Logger.LogEvent("tunnel_listen", map[string]any{
-		"addr":        addr,
-		"mode":        mode,
-		"identity":    identity,
-		"duration_ms": duration.Milliseconds(),
-	}, err)
-	return res, err
-}
-
-func (e *AuditEngine) TunnelStop(ectx *EngineContext) error {
-	start := time.Now()
-	err := e.Engine.TunnelStop(ectx)
-	duration := time.Since(start)
-	e.Logger.LogEvent("tunnel_stop", map[string]any{
-		"duration_ms": duration.Milliseconds(),
-	}, err)
-	return err
-}
-
-func (e *AuditEngine) TunnelStatus(ectx *EngineContext) (tunnel.TunnelStatus, error) {
-	return e.Engine.TunnelStatus(ectx)
-}
-
-func (e *AuditEngine) ChatStart(ectx *EngineContext, identityName string, target string) (*P2PChatSession, error) {
-	start := time.Now()
-	sess, err := e.Engine.ChatStart(ectx, identityName, target)
-	duration := time.Since(start)
-	e.Logger.LogEvent("chat_start", map[string]any{
-		"identity":    identityName,
-		"target":      target,
-		"duration_ms": duration.Milliseconds(),
-	}, err)
-	return sess, err
-}
-
 func (e *AuditEngine) Sign(ectx *EngineContext, data []byte, privKey []byte) ([]byte, error) {
 	start := time.Now()
 	sig, err := e.Engine.Sign(ectx, data, privKey)
@@ -613,27 +530,6 @@ func (e *AuditEngine) VaultCheckShards(ectx *EngineContext, mnemonics []string) 
 		"duration_ms": duration.Milliseconds(),
 	}, err)
 	return res, err
-}
-
-func (e *AuditEngine) QuorumRequest(ectx *EngineContext, identityName string, targets []string, action QuorumAction, resource, purpose string) ([]QuorumResponse, error) {
-	start := time.Now()
-	resps, err := e.Engine.QuorumRequest(ectx, identityName, targets, action, resource, purpose)
-	duration := time.Since(start)
-
-	approved := 0
-	for _, r := range resps {
-		if r.Approved {
-			approved++
-		}
-	}
-	e.Logger.LogEvent("quorum_request_init", map[string]any{
-		"action":       action,
-		"resource":     resource,
-		"target_count": len(targets),
-		"approved":     approved,
-		"duration_ms":  duration.Milliseconds(),
-	}, err)
-	return resps, err
 }
 
 func (e *AuditEngine) Close() error {
