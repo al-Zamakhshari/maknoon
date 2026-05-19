@@ -5,8 +5,10 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -264,4 +266,129 @@ func TestAuditChainTamperDetected(t *testing.T) {
 	} else {
 		t.Logf("Tamper correctly detected: %v", err)
 	}
+}
+
+// --- ConsoleAuditLogger ---
+
+func TestConsoleAuditLoggerSuccess(t *testing.T) {
+	var buf bytes.Buffer
+	logger := &ConsoleAuditLogger{Writer: &buf}
+	logger.LogEvent("protect", map[string]any{"input": "file.pdf"}, nil)
+	out := buf.String()
+	if !strings.Contains(out, "protect") {
+		t.Errorf("expected action 'protect' in output: %s", out)
+	}
+	if !strings.Contains(out, "SUCCESS") {
+		t.Errorf("expected SUCCESS status in output: %s", out)
+	}
+}
+
+func TestConsoleAuditLoggerFailure(t *testing.T) {
+	var buf bytes.Buffer
+	logger := &ConsoleAuditLogger{Writer: &buf}
+	logger.LogEvent("decrypt", map[string]any{}, fmt.Errorf("bad passphrase"))
+	out := buf.String()
+	if !strings.Contains(out, "FAILURE") {
+		t.Errorf("expected FAILURE in output: %s", out)
+	}
+	if !strings.Contains(out, "bad passphrase") {
+		t.Errorf("expected error message in output: %s", out)
+	}
+}
+
+func TestConsoleAuditLoggerClose(t *testing.T) {
+	logger := &ConsoleAuditLogger{Writer: &bytes.Buffer{}}
+	if err := logger.Close(); err != nil {
+		t.Errorf("Close returned unexpected error: %v", err)
+	}
+}
+
+func TestConsoleAuditLoggerSetSigningKey(t *testing.T) {
+	// SetSigningKey is a no-op — just verify no panic.
+	logger := &ConsoleAuditLogger{Writer: &bytes.Buffer{}}
+	logger.SetSigningKey([]byte("key"))
+}
+
+// --- NoopLogger ---
+
+func TestNoopLoggerNoOp(t *testing.T) {
+	logger := &NoopLogger{}
+	// None of these should panic or return errors.
+	logger.LogEvent("anything", map[string]any{"x": 1}, fmt.Errorf("err"))
+	logger.SetSigningKey([]byte("key"))
+	if err := logger.Close(); err != nil {
+		t.Errorf("NoopLogger.Close returned error: %v", err)
+	}
+}
+
+// --- DeriveSigningKeyFromSeed ---
+
+func TestDeriveSigningKeyFromSeedDeterministic(t *testing.T) {
+	seed := make([]byte, 32)
+	for i := range seed {
+		seed[i] = byte(i + 1)
+	}
+	k1, err := DeriveSigningKeyFromSeed(seed)
+	if err != nil {
+		t.Fatalf("DeriveSigningKeyFromSeed: %v", err)
+	}
+	k2, _ := DeriveSigningKeyFromSeed(seed)
+	if !bytes.Equal(k1, k2) {
+		t.Error("DeriveSigningKeyFromSeed is not deterministic for same seed")
+	}
+}
+
+func TestDeriveSigningKeyFromSeedDifferentSeeds(t *testing.T) {
+	s1 := bytes.Repeat([]byte{0xAA}, 32)
+	s2 := bytes.Repeat([]byte{0xBB}, 32)
+	k1, _ := DeriveSigningKeyFromSeed(s1)
+	k2, _ := DeriveSigningKeyFromSeed(s2)
+	if bytes.Equal(k1, k2) {
+		t.Error("different seeds should produce different signing keys")
+	}
+}
+
+func TestDeriveSigningKeyFromSeedLength(t *testing.T) {
+	key, err := DeriveSigningKeyFromSeed(make([]byte, 32))
+	if err != nil {
+		t.Fatalf("DeriveSigningKeyFromSeed: %v", err)
+	}
+	if len(key) == 0 {
+		t.Error("derived signing key is empty")
+	}
+}
+
+// --- NewJSONFileLoggerWithRotation ---
+
+func TestNewJSONFileLoggerWithRotation(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "rotate.log")
+	logger, err := NewJSONFileLoggerWithRotation(path, 100, 24, 3)
+	if err != nil {
+		t.Fatalf("NewJSONFileLoggerWithRotation: %v", err)
+	}
+	defer logger.Close()
+
+	// Log enough entries to confirm it works.
+	for i := 0; i < 5; i++ {
+		logger.LogEvent("op", map[string]any{"i": i}, nil)
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("reading log: %v", err)
+	}
+	lines := bytes.Split(bytes.TrimSpace(data), []byte("\n"))
+	if len(lines) < 5 {
+		t.Errorf("expected at least 5 log entries, got %d", len(lines))
+	}
+}
+
+func TestNewJSONFileLoggerWithRotationDefaultBackups(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "rotate2.log")
+	// maxBackups=0 → should use default.
+	logger, err := NewJSONFileLoggerWithRotation(path, 1024, 48, 0)
+	if err != nil {
+		t.Fatalf("NewJSONFileLoggerWithRotation: %v", err)
+	}
+	logger.Close()
 }

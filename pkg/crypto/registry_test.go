@@ -273,3 +273,71 @@ func TestIdentityRecordReplayAcceptance(t *testing.T) {
 
 	t.Log("KNOWN GAP: identity records have no nonce — replay within valid signature window is possible")
 }
+
+// --- DNSRegistry ---
+
+func TestDNSRegistryConstructor(t *testing.T) {
+	conf := DefaultConfig()
+	reg := NewDNSRegistry(conf)
+	if reg == nil {
+		t.Fatal("NewDNSRegistry returned nil")
+	}
+}
+
+func TestDNSRegistryPublishReturnsManualInstruction(t *testing.T) {
+	reg := NewDNSRegistry(DefaultConfig())
+	_, _, spub, spriv, err := GeneratePQKeyPair(1)
+	if err != nil {
+		t.Fatalf("GeneratePQKeyPair: %v", err)
+	}
+	kpub, _, _, _, _ := GeneratePQKeyPair(1)
+	rec := &IdentityRecord{
+		Handle:    "@alice@example.com",
+		KEMPubKey: kpub,
+		SIGPubKey: spub,
+		Timestamp: time.Now(),
+	}
+	if err := rec.Sign(spriv); err != nil {
+		t.Fatalf("Sign: %v", err)
+	}
+
+	err = reg.Publish(context.Background(), rec)
+	if err == nil {
+		t.Fatal("expected non-nil error (manual instruction)")
+	}
+	if !strings.Contains(err.Error(), "manual") {
+		t.Errorf("expected 'manual' in error: %v", err)
+	}
+}
+
+func TestDNSRegistryPublishWithKeyDelegatesToPublish(t *testing.T) {
+	reg := NewDNSRegistry(DefaultConfig())
+	kpub, _, spub, spriv, _ := GeneratePQKeyPair(1)
+	rec := &IdentityRecord{
+		Handle:    "@alice@example.com",
+		KEMPubKey: kpub,
+		SIGPubKey: spub,
+		Timestamp: time.Now(),
+	}
+	rec.Sign(spriv)
+
+	err1 := reg.Publish(context.Background(), rec)
+	err2 := reg.PublishWithKey(context.Background(), rec, []byte("token"))
+	if err1 == nil || err2 == nil {
+		t.Fatal("expected non-nil errors from both Publish calls")
+	}
+	if err1.Error() != err2.Error() {
+		t.Errorf("PublishWithKey should delegate to Publish:\n  Publish:        %v\n  PublishWithKey: %v", err1, err2)
+	}
+}
+
+func TestDNSRegistryRevokeReturnsManualInstruction(t *testing.T) {
+	reg := NewDNSRegistry(DefaultConfig())
+	err := reg.Revoke(context.Background(), "@alice@example.com", nil)
+	if err == nil {
+		t.Fatal("expected non-nil error (manual instruction)")
+	}
+	if !strings.Contains(err.Error(), "manual") {
+		t.Errorf("expected 'manual' in revoke error: %v", err)
+	}
+}
