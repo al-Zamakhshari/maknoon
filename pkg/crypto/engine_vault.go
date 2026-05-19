@@ -161,7 +161,9 @@ func (s *VaultService) Status(ectx *EngineContext, name string) (*VaultResult, e
 
 func (s *VaultService) Set(ectx *EngineContext, vaultPath string, entry *VaultEntry, passphrase []byte, pin string, overwrite bool) error {
 	ectx = s.engine.context(ectx)
+	log := s.engine.Logger.With("trace_id", ectx.TraceID, "action", "vault_set", "vault", vaultPath)
 	if err := s.engine.enforce(ectx, CapVaultWrite); err != nil {
+		log.Error("capability enforcement failed", "err", err)
 		return err
 	}
 	if vaultPath == "" {
@@ -304,7 +306,9 @@ func (s *VaultService) recordFailedAttempt(vaultPath string) {
 
 func (s *VaultService) Get(ectx *EngineContext, vaultPath string, service string, passphrase []byte, pin string) (*VaultEntry, error) {
 	ectx = s.engine.context(ectx)
+	log := s.engine.Logger.With("trace_id", ectx.TraceID, "action", "vault_get", "vault", vaultPath)
 	if err := s.engine.enforce(ectx, CapVaultRead); err != nil {
+		log.Error("capability enforcement failed", "err", err)
 		return nil, err
 	}
 	if vaultPath == "" {
@@ -345,7 +349,7 @@ func (s *VaultService) Get(ectx *EngineContext, vaultPath string, service string
 	// 2. Handle Quorum Unlocking if necessary
 	finalPassphrase := passphrase
 	if isInstitutional && len(passphrase) == 0 {
-		s.engine.Logger.Info("Institutional vault detected: initiating quorum unlock", "vault", vaultPath, "peers", len(quorumPeers))
+		log.Info("Institutional vault detected: initiating quorum unlock", "peers", len(quorumPeers))
 		responses, err := s.engine.QuorumRequest(ectx, "", quorumPeers, ActionVaultUnlock, vaultPath, "Consensus-based vault access requested")
 		if err != nil {
 			return nil, fmt.Errorf("quorum request failed: %w", err)

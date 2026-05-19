@@ -123,6 +123,10 @@ func NewEngine(policy SecurityPolicy, idMgr *IdentityManager, conf *Config, vaul
 		}
 	}
 
+	if err := conf.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid engine config: %w", err)
+	}
+
 	if idMgr == nil {
 		idMgr = NewIdentityManager()
 	}
