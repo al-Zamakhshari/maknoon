@@ -4,9 +4,6 @@ import (
 	"context"
 	"io"
 	"log/slog"
-
-	"github.com/al-Zamakhshari/maknoon/pkg/tunnel"
-	"github.com/libp2p/go-libp2p/core/host"
 )
 
 // EngineEvent is the base interface for all telemetry events.
@@ -111,16 +108,6 @@ type VaultManager interface {
 	VaultRecover(ectx *EngineContext, mnemonics []string, vaultPath string, output string, passphrase string) (string, error)
 }
 
-// P2PService handles peer-to-peer transfers.
-type P2PService interface {
-	P2PSend(ectx *EngineContext, identityName string, inputName string, r io.Reader, opts P2PSendOptions) (string, <-chan P2PStatus, error)
-	P2PReceive(ectx *EngineContext, identityName string, code string, opts P2PReceiveOptions) (<-chan P2PStatus, error)
-	ChatStart(ectx *EngineContext, identityName string, target string) (*P2PChatSession, error)
-	ValidateWormholeURL(ectx *EngineContext, u string) error
-	RegisterQuorumHandler(h host.Host)
-	QuorumRequest(ectx *EngineContext, identityName string, targets []string, action QuorumAction, resource, purpose string) ([]QuorumResponse, error)
-}
-
 // Utils provides secure generation helpers.
 type Utils interface {
 	GeneratePassword(ectx *EngineContext, length int, noSymbols bool) (string, error)
@@ -144,19 +131,6 @@ type StateProvider interface {
 // Inspector provides non-destructive analysis of encrypted Maknoon data.
 type Inspector interface {
 	Inspect(ectx *EngineContext, in io.Reader, stealth bool) (*HeaderInfo, error)
-}
-
-// TunnelService provides managed access to post-quantum L4 tunnels.
-type TunnelService interface {
-	TunnelStart(ectx *EngineContext, opts tunnel.TunnelOptions) (tunnel.TunnelStatus, error)
-	TunnelStop(ectx *EngineContext) error
-	TunnelStatus(ectx *EngineContext) (tunnel.TunnelStatus, error)
-	TunnelListen(ectx *EngineContext, addr string, mode string, identity string) (NetworkResult, error)
-}
-
-// ChatService handles persistent identity-bound chat missions.
-type ChatService interface {
-	ChatStart(ectx *EngineContext, identityName string, target string) (*P2PChatSession, error)
 }
 
 // Signer handles digital signature operations.
@@ -189,12 +163,9 @@ type MaknoonEngine interface {
 	Protector
 	IdentityCapabilities
 	VaultManager
-	P2PService
 	Utils
 	StateProvider
 	Inspector
-	TunnelService
-	ChatService
 	Signer
 	KMSService
 	DispersalService

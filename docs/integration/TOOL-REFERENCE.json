@@ -60,27 +60,6 @@
     ]
   },
   {
-    "name": "chat",
-    "path": "maknoon chat",
-    "description": "Start a secure, identity-bound Ghost Chat session (Agent Mode)",
-    "arguments": [
-      {
-        "name": "id|@petname",
-        "required": false
-      }
-    ],
-    "flags": [
-      {
-        "name": "identity",
-        "shorthand": "",
-        "description": "Local identity name to use for the session",
-        "type": "string",
-        "default": "",
-        "required": false
-      }
-    ]
-  },
-  {
     "name": "config",
     "path": "maknoon config",
     "description": "Manage Maknoon configuration (security, performance, agent limits)",
@@ -503,7 +482,7 @@
   {
     "name": "fragment",
     "path": "maknoon fragment",
-    "description": "Split a file into redundant erasure-coded fragments (RAID-for-Privacy)",
+    "description": "Split a file into erasure-coded fragments [EXPERIMENTAL]",
     "arguments": [
       {
         "name": "file",
@@ -1089,22 +1068,6 @@
     ]
   },
   {
-    "name": "net",
-    "path": "maknoon net",
-    "description": "Manage network and P2P connectivity",
-    "arguments": null,
-    "flags": null,
-    "subcommands": [
-      {
-        "name": "status",
-        "path": "maknoon net status",
-        "description": "Display P2P network health and tunnel status",
-        "arguments": null,
-        "flags": null
-      }
-    ]
-  },
-  {
     "name": "policy",
     "path": "maknoon policy",
     "description": "Manage and sign governance policy files",
@@ -1194,7 +1157,7 @@
   {
     "name": "reassemble",
     "path": "maknoon reassemble",
-    "description": "Reconstruct a file from fragments",
+    "description": "Reconstruct a file from fragments [EXPERIMENTAL]",
     "arguments": [
       {
         "name": "dir",
@@ -1216,99 +1179,6 @@
         "description": "Path to save the reconstructed file",
         "type": "string",
         "default": "",
-        "required": false
-      }
-    ]
-  },
-  {
-    "name": "receive",
-    "path": "maknoon receive",
-    "description": "Receive a file, directory, or text via secure P2P",
-    "arguments": [
-      {
-        "name": "peer_id/file_name",
-        "required": false
-      }
-    ],
-    "flags": [
-      {
-        "name": "fragment",
-        "shorthand": "",
-        "description": "Enable automated fragment retrieval",
-        "type": "bool",
-        "default": "false",
-        "required": false
-      },
-      {
-        "name": "from",
-        "shorthand": "",
-        "description": "Comma-separated list of sources (@petname or PeerID)",
-        "type": "string",
-        "default": "",
-        "required": false
-      },
-      {
-        "name": "identity",
-        "shorthand": "",
-        "description": "Identity name to use (default: active identity)",
-        "type": "string",
-        "default": "",
-        "required": false
-      },
-      {
-        "name": "output",
-        "shorthand": "o",
-        "description": "Output path or directory",
-        "type": "string",
-        "default": "",
-        "required": false
-      },
-      {
-        "name": "p2p",
-        "shorthand": "",
-        "description": "Use identity-first P2P (libp2p)",
-        "type": "bool",
-        "default": "true",
-        "required": false
-      },
-      {
-        "name": "passphrase",
-        "shorthand": "s",
-        "description": "Session passphrase",
-        "type": "string",
-        "default": "",
-        "required": false
-      },
-      {
-        "name": "private-key",
-        "shorthand": "k",
-        "description": "Path to your private key",
-        "type": "string",
-        "default": "",
-        "required": false
-      },
-      {
-        "name": "quiet",
-        "shorthand": "q",
-        "description": "Suppress informational messages",
-        "type": "bool",
-        "default": "false",
-        "required": false
-      },
-      {
-        "name": "sender-sig-pub",
-        "shorthand": "",
-        "description": "Sender's ML-DSA public key (hex) for fragment integrity verification",
-        "type": "string",
-        "default": "",
-        "required": false
-      },
-      {
-        "name": "stealth",
-        "shorthand": "",
-        "description": "Decrypt as stealth mode",
-        "type": "bool",
-        "default": "false",
         "required": false
       }
     ]
@@ -1391,102 +1261,9 @@
     ]
   },
   {
-    "name": "send",
-    "path": "maknoon send",
-    "description": "Send a file, directory, or text via secure P2P",
-    "arguments": [
-      {
-        "name": "file/dir",
-        "required": false
-      }
-    ],
-    "flags": [
-      {
-        "name": "fragment",
-        "shorthand": "",
-        "description": "Enable fragmented dispersal (e.g. 5/3 for 5 data + 3 parity shards)",
-        "type": "string",
-        "default": "",
-        "required": false
-      },
-      {
-        "name": "identity",
-        "shorthand": "",
-        "description": "Identity name to use (default: active identity)",
-        "type": "string",
-        "default": "",
-        "required": false
-      },
-      {
-        "name": "p2p",
-        "shorthand": "",
-        "description": "Use identity-first P2P (libp2p)",
-        "type": "bool",
-        "default": "true",
-        "required": false
-      },
-      {
-        "name": "passphrase",
-        "shorthand": "s",
-        "description": "Session passphrase (optional)",
-        "type": "string",
-        "default": "",
-        "required": false
-      },
-      {
-        "name": "public-key",
-        "shorthand": "p",
-        "description": "Encrypt for a specific recipient's identity",
-        "type": "string",
-        "default": "",
-        "required": false
-      },
-      {
-        "name": "quiet",
-        "shorthand": "q",
-        "description": "Suppress informational messages",
-        "type": "bool",
-        "default": "false",
-        "required": false
-      },
-      {
-        "name": "stealth",
-        "shorthand": "",
-        "description": "Use stealth mode (headerless)",
-        "type": "bool",
-        "default": "false",
-        "required": false
-      },
-      {
-        "name": "text",
-        "shorthand": "",
-        "description": "Send raw text instead of a file",
-        "type": "string",
-        "default": "",
-        "required": false
-      },
-      {
-        "name": "to",
-        "shorthand": "",
-        "description": "Recipient @petname or PeerID",
-        "type": "string",
-        "default": "",
-        "required": false
-      },
-      {
-        "name": "trust-on-first-use",
-        "shorthand": "",
-        "description": "Automatically add unknown signers to contacts",
-        "type": "bool",
-        "default": "false",
-        "required": false
-      }
-    ]
-  },
-  {
     "name": "serve",
     "path": "maknoon serve",
-    "description": "Start the Maknoon PQC API Server",
+    "description": "Start the Maknoon PQC API Server (MCP/SSE)",
     "arguments": null,
     "flags": [
       {
@@ -1602,159 +1379,6 @@
             "description": "Output path for the aggregate signature",
             "type": "string",
             "default": "multi.sig",
-            "required": false
-          }
-        ]
-      }
-    ]
-  },
-  {
-    "name": "tunnel",
-    "path": "maknoon tunnel",
-    "description": "Post-Quantum L4 Tunnel Gateway",
-    "arguments": null,
-    "flags": null,
-    "subcommands": [
-      {
-        "name": "listen",
-        "path": "maknoon tunnel listen",
-        "description": "Start a Post-Quantum Tunnel Server (Gateway Receiver)",
-        "arguments": null,
-        "flags": [
-          {
-            "name": "address",
-            "shorthand": "",
-            "description": "Address to listen on",
-            "type": "string",
-            "default": ":4433",
-            "required": false
-          },
-          {
-            "name": "identity",
-            "shorthand": "",
-            "description": "Identity to use for P2P",
-            "type": "string",
-            "default": "",
-            "required": false
-          },
-          {
-            "name": "p2p",
-            "shorthand": "",
-            "description": "Use libp2p for P2P/NAT traversal",
-            "type": "bool",
-            "default": "false",
-            "required": false
-          },
-          {
-            "name": "tls-cert",
-            "shorthand": "",
-            "description": "Path to TLS certificate",
-            "type": "string",
-            "default": "",
-            "required": false
-          },
-          {
-            "name": "tls-key",
-            "shorthand": "",
-            "description": "Path to TLS private key",
-            "type": "string",
-            "default": "",
-            "required": false
-          },
-          {
-            "name": "yamux",
-            "shorthand": "",
-            "description": "Use TCP+Yamux mode",
-            "type": "bool",
-            "default": "false",
-            "required": false
-          }
-        ]
-      },
-      {
-        "name": "start",
-        "path": "maknoon tunnel start",
-        "description": "Start a local Post-Quantum SOCKS5 Gateway",
-        "arguments": null,
-        "flags": [
-          {
-            "name": "bind",
-            "shorthand": "",
-            "description": "Interface to bind the SOCKS5 proxy to",
-            "type": "string",
-            "default": "127.0.0.1",
-            "required": false
-          },
-          {
-            "name": "data-lanes",
-            "shorthand": "",
-            "description": "Number of data lanes for Reed-Solomon resilience",
-            "type": "int",
-            "default": "0",
-            "required": false
-          },
-          {
-            "name": "identity",
-            "shorthand": "",
-            "description": "Identity to use for P2P",
-            "type": "string",
-            "default": "",
-            "required": false
-          },
-          {
-            "name": "insecure",
-            "shorthand": "",
-            "description": "Disable TLS certificate verification (DANGEROUS)",
-            "type": "bool",
-            "default": "false",
-            "required": false
-          },
-          {
-            "name": "p2p",
-            "shorthand": "",
-            "description": "Use libp2p for P2P mode",
-            "type": "bool",
-            "default": "false",
-            "required": false
-          },
-          {
-            "name": "p2p-addr",
-            "shorthand": "",
-            "description": "Remote P2P Multiaddr",
-            "type": "string",
-            "default": "",
-            "required": false
-          },
-          {
-            "name": "parity-lanes",
-            "shorthand": "",
-            "description": "Number of parity lanes for Reed-Solomon resilience",
-            "type": "int",
-            "default": "0",
-            "required": false
-          },
-          {
-            "name": "port",
-            "shorthand": "p",
-            "description": "Local SOCKS5 proxy port",
-            "type": "int",
-            "default": "1080",
-            "required": false
-          },
-          {
-            "name": "remote",
-            "shorthand": "",
-            "description": "Remote PQC Tunnel endpoint (host:port)",
-            "type": "string",
-            "default": "",
-            "required": false
-          },
-          {
-            "name": "yamux",
-            "shorthand": "",
-            "description": "Use TCP+Yamux mode",
-            "type": "bool",
-            "default": "false",
             "required": false
           }
         ]

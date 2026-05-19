@@ -1,139 +1,178 @@
 # Maknoon (مكنون)
-> **Industrial Post-Quantum Encryption Engine & Resilient MCP Gateway**
+> **Post-Quantum Cryptography for AI Agents**
 
 [![Release](https://img.shields.io/github/v/release/al-Zamakhshari/maknoon)](https://github.com/al-Zamakhshari/maknoon/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![Go Report Card](https://goreportcard.com/badge/github.com/al-Zamakhshari/maknoon)](https://goreportcard.com/report/github.com/al-Zamakhshari/maknoon)
 
-Maknoon is an industrial-grade cryptographic engine and Model Context Protocol (MCP) server designed to secure data against classical and quantum threats. It features a **RAID-for-Networking** L4 tunnel system, hybrid PQC encryption, and a constant-memory streaming architecture.
+Maknoon is a post-quantum cryptographic engine and MCP gateway. It lets AI agents and CLI users encrypt data, manage secrets, and publish verifiable identities — all secured against both classical and quantum adversaries.
 
 ---
 
-## 🚀 Key Capabilities
+## Key Capabilities
 
 | Feature | Specification |
 | :--- | :--- |
-| **Hybrid PQC** | ML-KEM-768 + X25519 (X-Wing, IETF draft-connolly-cfrg-xwing-kem). |
-| **Non-Lattice** | **Conservative Profile (3)**: FrodoKEM-640 + SLH-DSA-SHA2-128s. |
-| **Resilient Tunnels** | RAID-for-Networking surviving up to 66% lane failure (Reed-Solomon). |
-| **Cipher Stack** | AES-256-GCM (Encryption) + ML-DSA-87 (Forensic Signatures). |
-| **Unified Binary** | CLI, MCP (Stdio/SSE), and **Enterprise REST API**. |
-| **Threshold Sig** | M-of-N Post-Quantum digital signatures (ML-DSA-87). |
-| **Privacy RAID** | Fragment dispersal (Shamir + Erasure Coding) for data at rest. |
-| **Decentralised Identity** | Three-tier registry: Nostr (primary) → BEP-44 (opt-in) → DNS (tertiary). |
+| **Hybrid PQC Encryption** | ML-KEM-768 + X25519 (X-Wing). Conservative option: FrodoKEM-640. |
+| **Post-Quantum Signatures** | ML-DSA-87 for integrated signing and M-of-N threshold signatures. |
+| **Encrypted Vault** | Argon2id-protected secrets with quorum unlock and brute-force lockout. |
+| **Decentralised Identity** | Self-signed records on Nostr (primary) → BEP-44 DHT → DNS. |
+| **Session-Keyed Encryption** | Derive a key once, encrypt thousands of files with no per-file KDF cost. |
+| **MCP Server** | ~25 PQC tools for AI agents via stdio or SSE transport. |
+| **Multi-Recipient Encrypt** | Encrypt for @alice + @bob simultaneously; keys resolved from the registry. |
 
 ---
 
-## 🛠 Installation
+## Installation
 
-### Homebrew (macOS/Linux)
 ```bash
+# Homebrew (macOS/Linux)
 brew install al-Zamakhshari/tap/maknoon
-```
 
-### From Source
-```bash
-git clone https://github.com/al-Zamakhshari/maknoon
-cd maknoon
-make build
+# From source
+git clone https://github.com/al-Zamakhshari/maknoon && cd maknoon && make build
 ```
 
 ---
 
-## 📖 Practical Examples
+## Practical Examples
 
-### 1. Post-Quantum Identity & Decentralised Discovery
-Generate an identity and publish it to the decentralised registry stack.
+### 1. Multi-Recipient PQC Encryption
+Encrypt a file for multiple recipients whose public keys are resolved from the decentralised registry.
+
 ```bash
-# 1. Generate a hybrid ML-KEM + ML-DSA identity (profile: nist or conservative)
+# Publish identities to the registry (each user does this once)
 maknoon keygen -o alice_id --profile nist
-
-# 2. Publish to libp2p Kademlia DHT (default) + Nostr relays
 maknoon identity publish @alice --name alice_id
-maknoon identity publish @alice --name alice_id --nostr   # also push to Nostr
 
-# 3. Encrypt for a remote peer — resolved via the registry
-maknoon encrypt ./secret.txt -p @alice -o secret.makn
+# Encrypt for both alice and bob — keys resolved automatically
+maknoon encrypt ./secret.txt -p @alice -p @bob -o secret.makn
 
-# 4. Inspect the cryptographic provenance without decrypting
+# Either recipient can decrypt with their private key
+maknoon decrypt secret.makn -k alice_id --passphrase mypass -o secret.txt
+
+# Inspect provenance without decrypting
 maknoon info secret.makn --json
 ```
 
-### 2. Resilient L4 Tunnels (Phase 7.4)
-Establish a user-space tunnel that stripes data across multiple parallel sessions. Survives lane drops and network instability.
+### 2. Encrypted Vault
+Store and retrieve secrets with Argon2id-derived keys and optional quorum unlock.
+
 ```bash
-# 1. Start a PQC Listener on the remote side
-maknoon tunnel listen --p2p --address ":4433"
+# Store a secret
+maknoon vault set MY_API_KEY --vault prod --passphrase vault_pass
 
-# 2. Establish a resilient gateway with 2 data lanes and 2 parity lanes
-maknoon tunnel start --remote "gateway.internal:4433" --data-lanes 2 --parity-lanes 2 --port 1080
+# Retrieve it
+maknoon vault get MY_API_KEY --vault prod --passphrase vault_pass
 
-# 3. Use the tunnel via SOCKS5
-curl --proxy socks5h://127.0.0.1:1080 http://internal-service.local
+# Session-keyed bulk encryption (no per-file KDF overhead)
+KEY=$(maknoon session derive --passphrase mypass)
+maknoon encrypt file1.txt --session-key "$KEY" -o file1.makn
+maknoon encrypt file2.txt --session-key "$KEY" -o file2.makn
 ```
 
 ### 3. AI Agent Integration (MCP)
-Expose Maknoon's PQC toolkit to AI agents (Cursor, Claude Desktop, etc.).
+Expose Maknoon's PQC toolkit to AI agents (Claude Desktop, Cursor, etc.).
+
 ```bash
-# Start a local MCP server (Stdio)
+# stdio transport — direct integration with MCP-compatible agents
 maknoon mcp --transport stdio
 
-# Start a remote SSE gateway for cloud agents
+# SSE transport — for cloud agents or multi-user deployments
 maknoon mcp --transport sse --address ":8443" --tls-cert cert.pem --tls-key key.pem
 ```
 
-### 4. Fragmented Dispersal (RAID-for-Privacy)
-Split a sensitive file into encrypted fragments stored across different volumes or cloud providers.
-```bash
-# Disperse a file into 5 shards (any 3 required for reconstruction)
-maknoon fragment data.zip --shards 5 --threshold 3 --out ./shard_dir/
+**Available MCP tool categories:**
+- **crypto** — encrypt, decrypt, sign, verify, aggregate signatures, key wrap/unwrap
+- **vault** — set, get, list, delete, rotate, quorum unlock
+- **identity** — keygen, publish, resolve, delete, rotate
+- **workspace** — create ephemeral RAM-disk workspace, shred on completion
 
-# Reassemble from the fragments
-maknoon reassemble ./shard_dir/ -o restored_data.zip
+**Example agent workflow:**
+```
+Agent: "Store this API key securely"
+→ vault_set(service="API_KEY", password="sk-...", vault="agent_memory")
+
+Agent: "Encrypt this report for alice and send it"  
+→ identity_resolve(handle="@alice")
+→ encrypt_file(input="report.pdf", recipients=["@alice"])
+```
+
+### 4. Threshold Signatures
+M-of-N post-quantum signing for multi-party authorization.
+
+```bash
+# Sign with two different keys
+maknoon sign document.pdf -k alice.sig.key -o alice.sig
+maknoon sign document.pdf -k bob.sig.key -o bob.sig
+
+# Aggregate and verify with 2-of-2 threshold
+maknoon sign aggregate alice.sig bob.sig -o combined.sig
+maknoon verify document.pdf --signature combined.sig --threshold 2
 ```
 
 ---
 
-## 🛡 Security Architecture
+## Security Architecture
 
 ```mermaid
 graph TD
     A[CLI / MCP / API] --> B[Engine Core]
     B --> C{Security Policy}
-    C -- Validated --> D[Transformer Pipeline]
+    C -- Validated --> D[Pipeline]
     subgraph Pipeline [Streaming Pipeline]
         D --> E[Parallel Sequencer]
-        E --> F[Reed-Solomon Lane Striping]
-        F --> G[ML-KEM Hybrid Encryption]
+        E --> F[ML-KEM Hybrid KEM]
+        F --> G[AES-256-GCM Encrypt]
     end
-    G --> H[I/O Transport]
+    G --> H[Output]
+    B --> I[Vault]
+    B --> J[Identity Registry]
+    J --> K[Nostr Relays]
+    J --> L[BEP-44 DHT]
 ```
 
-### Skeptical Engineering
-Maknoon is built on the principle of **Empirical Rigor**. Every cryptographic transformation is verified via Power-On Self-Tests (POST), and all sensitive memory is explicitly zeroized using the `memguard` enclave to prevent leakage via swap or core dumps.
+### Design Principles
+- **Constant-memory streaming** — encrypts arbitrarily large files with bounded RSS
+- **Explicit zeroization** — all key material cleared from memory after use
+- **Identity expiry** — published records expire after 48h; replayed stale records are rejected
+- **Vault lockout** — 10 failed attempts triggers a 15-minute lockout (configurable)
+- **Agent-mode restrictions** — file paths constrained to home/vault/tmp in MCP mode
 
-### Performance Characteristics
-- **Bulk throughput**: ~384 MB/s at 10MB, ~3.3 GB/s at 100MB (Apple M4 Pro, parallel)
-- **KDF cost**: Argon2id adds ~26ms flat overhead per file — optimal for files ≥1MB. For bulk encryption of many small files (<64KB), consider a session-keyed approach: derive the key once and reuse it across files.
-- **ML-DSA-87 sign/verify**: ~1ms per operation
-- Run `make bench` for full benchmark output on your hardware
+### Performance
 
----
+| Operation | Throughput | Notes |
+| :--- | :--- | :--- |
+| Encrypt 10 MB (8 workers) | ~384 MB/s | Near memory bandwidth |
+| Encrypt 100 MB | ~3.3 GB/s | Large-buffer amortization |
+| Session-key encrypt 1 KB | ~2,000 MB/s | No per-file KDF cost |
+| Encrypt 1 KB (with KDF) | ~0.04 MB/s | 26 ms Argon2id dominates |
+| ML-DSA-87 sign/verify | ~1 ms | Per operation |
 
-## 🏆 Documentation & Knowledge Base
-For detailed technical specifications and user guides, refer to the [Documentation Hub](./docs/):
-
-*   **[Getting Started](./docs/getting-started/INSTALL.md)**: Installation and Hardware Hardening.
-*   **[Architecture](./docs/architecture/overview.md)**: Sequencer model and memory safety.
-*   **[Resilient Networking](./docs/user-guides/tunnels.md)**: Deep-dive into Tunnels and Reed-Solomon.
-*   **[Security Rationale](./docs/architecture/threat-model.md)**: Choice of Kyber, Dilithium, and AES-GCM.
-*   **[CLI Reference](./docs/integration/cli-reference.md)**: Full command and flag specification.
-*   **[AI Agent Integration](./docs/integration/mcp-server.md)**: Native MCP tool schemas.
-*   **[Roadmap](./docs/architecture/roadmap.md)**: Planned features and upcoming milestones.
-*   **[Changelog](./CHANGELOG.md)**: Release history and notable changes.
+Use `make bench` for measurements on your hardware. Use `maknoon session derive` to eliminate KDF overhead for bulk small-file encryption.
 
 ---
 
+## What Maknoon is NOT
+
+- **Not a VPN.** For encrypted tunnels, use [Wireguard](https://www.wireguard.com) or [Tailscale](https://tailscale.com).
+- **Not a chat app.** For secure messaging, use Signal or a Nostr client.
+- **Not a general file sync tool.** Fragment dispersal (`maknoon fragment`) is experimental and requires manual shard management without a storage backend integration.
+
+---
+
+## Documentation
+
+- **[Getting Started](./docs/getting-started/INSTALL.md)** — Installation and hardware hardening
+- **[Architecture](./docs/architecture/overview.md)** — Sequencer model and memory safety
+- **[Security Rationale](./docs/architecture/threat-model.md)** — Algorithm choices and known limitations
+- **[CLI Reference](./docs/integration/cli-reference.md)** — Full command and flag specification
+- **[AI Agent Integration](./docs/integration/mcp-server.md)** — MCP tool schemas
+- **[Roadmap](./docs/architecture/roadmap.md)** — Planned features
+- **[Changelog](./CHANGELOG.md)** — Release history
+
+---
 
 ## License
+
 MIT License. Created by [al-Zamakhshari](https://github.com/al-Zamakhshari).

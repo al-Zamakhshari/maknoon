@@ -166,21 +166,6 @@ func TestAuditIdentityDelete(t *testing.T) {
 	}
 }
 
-// TestAuditP2POperations verifies p2p_send and p2p_receive are logged.
-func TestAuditP2POperations(t *testing.T) {
-	ae, mock := captureAuditEngine(t)
-
-	ae.P2PSend(nil, "id", "file.bin", bytes.NewReader(nil), P2PSendOptions{})
-	if mock.LastAction != "p2p_send" {
-		t.Errorf("expected p2p_send, got %s", mock.LastAction)
-	}
-
-	ae.P2PReceive(nil, "id", "CODE", P2PReceiveOptions{})
-	if mock.LastAction != "p2p_receive" {
-		t.Errorf("expected p2p_receive, got %s", mock.LastAction)
-	}
-}
-
 // TestAuditHashChain writes 10 entries and verifies the full chain integrity.
 func TestAuditHashChain(t *testing.T) {
 	tmpLog := filepath.Join(t.TempDir(), "chain_audit.log")

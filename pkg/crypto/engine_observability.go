@@ -9,8 +9,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"time"
-
-	"github.com/al-Zamakhshari/maknoon/pkg/tunnel"
 )
 
 // --- Engine Wrappers ---
@@ -89,36 +87,8 @@ func (e *Engine) AuditExport(ectx *EngineContext) ([]AuditEntry, error) {
 
 // --- NetworkService Implementation ---
 
-func (s *NetworkService) NetworkStatus(ectx *EngineContext) (NetStatusResult, error) {
+func (s *NetworkService) NetworkStatus(_ *EngineContext) (NetStatusResult, error) {
 	res := NetStatusResult{}
-
-	// 1. Check active tunnel
-	s.tunnelMu.RLock()
-	if s.activeTunnel != nil {
-		res.Tunnel.Active = true
-		res.Tunnel.LocalAddress = s.activeTunnel.LocalAddress
-		res.Tunnel.RemoteEndpoint = s.activeTunnel.RemoteEndpoint
-		res.Tunnel.HandshakeTime = s.activeTunnel.HandshakeTime
-		res.Tunnel.DataLanes = s.activeTunnel.DataLanes
-		res.Tunnel.ParityLanes = s.activeTunnel.ParityLanes
-		res.Tunnel.HealthyLanes = s.activeTunnel.HealthyLanes
-	}
-	s.tunnelMu.RUnlock()
-
-	// 2. Create a temporary host to check P2P environment
-	h, err := tunnel.NewLibp2pHost()
-	if err != nil {
-		return res, fmt.Errorf("failed to initialize diagnostic host: %w", err)
-	}
-	defer h.Close()
-
-	res.PeerID = h.ID().String()
-	for _, addr := range h.Addrs() {
-		res.Addresses = append(res.Addresses, addr.String())
-	}
-	for _, p := range h.Mux().Protocols() {
-		res.Protocols = append(res.Protocols, string(p))
-	}
-
+	res.PeerID = fmt.Sprintf("local@%s", s.engine.Config.DefaultIdentity)
 	return res, nil
 }

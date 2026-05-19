@@ -1,8 +1,6 @@
 package crypto
 
 import (
-	"github.com/al-Zamakhshari/maknoon/pkg/tunnel"
-	"github.com/libp2p/go-libp2p/core/host"
 	"io"
 	"log/slog"
 )
@@ -118,26 +116,6 @@ func (e *BaseEngine) VaultRecover(ectx *EngineContext, mnemonics []string, vault
 	return e.Engine.VaultRecover(ectx, mnemonics, vaultPath, output, passphrase)
 }
 
-// P2PService
-func (e *BaseEngine) P2PSend(ectx *EngineContext, identityName string, inputName string, r io.Reader, opts P2PSendOptions) (string, <-chan P2PStatus, error) {
-	return e.Engine.P2PSend(ectx, identityName, inputName, r, opts)
-}
-func (e *BaseEngine) P2PReceive(ectx *EngineContext, identityName string, code string, opts P2PReceiveOptions) (<-chan P2PStatus, error) {
-	return e.Engine.P2PReceive(ectx, identityName, code, opts)
-}
-func (e *BaseEngine) ChatStart(ectx *EngineContext, identityName string, target string) (*P2PChatSession, error) {
-	return e.Engine.ChatStart(ectx, identityName, target)
-}
-func (e *BaseEngine) ValidateWormholeURL(ectx *EngineContext, u string) error {
-	return e.Engine.ValidateWormholeURL(ectx, u)
-}
-func (e *BaseEngine) RegisterQuorumHandler(h host.Host) {
-	e.Engine.RegisterQuorumHandler(h)
-}
-func (e *BaseEngine) QuorumRequest(ectx *EngineContext, identityName string, targets []string, action QuorumAction, resource, purpose string) ([]QuorumResponse, error) {
-	return e.Engine.QuorumRequest(ectx, identityName, targets, action, resource, purpose)
-}
-
 // Utils
 func (e *BaseEngine) GeneratePassword(ectx *EngineContext, length int, noSymbols bool) (string, error) {
 	return e.Engine.GeneratePassword(ectx, length, noSymbols)
@@ -172,20 +150,6 @@ func (e *BaseEngine) AuditExport(ectx *EngineContext) ([]AuditEntry, error) {
 // Inspector
 func (e *BaseEngine) Inspect(ectx *EngineContext, in io.Reader, stealth bool) (*HeaderInfo, error) {
 	return e.Engine.Inspect(ectx, in, stealth)
-}
-
-// TunnelService
-func (e *BaseEngine) TunnelStart(ectx *EngineContext, opts tunnel.TunnelOptions) (tunnel.TunnelStatus, error) {
-	return e.Engine.TunnelStart(ectx, opts)
-}
-func (e *BaseEngine) TunnelStop(ectx *EngineContext) error {
-	return e.Engine.TunnelStop(ectx)
-}
-func (e *BaseEngine) TunnelStatus(ectx *EngineContext) (tunnel.TunnelStatus, error) {
-	return e.Engine.TunnelStatus(ectx)
-}
-func (e *BaseEngine) TunnelListen(ectx *EngineContext, addr string, mode string, identity string) (NetworkResult, error) {
-	return e.Engine.TunnelListen(ectx, addr, mode, identity)
 }
 
 // Signer

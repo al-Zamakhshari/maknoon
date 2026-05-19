@@ -153,7 +153,8 @@ func NewEngine(policy SecurityPolicy, idMgr *IdentityManager, conf *Config, vaul
 	e.Crypto = &CryptoService{engine: e}
 	e.Workspace = &WorkspaceService{engine: e}
 
-	e.Identity.Mgr.P2P = &networkMultiaddrsAdapter{network: e.Network}
+	// P2P transport removed — IdentityPublish will use static Multiaddrs from opts only.
+	e.Identity.Mgr.P2P = nil
 	return e, nil
 }
 

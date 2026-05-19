@@ -120,7 +120,6 @@ func createMCPServer() *server.MCPServer {
 	// Register Categorized Tools
 	registerVaultTools(s, engine)
 	registerCryptoTools(s, engine)
-	registerNetworkTools(s, engine)
 	registerConfigTools(s, engine)
 	registerIdentityTools(s, engine)
 	registerProfilesTools(s, engine)
