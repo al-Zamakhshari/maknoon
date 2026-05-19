@@ -2,6 +2,7 @@ package crypto
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -15,16 +16,16 @@ type MultiaddrsProvider interface {
 
 // IdentityPublishOptions settings for publishing an identity.
 type IdentityPublishOptions struct {
-	Name       string   // Local identity name
-	Passphrase string   // Passphrase to unlock local identity
-	Local      bool     // Add to local contacts
-	LibP2P     bool     // Deprecated: libp2p-kad-dht was removed; this field is ignored
-	Nostr      bool     // Publish to Nostr relays
-	DNS        bool     // Publish to DNS (via DHT)
-	Desec      bool     // Publish to deSEC
-	DesecToken string   // deSEC API token
-	BEP44      bool     // Deprecated: BEP-44 publishing removed; field retained for JSON compat discovery)
-	Multiaddrs []string // Optional Multiaddrs to broadcast
+	Name       string // Local identity name
+	Passphrase string // Passphrase to unlock local identity
+	Local      bool   // Add to local contacts only
+	LibP2P     bool   // Deprecated: libp2p-kad-dht was removed; ignored
+	Nostr      bool   // Publish to Nostr relays (default when nothing else is set)
+	DNS        bool   // Generate DNS TXT record instructions
+	Desec      bool   // Publish to DNS via deSEC.io API
+	DesecToken string // deSEC API token
+	WKD        bool   // Publish to HTTPS static file (Web Key Directory)
+	BEP44      bool   // Deprecated: BEP-44 removed; retained for JSON compat
 }
 
 // IdentityPublish broadcasts an identity to configured decentralized registries.
@@ -38,33 +39,28 @@ func (m *IdentityManager) IdentityPublish(ctx context.Context, handle string, op
 		name = opts.Name
 	}
 
-	// 1. Load the identity (including private keys for signing the record)
+	// 1. Load the identity (including private keys for signing the record).
 	id, err := m.LoadIdentity(name, []byte(opts.Passphrase), "", false)
 	if err != nil {
 		return err
 	}
 	defer id.Wipe()
 
-	// 2. Create and sign record
+	// 2. Create and sign the record.
 	record := &IdentityRecord{
-		Handle:     handle,
-		KEMPubKey:  id.KEMPub,
-		SIGPubKey:  id.SIGPub,
-		Timestamp:  time.Now(),
-		ExpiresAt:  time.Now().Add(m.Config.IdentityTTL()),
-		Multiaddrs: opts.Multiaddrs,
+		Handle:    handle,
+		KEMPubKey: id.KEMPub,
+		SIGPubKey: id.SIGPub,
+		Timestamp: time.Now(),
+		ExpiresAt: time.Now().Add(m.Config.IdentityTTL()),
 	}
-
-	// 2b. Attempt to capture active P2P Multiaddrs if none provided
-	if len(record.Multiaddrs) == 0 && m.P2P != nil {
-		record.Multiaddrs = m.P2P.Multiaddrs(ctx, name)
-	}
-
 	if err := record.Sign(id.SIGPriv); err != nil {
 		return fmt.Errorf("failed to sign identity record: %w", err)
 	}
 
-	// 3. Dispatch to registries
+	// 3. Dispatch to selected registries.
+	published := false
+
 	if opts.Local {
 		if m.Contacts == nil {
 			return fmt.Errorf("contact manager not initialized")
@@ -77,6 +73,7 @@ func (m *IdentityManager) IdentityPublish(ctx context.Context, handle string, op
 		}); err != nil {
 			return err
 		}
+		published = true
 	}
 
 	if opts.Desec {
@@ -85,18 +82,31 @@ func (m *IdentityManager) IdentityPublish(ctx context.Context, handle string, op
 			token = os.Getenv("DESEC_TOKEN")
 		}
 		if token == "" {
-			return fmt.Errorf("deSEC token required")
+			return fmt.Errorf("deSEC token required (--desec-token or DESEC_TOKEN env)")
 		}
-
 		dnsReg := NewDNSRegistry(m.Config)
 		if err := dnsReg.PublishWithKey(ctx, record, []byte(token)); err != nil {
 			return err
 		}
+		published = true
 	}
 
-	// Default to Nostr when no specific registry is selected.
-	// libp2p-kad-dht was removed (GO-2024-3218); Nostr is now the primary registry.
-	if opts.Nostr || (!opts.DNS && !opts.Desec && !opts.Local) {
+	if opts.WKD {
+		wkdReg := NewWKDRegistry(m.Config)
+		err := wkdReg.Publish(ctx, record)
+		var wkdManual *ErrWKDPublishManual
+		if errors.As(err, &wkdManual) {
+			// Surface as a structured publish result — not an error.
+			return wkdManual
+		}
+		if err != nil {
+			return fmt.Errorf("WKD publish failed: %w", err)
+		}
+		published = true
+	}
+
+	// Default to Nostr when no other registry is selected.
+	if opts.Nostr || !published {
 		nostrPriv, err := DeriveNostrKeypair(id.SIGPriv)
 		if err != nil {
 			return fmt.Errorf("nostr key derivation failed: %w", err)

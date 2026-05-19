@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"os"
 
 	"github.com/al-Zamakhshari/maknoon/pkg/crypto"
@@ -129,10 +130,10 @@ func registerIdentityTools(s *server.MCPServer, engine crypto.MaknoonEngine) {
 	})
 
 	s.AddTool(mcp.NewTool("identity_publish",
-		mcp.WithDescription("Publish an identity to a registry (nostr or dns)"),
-		mcp.WithString("handle", mcp.Required(), mcp.Description("Public handle to publish (e.g. alice or alice@example.com)")),
+		mcp.WithDescription("Publish an identity to a registry (nostr, wkd, or dns)"),
+		mcp.WithString("handle", mcp.Required(), mcp.Description("Public handle to publish (e.g. @alice or @alice@example.com)")),
 		mcp.WithString("name", mcp.Description("Local identity name (uses default identity if omitted)")),
-		mcp.WithString("registry", mcp.Description("Registry to publish to: nostr (default) or dns")),
+		mcp.WithString("registry", mcp.Description("Registry: nostr (default), wkd (HTTPS static file, requires alice@domain handle), dns")),
 	), func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		args := getArgs(request)
 		handle := getString(args, "handle", "")
@@ -143,6 +144,8 @@ func registerIdentityTools(s *server.MCPServer, engine crypto.MaknoonEngine) {
 			Passphrase: viper.GetString("passphrase"),
 		}
 		switch registry {
+		case "wkd":
+			opts.WKD = true
 		case "dns":
 			opts.DNS = true
 		default:
@@ -150,6 +153,19 @@ func registerIdentityTools(s *server.MCPServer, engine crypto.MaknoonEngine) {
 		}
 
 		err := engine.IdentityPublish(&crypto.EngineContext{Context: ctx}, handle, opts)
+
+		// WKD returns a manual-step result, not an error.
+		var wkdManual *crypto.ErrWKDPublishManual
+		if errors.As(err, &wkdManual) {
+			res := map[string]any{
+				"status":  "action_required",
+				"handle":  handle,
+				"url":     wkdManual.URL,
+				"content": string(wkdManual.Content),
+			}
+			outData, _ := json.Marshal(res)
+			return mcp.NewToolResultText(string(outData)), nil
+		}
 		if err != nil {
 			return crypto.FormatMCPError(err, "identity_publish")
 		}

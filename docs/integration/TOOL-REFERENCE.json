@@ -12,6 +12,13 @@
         "description": "Export a forensic summary of all cryptographic operations",
         "arguments": null,
         "flags": null
+      },
+      {
+        "name": "verify",
+        "path": "maknoon audit verify",
+        "description": "Verify the hash-chain integrity of the audit log (detect tampering)",
+        "arguments": null,
+        "flags": null
       }
     ]
   },
@@ -161,14 +168,6 @@
             "required": false
           },
           {
-            "name": "peer-id",
-            "shorthand": "",
-            "description": "Explicit libp2p Peer ID (optional)",
-            "type": "string",
-            "default": "",
-            "required": false
-          },
-          {
             "name": "sig-pub",
             "shorthand": "",
             "description": "Path to the contact's ML-DSA public key",
@@ -216,14 +215,6 @@
         "description": "Number of parallel workers (0 for auto)",
         "type": "int",
         "default": "0",
-        "required": false
-      },
-      {
-        "name": "fido2",
-        "shorthand": "f",
-        "description": "Use FIDO2 security key for authentication",
-        "type": "bool",
-        "default": "false",
         "required": false
       },
       {
@@ -669,7 +660,7 @@
       {
         "name": "publish",
         "path": "maknoon identity publish",
-        "description": "Anchor your active identity to a global registry (libp2p DHT / Nostr / DNS)",
+        "description": "Anchor your active identity to a registry (Nostr, WKD, or DNS)",
         "arguments": [
           {
             "name": "handle",
@@ -678,17 +669,9 @@
         ],
         "flags": [
           {
-            "name": "bep44",
-            "shorthand": "",
-            "description": "Publish peer-discovery mini-record to BitTorrent BEP-44 DHT (requires peer online for resolution)",
-            "type": "bool",
-            "default": "false",
-            "required": false
-          },
-          {
             "name": "desec",
             "shorthand": "",
-            "description": "Automatically publish to deSEC.io (requires --desec-token or DESEC_TOKEN)",
+            "description": "Auto-publish DNS record via deSEC.io (requires --desec-token or DESEC_TOKEN)",
             "type": "bool",
             "default": "false",
             "required": false
@@ -704,7 +687,7 @@
           {
             "name": "dns",
             "shorthand": "",
-            "description": "Generate a DNS TXT record for decentralized discovery",
+            "description": "Generate a _maknoon DNS TXT record (manual setup)",
             "type": "bool",
             "default": "false",
             "required": false
@@ -712,23 +695,23 @@
           {
             "name": "local",
             "shorthand": "",
-            "description": "Pin identity to local contacts only",
+            "description": "Pin identity to local contacts only (no network)",
             "type": "bool",
             "default": "false",
             "required": false
           },
           {
-            "name": "multiaddr",
+            "name": "nostr",
             "shorthand": "",
-            "description": "Explicit Multiaddrs to broadcast (overrides auto-capture)",
-            "type": "stringSlice",
-            "default": "[]",
+            "description": "Publish to Nostr relays (default when no other registry is specified)",
+            "type": "bool",
+            "default": "false",
             "required": false
           },
           {
-            "name": "nostr",
+            "name": "wkd",
             "shorthand": "",
-            "description": "Publish to Nostr relays (secp256k1 key derived ephemerally)",
+            "description": "Web Key Directory: publish as an HTTPS static file (requires alice@domain.com handle)",
             "type": "bool",
             "default": "false",
             "required": false
@@ -935,13 +918,21 @@
   {
     "name": "man",
     "path": "maknoon man",
-    "description": "Verify or generate the man page",
+    "description": "Verify or generate man pages for all commands",
     "arguments": null,
     "flags": [
       {
+        "name": "dir",
+        "shorthand": "",
+        "description": "Directory for man page files",
+        "type": "string",
+        "default": "man",
+        "required": false
+      },
+      {
         "name": "generate",
         "shorthand": "",
-        "description": "Generate the man page to stdout",
+        "description": "Generate man pages for all commands into --dir",
         "type": "bool",
         "default": "false",
         "required": false
@@ -949,7 +940,7 @@
       {
         "name": "verify",
         "shorthand": "",
-        "description": "Verify that the man page is up to date with the CLI structure",
+        "description": "Verify all commands have man page files in --dir",
         "type": "bool",
         "default": "false",
         "required": false
@@ -1225,7 +1216,16 @@
         "path": "maknoon registry health",
         "description": "Check connectivity of configured Nostr relays",
         "arguments": null,
-        "flags": null
+        "flags": [
+          {
+            "name": "discover",
+            "shorthand": "",
+            "description": "Also probe well-known public relays beyond the configured set",
+            "type": "bool",
+            "default": "false",
+            "required": false
+          }
+        ]
       }
     ]
   },
@@ -1378,6 +1378,22 @@
         "flags": null
       },
       {
+        "name": "export",
+        "path": "maknoon vault export",
+        "description": "Export all vault entries as an encrypted .makn bundle",
+        "arguments": null,
+        "flags": [
+          {
+            "name": "output",
+            "shorthand": "o",
+            "description": "Output path (default: \u003cvault\u003e.vault.makn)",
+            "type": "string",
+            "default": "",
+            "required": false
+          }
+        ]
+      },
+      {
         "name": "get",
         "path": "maknoon vault get",
         "description": "Retrieve a secret from the vault",
@@ -1400,6 +1416,30 @@
           }
         ],
         "flags": null
+      },
+      {
+        "name": "import",
+        "path": "maknoon vault import",
+        "description": "Import vault entries from an encrypted .makn bundle",
+        "arguments": null,
+        "flags": [
+          {
+            "name": "input",
+            "shorthand": "i",
+            "description": "Path to the encrypted .makn bundle (required)",
+            "type": "string",
+            "default": "",
+            "required": false
+          },
+          {
+            "name": "overwrite",
+            "shorthand": "",
+            "description": "Overwrite existing entries",
+            "type": "bool",
+            "default": "false",
+            "required": false
+          }
+        ]
       },
       {
         "name": "init-institutional",

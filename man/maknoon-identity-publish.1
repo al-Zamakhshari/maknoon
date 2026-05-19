@@ -2,7 +2,7 @@
 .TH "MAKNOON" "1" "Jan 2024" "Maknoon Post-Quantum Engine" "Maknoon Manual"
 
 .SH NAME
-maknoon-identity-publish - Anchor your active identity to a global registry (Nostr / DNS)
+maknoon-identity-publish - Anchor your active identity to a registry (Nostr, WKD, or DNS)
 
 
 .SH SYNOPSIS
@@ -10,12 +10,24 @@ maknoon-identity-publish - Anchor your active identity to a global registry (Nos
 
 
 .SH DESCRIPTION
-Anchor your active identity to a global registry (Nostr / DNS)
+Publishes your identity (ML-KEM + ML-DSA public keys) to one or more registries
+so that other Maknoon users can encrypt directly to you by handle.
+
+.PP
+Registries:
+  --nostr     Publish to Nostr relays (default). No infrastructure required.
+              Recipients resolve you via @handle or user@domain.com (NIP-05).
+  --wkd       Web Key Directory — place a JSON file on your own HTTPS server at
+              https:///.well-known/maknoon/\&.json
+              Works for alice@example.com handles. No DNS changes required.
+  --dns       Generate a DNS TXT record (_maknoon.) for manual setup.
+  --desec     Auto-publish the DNS record via deSEC.io API.
+  --local     Pin to local contacts only (no network publishing).
 
 
 .SH OPTIONS
 \fB--desec\fP[=false]
-	Automatically publish to deSEC.io (requires --desec-token or DESEC_TOKEN)
+	Auto-publish DNS record via deSEC.io (requires --desec-token or DESEC_TOKEN)
 
 .PP
 \fB--desec-token\fP=""
@@ -23,7 +35,7 @@ Anchor your active identity to a global registry (Nostr / DNS)
 
 .PP
 \fB--dns\fP[=false]
-	Generate a DNS TXT record for decentralized discovery
+	Generate a _maknoon DNS TXT record (manual setup)
 
 .PP
 \fB-h\fP, \fB--help\fP[=false]
@@ -31,11 +43,15 @@ Anchor your active identity to a global registry (Nostr / DNS)
 
 .PP
 \fB--local\fP[=false]
-	Pin identity to local contacts only
+	Pin identity to local contacts only (no network)
 
 .PP
 \fB--nostr\fP[=false]
-	Publish to Nostr relays (secp256k1 key derived ephemerally)
+	Publish to Nostr relays (default when no other registry is specified)
+
+.PP
+\fB--wkd\fP[=false]
+	Web Key Directory: publish as an HTTPS static file (requires alice@domain.com handle)
 
 
 .SH OPTIONS INHERITED FROM PARENT COMMANDS
