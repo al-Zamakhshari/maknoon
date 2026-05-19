@@ -466,7 +466,7 @@
   {
     "name": "fragment",
     "path": "maknoon fragment",
-    "description": "Split a file into erasure-coded fragments [EXPERIMENTAL]",
+    "description": "Split a file into erasure-coded fragments",
     "arguments": [
       {
         "name": "file",
@@ -485,7 +485,15 @@
       {
         "name": "output",
         "shorthand": "o",
-        "description": "Output directory for fragments",
+        "description": "Output directory for shards",
+        "type": "string",
+        "default": "",
+        "required": false
+      },
+      {
+        "name": "output-manifest",
+        "shorthand": "",
+        "description": "Write manifest to this path instead of alongside shards (useful with rclone)",
         "type": "string",
         "default": "",
         "required": false
@@ -509,7 +517,7 @@
       {
         "name": "sign-with",
         "shorthand": "",
-        "description": "ML-DSA private key to sign each fragment block",
+        "description": "ML-DSA private key to sign each shard block",
         "type": "string",
         "default": "",
         "required": false
@@ -1109,7 +1117,7 @@
   {
     "name": "reassemble",
     "path": "maknoon reassemble",
-    "description": "Reconstruct a file from fragments [EXPERIMENTAL]",
+    "description": "Reconstruct a file from fragments",
     "arguments": [
       {
         "name": "dir",
@@ -1120,7 +1128,7 @@
       {
         "name": "authorized-key",
         "shorthand": "",
-        "description": "ML-DSA public key to verify fragment integrity",
+        "description": "ML-DSA public key to verify shard integrity",
         "type": "string",
         "default": "",
         "required": false
@@ -1131,6 +1139,14 @@
         "description": "Path to save the reconstructed file",
         "type": "string",
         "default": "",
+        "required": false
+      },
+      {
+        "name": "verify",
+        "shorthand": "",
+        "description": "Verify output SHA-256 against manifest.json (recommended)",
+        "type": "bool",
+        "default": "false",
         "required": false
       }
     ]

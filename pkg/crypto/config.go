@@ -79,7 +79,6 @@ type PerformanceConfig struct {
 // The standard BitTorrent bootstrap nodes are used automatically; no configuration is required.
 type BEP44Config struct{}
 
-
 type PathConfig struct {
 	KeysDir   string `json:"keys_dir" mapstructure:"keys_dir"`
 	VaultsDir string `json:"vaults_dir" mapstructure:"vaults_dir"`

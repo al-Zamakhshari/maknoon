@@ -32,6 +32,11 @@ type FragmentOptions struct {
 	OriginalSize int64
 	OriginalName string // original filename, written to manifest
 	OriginalHash string // hex(sha256) of original file, written to manifest
+	// ManifestPath writes the manifest to a separate path instead of <TargetDir>/manifest.json.
+	// Use this when distributing shards to cloud storage and keeping the manifest locally
+	// (e.g. with rclone: fragment → upload shards only → store manifest in safe location).
+	// When empty, manifest is written alongside the shards in TargetDir.
+	ManifestPath string
 }
 
 // FragmentManifest records shard metadata for reassembly and integrity verification.
@@ -371,11 +376,11 @@ func ReassembleFragments(srcDir string, w io.Writer, authorizedPubKey []byte) er
 	return nil
 }
 
-// writeFragmentManifest writes manifest.json to opts.TargetDir describing the shards.
+// writeFragmentManifest writes manifest.json either to opts.ManifestPath (if set)
+// or to <opts.TargetDir>/manifest.json (default). The manifest records all
+// metadata needed to verify and reassemble the shards.
 func writeFragmentManifest(opts FragmentOptions, writers []io.WriteCloser) error {
-	if opts.TargetDir == "" {
-		return nil
-	}
+	_ = writers // shard file handles already created; manifest references filenames only
 	total := opts.DataShards + opts.ParityShards
 	shards := make([]ShardInfo, total)
 	for i := 0; i < total; i++ {
@@ -384,7 +389,6 @@ func writeFragmentManifest(opts FragmentOptions, writers []io.WriteCloser) error
 			Filename: fmt.Sprintf("shard_%03d.maknf", i),
 		}
 	}
-	_ = writers // shard file handles already created; manifest references filenames only
 	m := FragmentManifest{
 		Version:      1,
 		CreatedAt:    time.Now().UTC(),
@@ -401,7 +405,36 @@ func writeFragmentManifest(opts FragmentOptions, writers []io.WriteCloser) error
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(opts.TargetDir, "manifest.json"), data, 0600)
+
+	dest := opts.ManifestPath
+	if dest == "" {
+		if opts.TargetDir == "" {
+			return nil
+		}
+		dest = filepath.Join(opts.TargetDir, "manifest.json")
+	}
+	return os.WriteFile(dest, data, 0600)
+}
+
+// VerifyReassembly checks the SHA-256 of outputPath against the original_hash
+// stored in srcDir/manifest.json. Returns nil if they match, an error otherwise.
+// If the manifest is absent or has no hash, verification is skipped (returns nil).
+func VerifyReassembly(srcDir, outputPath string) error {
+	manifest, err := ReadFragmentManifest(srcDir)
+	if err != nil {
+		return fmt.Errorf("reading manifest: %w", err)
+	}
+	if manifest == nil || manifest.OriginalHash == "" {
+		return nil // nothing to verify against
+	}
+	got, err := HashFile(outputPath)
+	if err != nil {
+		return fmt.Errorf("hashing output: %w", err)
+	}
+	if got != manifest.OriginalHash {
+		return fmt.Errorf("integrity check FAILED: output hash %s does not match manifest hash %s", got, manifest.OriginalHash)
+	}
+	return nil
 }
 
 // ReadFragmentManifest reads manifest.json from srcDir if it exists.

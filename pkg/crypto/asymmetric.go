@@ -80,7 +80,6 @@ func DeriveSIGPublic(privKeyBytes []byte, profileID byte) ([]byte, error) {
 	return mldsaPub, nil
 }
 
-
 // DeriveKEMPublic derives the public key from a Hybrid KEM private key.
 func DeriveKEMPublic(privKeyBytes []byte) ([]byte, error) {
 	kem := hpke.MLKEM768X25519()

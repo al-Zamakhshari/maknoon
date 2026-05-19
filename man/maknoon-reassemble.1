@@ -2,7 +2,7 @@
 .TH "MAKNOON" "1" "Jan 2024" "Maknoon Post-Quantum Engine" "Maknoon Manual"
 
 .SH NAME
-maknoon-reassemble - Reconstruct a file from fragments [EXPERIMENTAL]
+maknoon-reassemble - Reconstruct a file from fragments
 
 
 .SH SYNOPSIS
@@ -10,12 +10,20 @@ maknoon-reassemble - Reconstruct a file from fragments [EXPERIMENTAL]
 
 
 .SH DESCRIPTION
-Reconstruct a file from fragments [EXPERIMENTAL]
+Reconstructs the original file from a directory of .maknf shard files.
+Requires at least N data shards (as specified during fragmentation).
+
+.PP
+Use --verify to check the output SHA-256 against the hash stored in manifest.json,
+confirming the reconstruction is byte-perfect:
+
+.PP
+maknoon reassemble /tmp/recover/ --output secret.makn --verify
 
 
 .SH OPTIONS
 \fB--authorized-key\fP=""
-	ML-DSA public key to verify fragment integrity
+	ML-DSA public key to verify shard integrity
 
 .PP
 \fB-h\fP, \fB--help\fP[=false]
@@ -24,6 +32,10 @@ Reconstruct a file from fragments [EXPERIMENTAL]
 .PP
 \fB-o\fP, \fB--output\fP=""
 	Path to save the reconstructed file
+
+.PP
+\fB--verify\fP[=false]
+	Verify output SHA-256 against manifest.json (recommended)
 
 
 .SH OPTIONS INHERITED FROM PARENT COMMANDS

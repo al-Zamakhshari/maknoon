@@ -2,7 +2,7 @@
 .TH "MAKNOON" "1" "Jan 2024" "Maknoon Post-Quantum Engine" "Maknoon Manual"
 
 .SH NAME
-maknoon-fragment - Split a file into erasure-coded fragments [EXPERIMENTAL]
+maknoon-fragment - Split a file into erasure-coded fragments
 
 
 .SH SYNOPSIS
@@ -11,11 +11,26 @@ maknoon-fragment - Split a file into erasure-coded fragments [EXPERIMENTAL]
 
 .SH DESCRIPTION
 Breaks a file into redundant shards using Reed-Solomon erasure coding.
-The original data can be reconstructed from any subset of size >= threshold.
+The original data can be reconstructed from any N data shards out of N+M total.
 
 .PP
-NOTE: Fragment dispersal is experimental. Without a storage backend, shards
-require manual placement. For production use, combine with an object store.
+Designed to compose with rclone for cloud distribution:
+
+.PP
+# Fragment and upload shards to three different clouds
+  maknoon fragment secret.makn --data 5 --parity 3 \\
+    --output /tmp/shards/ --output-manifest ~/manifests/secret.json
+
+.PP
+rclone copy /tmp/shards/ s3:bucket/shards/
+  rclone copy /tmp/shards/ gcs:bucket/shards/
+  rclone copy /tmp/shards/ azure:container/shards/
+  maknoon shred /tmp/shards/
+
+.PP
+# Recovery: fetch any 5+ shards, reassemble, verify
+  rclone copy s3:bucket/shards/ /tmp/recover/
+  maknoon reassemble /tmp/recover/ --output secret.makn --verify
 
 
 .SH OPTIONS
@@ -28,7 +43,11 @@ require manual placement. For production use, combine with an object store.
 
 .PP
 \fB-o\fP, \fB--output\fP=""
-	Output directory for fragments
+	Output directory for shards
+
+.PP
+\fB--output-manifest\fP=""
+	Write manifest to this path instead of alongside shards (useful with rclone)
 
 .PP
 \fB-r\fP, \fB--parity\fP=3
@@ -40,7 +59,7 @@ require manual placement. For production use, combine with an object store.
 
 .PP
 \fB--sign-with\fP=""
-	ML-DSA private key to sign each fragment block
+	ML-DSA private key to sign each shard block
 
 
 .SH OPTIONS INHERITED FROM PARENT COMMANDS

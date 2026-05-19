@@ -9,8 +9,6 @@ import (
 	"time"
 )
 
-
-
 // MultiaddrsProvider can return the node's current P2P multiaddresses.
 type MultiaddrsProvider interface {
 	Multiaddrs(ctx context.Context, identityName string) []string
