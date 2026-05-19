@@ -153,19 +153,27 @@ The following variables govern the behavior of Maknoon in automated and non-inte
 Maknoon is fully self-describing. AI Agents can query the current tool registry and schema dynamically to understand the available cryptographic capabilities.
 
 ```bash
-# Generate human-readable tool documentation from schema
-maknoon schema --format markdown > docs/integration/TOOL-REFERENCE.md
+# Generate machine-readable tool schema (JSON)
+go run ./cmd/maknoon schema 2>/dev/null > docs/integration/TOOL-REFERENCE.json
 ```
 
 
-| Tool Name | Mission Role | Description |
+| Tool Name | Category | Description |
 | :--- | :--- | :--- |
-| `vault_get` | Identity | Secure retrieval of agent credentials from the PQC vault. |
-| `encrypt_file` | Protection | Multi-recipient Post-Quantum encryption of local assets. |
-| `inspect_file` | Analysis | Forensic header analysis without private key access. |
-| `config_update` | Governance | Dynamic live-migration of cryptographic profiles (Agility). |
-| `p2p_send` | Transport | Direct peer-to-peer authenticated file transfer. |
-| `gen_passphrase` | Logic | Provisioning of secure, high-entropy master mnemonics. |
+| `encrypt_file` | Crypto | Multi-recipient PQC encryption; supports directories and comma-separated key handles. |
+| `decrypt_file` | Crypto | Asymmetric or symmetric decryption with optional sender verification. |
+| `sign_file` / `verify_file` | Crypto | ML-DSA-87 signing and M-of-N threshold verification. |
+| `shred_file` | Crypto | Secure deletion (multi-pass overwrite + random rename). |
+| `vault_get` / `vault_set` | Vault | Encrypted secret storage with Argon2id key derivation. |
+| `vault_set_blob` / `vault_get_blob` | Vault | Encrypted agent memory (persists across sessions). |
+| `vault_status` | Vault | Quorum vault health and shard readiness. |
+| `fragment_file` / `reassemble_file` | Dispersal | Reed-Solomon erasure coding; compose with rclone for cloud distribution. |
+| `identity_publish` | Identity | Publish to WKD (HTTPS) or DNS; `registry` field: `wkd` (default), `dns`, `desec`, `local`. |
+| `resolve_identity` | Identity | Resolve a petname or `@handle` to raw public key bytes. |
+| `audit_verify` | Config | Verify hash-chain integrity of the forensic audit log. |
+| `diagnostic` | Config | Full engine and environment manifest — call first to orient an agent. |
+| `config_update` | Config | Live-update engine settings (profile, concurrency, stealth mode). |
+| `gen_passphrase` | Crypto | High-entropy mnemonic generation. |
 
 
 ---

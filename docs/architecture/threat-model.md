@@ -93,13 +93,12 @@ These are accepted, documented gaps — not unintended bugs. Each has a mitigati
 
 ## Identity Registry Architecture
 
-Maknoon uses a three-tier identity discovery chain:
+Maknoon uses a two-tier identity discovery chain:
 
-1. **Nostr (primary)** — decentralized relays, identity records signed with ML-DSA-87, no single point of failure
-2. **BEP-44 (opt-in)** — BitTorrent DHT mutable items, fully peer-to-peer
-3. **DNS (tertiary)** — standard TXT record lookup for handle resolution
+1. **WKD (primary)** — Web Key Directory: a signed `IdentityRecord` JSON served over HTTPS at `https://<domain>/.well-known/maknoon/<user>.json`. No DNS changes required; any web server or CDN works. SSRF-protected: all domains are validated against RFC1918/loopback/ULA before connecting.
+2. **DNS (fallback)** — `_maknoon.<domain>` TXT record. Standard DNS resolution; supports automated publishing via deSEC.io API.
 
-`libp2p-kad-dht` was removed in favour of Nostr as the primary layer. This eliminates the GO-2024-3218 vulnerability (content censorship via Kademlia DHT routing) while maintaining decentralized identity discovery. P2P tunneling continues to use `go-libp2p` core (unaffected).
+`libp2p-kad-dht` was removed (GO-2024-3218). Nostr was subsequently removed as well in favour of HTTPS-based WKD, which provides the same decentralised key discovery without relay infrastructure, volunteer-run relays, or social-network dependencies. BEP-44 DHT was removed at the same time.
 
 ---
 

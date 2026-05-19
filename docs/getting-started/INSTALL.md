@@ -35,4 +35,4 @@ make build
 
 ## 🛡️ Hardware Hardening Setup
 After installation, it is highly recommended to configure your hardware trust anchors:
-*   **[TPM 2.0 & FIDO2 Setup](./HARDWARE-HARDENING.md)**: Binding identities to silicon trust.
+*   **[TPM 2.0 Setup](./HARDWARE-HARDENING.md)**: Binding identities to silicon trust and secure deletion guidance for SSDs.

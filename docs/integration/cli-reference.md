@@ -62,8 +62,8 @@ Maknoon utilizes a decentralized identity model based on NIST-standardized PQC a
 | :--- | :--- | :--- |
 | `keygen` | Provisions a new hybrid PQC identity pair. | `--profile` (`nist`\|`conservative`), `--output` |
 | `identity active` | Enumerates locally managed cryptographic identities. | `--json` |
-| `identity info` | Shows key details including `nostr_pub` hex for relay discovery. | `--json` |
-| `identity publish` | Announces public keys to Nostr relays or DNS. | `--nostr`, `--dns`, `--desec` |
+| `identity info` | Shows key details: KEM public key, SIG public key, peer ID fingerprint. | `--json` |
+| `identity publish` | Publishes public keys to WKD (HTTPS) or DNS. | `--wkd` (default), `--dns`, `--desec`, `--local` |
 | `identity shard` | Splits a generic secret into Shamir shards (SSS). | `--threshold`, `--shares` |
 | `identity reconstruct` | Rebuilds a secret from threshold shards. | `--json` |
 | `identity split` | Shards a private identity file via Shamir's Secret Sharing. | `--threshold`, `--shares` |
@@ -94,7 +94,6 @@ Administrative commands for system configuration, capability discovery, and cryp
 | `config` | Manages global security and performance settings. | `list`, `set`, `init` |
 | `profiles` | Lists built-in profiles (`nist`=1, `conservative`=3) and manages custom profiles. | `list`, `gen`, `rm` |
 | `session derive` | Derives a reusable session key from a passphrase (skips per-file KDF in bulk ops). | `--passphrase` |
-| `registry health` | Checks Nostr relay connectivity; `--discover` probes well-known public relays. | `--discover`, `--json` |
 | `call <tool>` | CLI MCP client — invokes a tool on a running Maknoon SSE server. | `--addr`, `--args`, `--insecure` |
 | `audit verify` | Verifies the hash-chain integrity of the audit log. | `(No parameters)` |
 | `schema` | Generates a recursive JSON-Schema of the CLI. | `(No parameters)` |

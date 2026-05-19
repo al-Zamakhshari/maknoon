@@ -49,7 +49,6 @@ docker compose -f deploy/docker/mission-quorum.yml logs guardian-1 --tail 50
 | `wait_for_condition` timeout on identity | Container startup too slow | Increase `wait_for_condition` timeout in the script |
 | `checked_exec FAILED` on vault set | Wrong passphrase in test | Check test passphrase in docker-compose YAML |
 | Shard is null | `jq` path mismatch after CLI change | Verify `maknoon vault split --json` output structure |
-| Multiaddr empty | P2P port not open yet | Check that tunnel.go port binding precedes the wait |
 
 ---
 
