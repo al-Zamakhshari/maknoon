@@ -32,7 +32,8 @@ archives:
       {{- .Os }}_
       {{- .Arch }}
     files:
-      - maknoon.1
+      - src: man/*.1
+        dst: man
     format_overrides:
       - goos: windows
         formats: [zip]
@@ -87,4 +88,4 @@ brews:
       system "#{bin}/maknoon --version"
     install: |
       bin.install "maknoon"
-      man1.install "maknoon.1"
+      man1.install Dir["man/*.1"]
