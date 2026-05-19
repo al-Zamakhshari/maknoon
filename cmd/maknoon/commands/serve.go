@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/al-Zamakhshari/maknoon/pkg/crypto"
+	"github.com/mark3labs/mcp-go/server"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"golang.org/x/time/rate"
@@ -40,7 +41,6 @@ func rateLimitMiddleware(next http.Handler) http.Handler {
 func ServeCmd() *cobra.Command {
 	var addr string
 	var certFile, keyFile string
-	var backend string
 
 	cmd := &cobra.Command{
 		Use:   "serve",
@@ -55,7 +55,6 @@ ensuring a zero-trust, quantum-resistant infrastructure.`,
 			_ = viper.BindPFlag("server.address", cmd.Flags().Lookup("address"))
 			_ = viper.BindPFlag("server.tls_cert", cmd.Flags().Lookup("tls-cert"))
 			_ = viper.BindPFlag("server.tls_key", cmd.Flags().Lookup("tls-key"))
-			_ = viper.BindPFlag("vault_backend", cmd.Flags().Lookup("backend"))
 
 			// Initialize engine in agent mode for API safety (non-interactive)
 			viper.Set("agent_mode", "1")
@@ -70,7 +69,6 @@ ensuring a zero-trust, quantum-resistant infrastructure.`,
 	cmd.Flags().StringVar(&addr, "address", ":8081", "Address to listen on")
 	cmd.Flags().StringVar(&certFile, "tls-cert", "", "Path to TLS certificate (REQUIRED)")
 	cmd.Flags().StringVar(&keyFile, "tls-key", "", "Path to TLS private key (REQUIRED)")
-	cmd.Flags().StringVar(&backend, "backend", "bbolt", "Vault storage backend (bbolt or badger)")
 
 	return cmd
 }
@@ -117,8 +115,8 @@ func runAPIServer() error {
 	mux.HandleFunc("/v1/ready", handleReady)
 
 	// Route all other requests to the MCP SSE transport.
-	// TODO: replace with server.NewSSEServer(mcpServer, ...) once baseURL is plumbed from flags.
-	_ = mcpServer // suppress unused warning while wiring is completed below
+	sseServer := server.NewSSEServer(mcpServer, server.WithBaseURL("https://"+addr))
+	mux.Handle("/", sseServer)
 
 	// Define the HTTP server with Post-Quantum TLS 1.3 configuration
 	httpServer := &http.Server{

@@ -1244,14 +1244,6 @@
         "required": false
       },
       {
-        "name": "backend",
-        "shorthand": "",
-        "description": "Vault storage backend (bbolt or badger)",
-        "type": "string",
-        "default": "bbolt",
-        "required": false
-      },
-      {
         "name": "tls-cert",
         "shorthand": "",
         "description": "Path to TLS certificate (REQUIRED)",
