@@ -34,6 +34,10 @@ rclone copy /tmp/shards/ s3:bucket/shards/
 
 
 .SH OPTIONS
+\fB--chunk-size\fP=0
+	Shard chunk size in bytes (default: 65536; range: 4096–4194304)
+
+.PP
 \fB-d\fP, \fB--data\fP=5
 	Number of data shards
 
