@@ -44,13 +44,7 @@ func printProfiles() {
 
 		for _, name := range names {
 			p := conf.Profiles[name]
-			cipherName := "XChaCha20"
-			if p.CipherType == crypto.AlgoAES256GCM {
-				cipherName = "AES-GCM"
-			} else if p.CipherType == crypto.AlgoAES256GCMSIV {
-				cipherName = "AES-GCM-SIV"
-			}
-			fmt.Printf("  %-15s (%d): %s + Argon2id\n", name, p.CustomID, cipherName)
+			fmt.Printf("  %-15s (%d): AES-GCM + Argon2id\n", name, p.CustomID)
 		}
 	}
 
@@ -96,13 +90,8 @@ func profilesListCmd() *cobra.Command {
 
 			for _, name := range names {
 				p := conf.Profiles[name]
-				cipherName := "XChaCha20"
-				if p.CipherType == crypto.AlgoAES256GCM {
-					cipherName = "AES-GCM"
-				} else if p.CipherType == crypto.AlgoAES256GCMSIV {
-					cipherName = "AES-GCM-SIV"
-				}
-
+				cipherName := "AES-GCM"
+				_ = p.CipherType // only AES-256-GCM supported
 				kdfStr := fmt.Sprintf("Argon2id (t=%d, m=%dKB, p=%d)", p.ArgonTime, p.ArgonMem, p.ArgonThrd)
 				fmt.Printf("%-20s %-5d %-15s %-30s\n", name, p.CustomID, cipherName, kdfStr)
 			}

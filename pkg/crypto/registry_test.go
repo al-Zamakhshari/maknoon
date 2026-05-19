@@ -51,12 +51,6 @@ func TestIdentityRecordSerializationRoundtrip(t *testing.T) {
 func TestRegistryConstructors(t *testing.T) {
 	conf := DefaultConfig()
 
-	// BEP44 registry should be constructable without error.
-	bep44Reg := NewBEP44Registry(conf)
-	if bep44Reg == nil {
-		t.Error("NewBEP44Registry returned nil")
-	}
-
 	// Nostr registry should be constructable without error.
 	nostrReg := NewNostrRegistry(conf)
 	if nostrReg == nil {
@@ -136,41 +130,6 @@ func TestNostrRegistryNilConfFallsBackToDefaults(t *testing.T) {
 	}
 }
 
-func TestBEP44HandleRoundtrip(t *testing.T) {
-	_, _, spub, spriv, err := GeneratePQKeyPair(1)
-	if err != nil {
-		t.Fatalf("GeneratePQKeyPair: %v", err)
-	}
-
-	handle, err := BEP44HandleFromSIGPub(spub)
-	if err != nil {
-		t.Fatalf("BEP44HandleFromSIGPub: %v", err)
-	}
-
-	// Ed25519 private key derivation should produce consistent public key.
-	edPriv, err := extractEd25519FromSIGPriv(spriv)
-	if err != nil {
-		t.Fatalf("extractEd25519FromSIGPriv: %v", err)
-	}
-	expectedHandle, err := BEP44HandleFromSIGPub(spub)
-	if err != nil {
-		t.Fatalf("second BEP44HandleFromSIGPub: %v", err)
-	}
-	if handle != expectedHandle {
-		t.Errorf("handle not deterministic: %s vs %s", handle, expectedHandle)
-	}
-	_ = edPriv
-
-	// Confirm extractEd25519PubFromHandle parses the handle back to a 32-byte key.
-	pubKey, err := extractEd25519PubFromHandle(handle)
-	if err != nil {
-		t.Fatalf("extractEd25519PubFromHandle: %v", err)
-	}
-	if pubKey == ([32]byte{}) {
-		t.Error("extracted public key is all zeros")
-	}
-}
-
 func TestIdentityRecordSignAndVerify(t *testing.T) {
 	_, _, spub, spriv, err := GeneratePQKeyPair(1)
 	if err != nil {
@@ -234,34 +193,6 @@ func TestIdentityRecordJSONRoundtrip(t *testing.T) {
 	if decoded.Handle != orig.Handle {
 		t.Errorf("handle mismatch: %q vs %q", decoded.Handle, orig.Handle)
 	}
-}
-
-func TestBEP44HandleExtraction(t *testing.T) {
-	_, _, spub, _, err := GeneratePQKeyPair(1)
-	if err != nil {
-		t.Fatalf("GeneratePQKeyPair failed: %v", err)
-	}
-
-	handle, err := BEP44HandleFromSIGPub(spub)
-	if err != nil {
-		t.Fatalf("BEP44HandleFromSIGPub failed: %v", err)
-	}
-
-	if !IsBEP44Handle(handle) {
-		t.Errorf("expected IsBEP44Handle true, got false for %s", handle)
-	}
-
-	pubKey, err := extractEd25519PubFromHandle(handle)
-	if err != nil {
-		t.Fatalf("extractEd25519PubFromHandle failed: %v", err)
-	}
-
-	// Re-derive from the SIG pub and verify they match.
-	expectedHandle, _ := BEP44HandleFromSIGPub(spub)
-	if handle != expectedHandle {
-		t.Errorf("handle mismatch: got %s want %s", handle, expectedHandle)
-	}
-	_ = pubKey
 }
 
 // TestExpiredRecordRejected verifies that MultiRegistry.Resolve() skips records

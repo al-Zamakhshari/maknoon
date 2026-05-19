@@ -276,33 +276,16 @@ func (m *IdentityManager) LoadPrivateKey(path string, passphrase []byte, pin str
 	return data, nil
 }
 
-func (m *IdentityManager) UnlockPrivateKeyWithFIDOOrPass(password []byte, pin string, resolvedPath string, isStdin bool) ([]byte, error) {
+func (m *IdentityManager) UnlockPrivateKeyWithFIDOOrPass(password []byte, _ string, resolvedPath string, _ bool) ([]byte, error) {
 	data, err := m.Store.ReadKey(resolvedPath)
 	if err != nil {
 		return nil, &ErrIO{Path: resolvedPath, Reason: err.Error()}
 	}
 
-	fidoPath := resolvedPath + ".fido2"
-	token, err := Fido2Unlock(fidoPath, pin)
-	if err != nil {
-		// Fallback to passphrase if FIDO fails but passphrase was provided
-		if len(password) > 0 {
-			var decrypted bytes.Buffer
-			_, _, err := DecryptStream(bytes.NewReader(data), &decrypted, password, 1, false)
-			if err == nil {
-				return decrypted.Bytes(), nil
-			}
-		}
-		return nil, &ErrAuthentication{Reason: fmt.Sprintf("FIDO2 unlock failed: %v", err)}
-	}
-	defer SafeClear(token)
-
 	var decrypted bytes.Buffer
-	_, _, err = DecryptStream(bytes.NewReader(data), &decrypted, token, 1, false)
-	if err != nil {
-		return nil, &ErrAuthentication{Reason: "FIDO2 token failed to decrypt the key"}
+	if _, _, err := DecryptStream(bytes.NewReader(data), &decrypted, password, 1, false); err != nil {
+		return nil, &ErrAuthentication{Reason: "passphrase incorrect or key file corrupt"}
 	}
-
 	return decrypted.Bytes(), nil
 }
 

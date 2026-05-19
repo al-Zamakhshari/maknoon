@@ -18,7 +18,6 @@ func MCPServerCmd() *cobra.Command {
 	var transport string
 	var addr string
 	var certFile, keyFile string
-	var otelEndpoint string
 
 	cmd := &cobra.Command{
 		Use:   "mcp",
@@ -34,20 +33,6 @@ For SSE mode, the server uses Go 1.23's native Post-Quantum TLS 1.3 capabilities
 			_ = viper.BindPFlag("mcp.address", cmd.Flags().Lookup("address"))
 			_ = viper.BindPFlag("mcp.tls_cert", cmd.Flags().Lookup("tls-cert"))
 			_ = viper.BindPFlag("mcp.tls_key", cmd.Flags().Lookup("tls-key"))
-
-			// Optional OpenTelemetry tracing.
-			if ep := viper.GetString("mcp.otel_endpoint"); ep != "" {
-				otelEndpoint = ep
-			}
-			otelShutdown, err := initOTEL(cmd.Context(), otelEndpoint)
-			if err != nil {
-				fmt.Fprintf(cmd.ErrOrStderr(), "⚠️  OTEL init failed (tracing disabled): %v\n", err)
-			} else {
-				defer otelShutdown()
-				if otelEndpoint != "" {
-					fmt.Printf("📡 OTEL tracing enabled → %s\n", otelEndpoint)
-				}
-			}
 
 			// Ensure engine is initialized with AgentPolicy
 			viper.Set("agent_mode", "1")
@@ -76,9 +61,6 @@ For SSE mode, the server uses Go 1.23's native Post-Quantum TLS 1.3 capabilities
 	cmd.Flags().StringVar(&addr, "address", ":8080", "Address to listen on for SSE mode")
 	cmd.Flags().StringVar(&certFile, "tls-cert", "", "Path to TLS certificate for SSE HTTPS")
 	cmd.Flags().StringVar(&keyFile, "tls-key", "", "Path to TLS private key for SSE HTTPS")
-	cmd.Flags().StringVar(&otelEndpoint, "otel-endpoint", "", "Optional OTLP/gRPC endpoint for OpenTelemetry tracing (e.g. localhost:4317)")
-	_ = viper.BindPFlag("mcp.otel_endpoint", cmd.Flags().Lookup("otel-endpoint"))
-
 	return cmd
 }
 
@@ -123,8 +105,6 @@ func createMCPServer() *server.MCPServer {
 	registerConfigTools(s, engine)
 	registerIdentityTools(s, engine)
 	registerProfilesTools(s, engine)
-	registerWorkspaceTools(s, engine)
-
 	return s
 }
 

@@ -373,20 +373,3 @@ func TestMissionReencryptProfile(t *testing.T) {
 		t.Errorf("content mismatch after reencrypt: got %q", data)
 	}
 }
-
-// TestMissionOTELTracingFlag verifies the --otel-endpoint flag is present on mcp command.
-func TestMissionOTELTracingFlag(t *testing.T) {
-	cmd := MCPServerCmd()
-	f := cmd.Flags().Lookup("otel-endpoint")
-	if f == nil {
-		t.Fatal("--otel-endpoint flag is missing from 'mcp' command")
-	}
-	if f.DefValue != "" {
-		t.Errorf("--otel-endpoint default should be empty (disabled), got %q", f.DefValue)
-	}
-	// Flag description must mention OTEL or tracing
-	if !strings.Contains(strings.ToLower(f.Usage), "otel") &&
-		!strings.Contains(strings.ToLower(f.Usage), "trac") {
-		t.Errorf("--otel-endpoint usage text should mention OTEL/tracing, got: %q", f.Usage)
-	}
-}

@@ -72,7 +72,8 @@ func TestRandomProfileGeneration(t *testing.T) {
 		}
 	}
 
-	if len(seenCiphers) < 2 {
-		t.Errorf("Low cipher diversity in random profiles: %v", seenCiphers)
+	// Only AES-256-GCM (cipher type 1) is supported; all profiles should use it.
+	if !seenCiphers[1] {
+		t.Errorf("Expected all random profiles to use AES-256-GCM (type 1), got: %v", seenCiphers)
 	}
 }

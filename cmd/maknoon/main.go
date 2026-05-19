@@ -97,7 +97,6 @@ Post-Quantum Cryptography (PQC).`,
 	addCommand(commands.SessionCmd(), "utils")
 	addCommand(commands.RegistryCmd(), "utils")
 	addCommand(commands.VaultCmd(), "utils")
-	addCommand(commands.WorkspaceCmd(), "utils")
 	addCommand(commands.GenCmd(), "utils")
 	addCommand(commands.ConfigCmd(), "utils")
 	addCommand(commands.ProfilesCmd(), "utils")

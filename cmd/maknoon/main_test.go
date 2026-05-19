@@ -333,10 +333,9 @@ func TestIntegrationSecretProfileAutoDiscovery(t *testing.T) {
 func TestIntegrationKeygenCustomProfile(t *testing.T) {
 	tmpDir := t.TempDir()
 	profileFile := filepath.Join(tmpDir, "custom_profile.json")
-	// Profile ID 140 (Portable), AES-GCM-SIV (2), 1 iteration Argon2
 	profileJSON := `{
 		"id": 140,
-		"cipher": 2,
+		"cipher": 1,
 		"kdf": 0,
 		"kdf_iterations": 1,
 		"kdf_memory": 16384,
@@ -433,59 +432,6 @@ func TestIntegrationRandomProfileStress(t *testing.T) {
 	}
 	if !bytes.Equal(content, restored) {
 		t.Fatalf("Random profile restored content mismatch")
-	}
-}
-
-func TestIntegrationGCMSIVProfile(t *testing.T) {
-	tmpDir := t.TempDir()
-
-	profileFile := filepath.Join(tmpDir, "siv_profile.json")
-	// Profile ID 150 (Portable), AES-GCM-SIV (2), 1 iteration Argon2
-	profileJSON := `{
-		"id": 150,
-		"cipher": 2,
-		"kdf": 0,
-		"kdf_iterations": 1,
-		"kdf_memory": 16384,
-		"kdf_threads": 4,
-		"salt_size": 16,
-		"nonce_size": 12
-	}`
-	if err := os.WriteFile(profileFile, []byte(profileJSON), 0644); err != nil {
-		t.Fatal(err)
-	}
-
-	inputFile := filepath.Join(tmpDir, "siv_test.txt")
-	content := []byte("AES-GCM-SIV Nonce-Misuse Resistance Test")
-	if err := os.WriteFile(inputFile, content, 0644); err != nil {
-		t.Fatal(err)
-	}
-
-	encryptedFile := inputFile + ".makn"
-	passphrase := "siv-pass"
-
-	// 1. Encrypt
-	encCmd := commands.EncryptCmd()
-	encCmd.SetArgs([]string{inputFile, "-o", encryptedFile, "-s", passphrase, "--profile-file", profileFile, "--quiet"})
-	if err := encCmd.Execute(); err != nil {
-		t.Fatalf("SIV profile encryption failed: %v", err)
-	}
-
-	// 2. Decrypt (Auto-detect from header)
-	decryptedFile := filepath.Join(tmpDir, "siv_restored.txt")
-	decCmd := commands.DecryptCmd()
-	decCmd.SetArgs([]string{encryptedFile, "-o", decryptedFile, "-s", passphrase, "--quiet"})
-	if err := decCmd.Execute(); err != nil {
-		t.Fatalf("SIV profile decryption failed: %v", err)
-	}
-
-	// 3. Verify
-	restored, err := os.ReadFile(decryptedFile)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !bytes.Equal(content, restored) {
-		t.Fatalf("SIV restored content mismatch")
 	}
 }
 
