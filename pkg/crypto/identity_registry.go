@@ -23,7 +23,7 @@ type IdentityPublishOptions struct {
 	DNS        bool     // Publish to DNS (via DHT)
 	Desec      bool     // Publish to deSEC
 	DesecToken string   // deSEC API token
-	BEP44      bool     // Publish mini-record to BitTorrent BEP-44 DHT (opt-in peer discovery)
+	BEP44      bool     // Deprecated: BEP-44 publishing removed; field retained for JSON compat discovery)
 	Multiaddrs []string // Optional Multiaddrs to broadcast
 }
 
@@ -96,7 +96,7 @@ func (m *IdentityManager) IdentityPublish(ctx context.Context, handle string, op
 
 	// Default to Nostr when no specific registry is selected.
 	// libp2p-kad-dht was removed (GO-2024-3218); Nostr is now the primary registry.
-	if opts.Nostr || (!opts.DNS && !opts.Desec && !opts.BEP44 && !opts.Local) {
+	if opts.Nostr || (!opts.DNS && !opts.Desec && !opts.Local) {
 		nostrPriv, err := DeriveNostrKeypair(id.SIGPriv)
 		if err != nil {
 			return fmt.Errorf("nostr key derivation failed: %w", err)
@@ -104,13 +104,6 @@ func (m *IdentityManager) IdentityPublish(ctx context.Context, handle string, op
 		nostrReg := NewNostrRegistry(m.Config)
 		if err := nostrReg.PublishWithKey(ctx, record, nostrPriv); err != nil {
 			return fmt.Errorf("nostr publish failed: %w", err)
-		}
-	}
-
-	if opts.BEP44 {
-		bep44Reg := NewBEP44Registry(m.Config)
-		if err := bep44Reg.PublishWithSIGKey(ctx, record, id.SIGPriv); err != nil {
-			return fmt.Errorf("bep44 publish failed: %w", err)
 		}
 	}
 

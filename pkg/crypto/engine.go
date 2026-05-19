@@ -17,11 +17,10 @@ type Engine struct {
 	Logger *slog.Logger
 
 	// Component Services
-	Vault     *VaultService
-	Identity  *IdentityService
-	Network   *NetworkService
-	Crypto    *CryptoService
-	Workspace *WorkspaceService
+	Vault    *VaultService
+	Identity *IdentityService
+	Network  *NetworkService
+	Crypto   *CryptoService
 
 	// Contacts State
 	Contacts     *ContactManager
@@ -155,7 +154,6 @@ func NewEngine(policy SecurityPolicy, idMgr *IdentityManager, conf *Config, vaul
 	e.Identity = &IdentityService{engine: e, Mgr: idMgr}
 	e.Network = &NetworkService{engine: e}
 	e.Crypto = &CryptoService{engine: e}
-	e.Workspace = &WorkspaceService{engine: e}
 
 	// P2P transport removed — IdentityPublish will use static Multiaddrs from opts only.
 	e.Identity.Mgr.P2P = nil
@@ -205,7 +203,6 @@ func newShimEngine(conf *Config) *Engine {
 		Logger: slog.Default(),
 	}
 	e.Crypto = &CryptoService{engine: e}
-	e.Workspace = &WorkspaceService{engine: e}
 	return e
 }
 

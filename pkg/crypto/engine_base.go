@@ -179,14 +179,6 @@ func (e *BaseEngine) ReassembleFragments(srcDir string, w io.Writer, authorizedP
 	return e.Engine.ReassembleFragments(srcDir, w, authorizedPubKey)
 }
 
-// WorkspaceManager
-func (e *BaseEngine) WorkspaceCreate(ectx *EngineContext, name string) (string, error) {
-	return e.Engine.WorkspaceCreate(ectx, name)
-}
-func (e *BaseEngine) WorkspaceShred(ectx *EngineContext, path string) error {
-	return e.Engine.WorkspaceShred(ectx, path)
-}
-
 func (e *BaseEngine) Close() error {
 	return e.Engine.Close()
 }

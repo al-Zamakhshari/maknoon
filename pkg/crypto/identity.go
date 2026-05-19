@@ -10,8 +10,6 @@ import (
 	"strings"
 	"time"
 
-	libp2pcrypto "github.com/libp2p/go-libp2p/core/crypto"
-	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/spf13/viper"
 )
 
@@ -276,33 +274,16 @@ func (m *IdentityManager) LoadPrivateKey(path string, passphrase []byte, pin str
 	return data, nil
 }
 
-func (m *IdentityManager) UnlockPrivateKeyWithFIDOOrPass(password []byte, pin string, resolvedPath string, isStdin bool) ([]byte, error) {
+func (m *IdentityManager) UnlockPrivateKeyWithFIDOOrPass(password []byte, _ string, resolvedPath string, _ bool) ([]byte, error) {
 	data, err := m.Store.ReadKey(resolvedPath)
 	if err != nil {
 		return nil, &ErrIO{Path: resolvedPath, Reason: err.Error()}
 	}
 
-	fidoPath := resolvedPath + ".fido2"
-	token, err := Fido2Unlock(fidoPath, pin)
-	if err != nil {
-		// Fallback to passphrase if FIDO fails but passphrase was provided
-		if len(password) > 0 {
-			var decrypted bytes.Buffer
-			_, _, err := DecryptStream(bytes.NewReader(data), &decrypted, password, 1, false)
-			if err == nil {
-				return decrypted.Bytes(), nil
-			}
-		}
-		return nil, &ErrAuthentication{Reason: fmt.Sprintf("FIDO2 unlock failed: %v", err)}
-	}
-	defer SafeClear(token)
-
 	var decrypted bytes.Buffer
-	_, _, err = DecryptStream(bytes.NewReader(data), &decrypted, token, 1, false)
-	if err != nil {
-		return nil, &ErrAuthentication{Reason: "FIDO2 token failed to decrypt the key"}
+	if _, _, err := DecryptStream(bytes.NewReader(data), &decrypted, password, 1, false); err != nil {
+		return nil, &ErrAuthentication{Reason: "passphrase incorrect or key file corrupt"}
 	}
-
 	return decrypted.Bytes(), nil
 }
 
@@ -474,45 +455,4 @@ func EnsureMaknoonDirs() error {
 func (id *Identity) Wipe() {
 	SafeClear(id.KEMPriv)
 	SafeClear(id.SIGPriv)
-}
-
-// AsLibp2pKey converts the Maknoon signing key to a libp2p private key.
-// In v1.x, we support Hybrid SIG (ML-DSA + Ed25519). If an Ed25519 key is bundled,
-// we use it directly. Otherwise, we fallback to deterministic derivation.
-func (id *Identity) AsLibp2pKey() (libp2pcrypto.PrivKey, error) {
-	if len(id.SIGPriv) == 0 {
-		return nil, fmt.Errorf("signing key not loaded")
-	}
-
-	var edPrivBytes []byte
-
-	// 1. Check for Hybrid Format (ML-DSA-87 + Ed25519)
-	// ML-DSA-87 Priv is 4896 bytes, Ed25519 Priv is 64 bytes.
-	if len(id.SIGPriv) >= 4896+64 {
-		edPrivBytes = id.SIGPriv[4896 : 4896+64]
-	} else if len(id.SIGPriv) >= 4032+64 { // ML-DSA-65
-		edPrivBytes = id.SIGPriv[4032 : 4032+64]
-	} else if len(id.SIGPriv) >= 128+64 { // SLH-DSA
-		edPrivBytes = id.SIGPriv[len(id.SIGPriv)-64:]
-	} else {
-		// 2. Fallback: Deterministic derivation from the first 32 bytes of SIGPriv
-		seed := id.SIGPriv
-		if len(seed) > 32 {
-			seed = seed[:32]
-		}
-		priv, _, err := libp2pcrypto.GenerateEd25519Key(bytes.NewReader(seed))
-		return priv, err
-	}
-
-	return libp2pcrypto.UnmarshalEd25519PrivateKey(edPrivBytes)
-}
-
-// GetPeerID derives the libp2p PeerID from the identity's signing key.
-func (id *Identity) GetPeerID() (peer.ID, error) {
-	priv, err := id.AsLibp2pKey()
-	if err != nil {
-		return "", err
-	}
-
-	return peer.IDFromPrivateKey(priv)
 }

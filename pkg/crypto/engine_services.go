@@ -28,8 +28,3 @@ func (s *NetworkService) Shutdown(_ context.Context) error {
 type CryptoService struct {
 	engine *Engine
 }
-
-// WorkspaceService handles ephemeral environments.
-type WorkspaceService struct {
-	engine *Engine
-}

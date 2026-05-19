@@ -1,7 +1,6 @@
 package commands
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -16,7 +15,6 @@ func KeygenCmd() *cobra.Command {
 	var output string
 	var noPassword bool
 	var passphrase string
-	var useFido2 bool
 	var quiet bool
 	var profileStr string
 	var profileFile string
@@ -30,7 +28,6 @@ func KeygenCmd() *cobra.Command {
 		Use:   "keygen",
 		Short: "Generate a Post-Quantum (KEM & SIG) identity",
 		RunE: func(_ *cobra.Command, _ []string) error {
-			var fido2Meta *crypto.Fido2Metadata
 			var password []byte
 			var err error
 
@@ -70,30 +67,13 @@ func KeygenCmd() *cobra.Command {
 				}
 			}
 
-			if useFido2 {
-				pin, err := getPIN()
-				if err != nil {
+			password, err = getInitialPassphrase(noPassword, passphrase)
+			if err != nil {
+				if JSONOutput {
+					printErrorJSON(err)
 					return err
 				}
-				meta, secret, err := crypto.Fido2Enroll("maknoon.io", "keygen-user", pin)
-				if err != nil {
-					if JSONOutput {
-						printErrorJSON(err)
-						return err
-					}
-					return err
-				}
-				fido2Meta = meta
-				password = secret
-			} else {
-				password, err = getInitialPassphrase(noPassword, passphrase)
-				if err != nil {
-					if JSONOutput {
-						printErrorJSON(err)
-						return err
-					}
-					return err
-				}
+				return err
 			}
 
 			if len(password) > 0 {
@@ -121,26 +101,6 @@ func KeygenCmd() *cobra.Command {
 				return err
 			}
 
-			if fido2Meta != nil {
-				raw, err := json.Marshal(fido2Meta)
-				if err != nil {
-					err := fmt.Errorf("failed to marshal fido2 metadata: %w", err)
-					if JSONOutput {
-						printErrorJSON(err)
-						return err
-					}
-					return err
-				}
-				if err := os.WriteFile(res.BasePath+".fido2", raw, 0600); err != nil {
-					err := fmt.Errorf("failed to write fido2 metadata: %w", err)
-					if JSONOutput {
-						printErrorJSON(err)
-						return err
-					}
-					return err
-				}
-			}
-
 			if !JSONOutput && !quiet {
 				fmt.Printf("Success! Identity generated in %s\n", filepath.Dir(res.BasePath))
 				fmt.Printf("  - Encryption Keys: %s.kem.{key,pub}\n", res.BaseName)
@@ -158,7 +118,6 @@ func KeygenCmd() *cobra.Command {
 	cmd.Flags().StringVarP(&output, "output", "o", "", "Base name or path for the keys")
 	cmd.Flags().BoolVarP(&noPassword, "no-password", "n", false, "Generate unprotected keys (automation mode)")
 	cmd.Flags().StringVarP(&passphrase, "passphrase", "s", "", "Passphrase to protect the keys")
-	cmd.Flags().BoolVarP(&useFido2, "fido2", "f", false, "Use FIDO2 security key to protect the private keys")
 	cmd.Flags().BoolVarP(&quiet, "quiet", "q", false, "Suppress informational output")
 	cmd.Flags().StringVar(&profileStr, "profile", "nist", "Cryptographic profile (nist, conservative)")
 	cmd.Flags().StringVar(&profileFile, "profile-file", "", "Path to a custom profile JSON file to protect the keys")

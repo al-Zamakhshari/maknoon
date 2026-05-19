@@ -453,16 +453,7 @@ func LoadPrivateKey(path, envVar string, passphrase []byte) ([]byte, error) {
 		return nil, fmt.Errorf("private key required (use flag or %s)", envVar)
 	}
 
-	var pin string
-	if _, err := os.Stat(strings.TrimSuffix(resolvedPath, ".key") + ".fido2"); err == nil {
-		var err2 error
-		pin, err2 = getPIN()
-		if err2 != nil {
-			return nil, err2
-		}
-	}
-
-	return GlobalContext.Engine.LoadPrivateKey(nil, resolvedPath, passphrase, pin, false)
+	return GlobalContext.Engine.LoadPrivateKey(nil, resolvedPath, passphrase, "", false)
 }
 
 // ResetGlobalContext clears all global state. Used primarily for tests.
@@ -656,26 +647,7 @@ func InitEngine() error {
 			auditLogger = l
 
 			// Load signing key if configured
-			if core.Config.Audit.HardwareSigning {
-				home := crypto.GetUserHomeDir()
-				fidoPath := filepath.Join(home, crypto.MaknoonDir, "audit_fido.json")
-				if _, err := os.Stat(fidoPath); err == nil {
-					fmt.Println("🛡️  Audit Hardening: Please tap your Security Key to unlock forensic signing...")
-					pin, _ := getPIN()
-					seed, err := crypto.Fido2Unlock(fidoPath, pin)
-					if err == nil {
-						sk, err := crypto.DeriveSigningKeyFromSeed(seed)
-						if err == nil {
-							auditLogger.SetSigningKey(sk)
-							fmt.Println("✅ Hardware-backed forensic signing active")
-						}
-					} else {
-						fmt.Printf("⚠️  Failed to unlock hardware audit key: %v\n", err)
-					}
-				} else {
-					fmt.Println("⚠️  Hardware audit signing enabled but not enrolled. Run 'maknoon audit enroll' to bind to hardware.")
-				}
-			} else if core.Config.Audit.SigningKey != "" {
+			if core.Config.Audit.SigningKey != "" {
 				// We assume the signing key is protected by the default identity's passphrase
 				// or provided via environment if in agent mode.
 				pass := []byte(viper.GetString("passphrase"))
