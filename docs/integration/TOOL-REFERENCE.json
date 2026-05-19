@@ -7,13 +7,6 @@
     "flags": null,
     "subcommands": [
       {
-        "name": "enroll",
-        "path": "maknoon audit enroll",
-        "description": "Bind audit log integrity to a physical security key (FIDO2)",
-        "arguments": null,
-        "flags": null
-      },
-      {
         "name": "export",
         "path": "maknoon audit export",
         "description": "Export a forensic summary of all cryptographic operations",
@@ -882,14 +875,6 @@
         "required": false
       },
       {
-        "name": "fido2",
-        "shorthand": "f",
-        "description": "Use FIDO2 security key to protect the private keys",
-        "type": "bool",
-        "default": "false",
-        "required": false
-      },
-      {
         "name": "no-password",
         "shorthand": "n",
         "description": "Generate unprotected keys (automation mode)",
@@ -986,14 +971,6 @@
         "required": false
       },
       {
-        "name": "otel-endpoint",
-        "shorthand": "",
-        "description": "Optional OTLP/gRPC endpoint for OpenTelemetry tracing (e.g. localhost:4317)",
-        "type": "string",
-        "default": "",
-        "required": false
-      },
-      {
         "name": "tls-cert",
         "shorthand": "",
         "description": "Path to TLS certificate for SSE HTTPS",
@@ -1031,14 +1008,6 @@
         "description": "Address to listen on for SSE mode",
         "type": "string",
         "default": ":8080",
-        "required": false
-      },
-      {
-        "name": "otel-endpoint",
-        "shorthand": "",
-        "description": "Optional OTLP/gRPC endpoint for OpenTelemetry tracing (e.g. localhost:4317)",
-        "type": "string",
-        "default": "",
         "required": false
       },
       {
@@ -1671,43 +1640,6 @@
         "type": "int",
         "default": "1",
         "required": false
-      }
-    ]
-  },
-  {
-    "name": "workspace",
-    "path": "maknoon workspace",
-    "description": "Manage ephemeral, forensically-audited sandbox environments",
-    "arguments": null,
-    "flags": null,
-    "subcommands": [
-      {
-        "name": "create",
-        "path": "maknoon workspace create",
-        "description": "Create a new ephemeral workspace",
-        "arguments": null,
-        "flags": [
-          {
-            "name": "name",
-            "shorthand": "n",
-            "description": "Logical name for the workspace",
-            "type": "string",
-            "default": "session",
-            "required": false
-          }
-        ]
-      },
-      {
-        "name": "shred",
-        "path": "maknoon workspace shred",
-        "description": "Securely delete and zeroize an ephemeral workspace",
-        "arguments": [
-          {
-            "name": "path",
-            "required": false
-          }
-        ],
-        "flags": null
       }
     ]
   }
