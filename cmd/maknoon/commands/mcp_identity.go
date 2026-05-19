@@ -125,40 +125,26 @@ func registerIdentityTools(s *server.MCPServer, engine crypto.MaknoonEngine) {
 			return mcp.NewToolResultText(string(outData)), nil
 		})
 
-	s.AddTool(mcp.NewTool("identity_publish", mcp.WithDescription("Publish identity to a registry (libp2p DHT, Nostr, DNS, or BEP-44)")),
+	s.AddTool(mcp.NewTool("identity_publish", mcp.WithDescription("Publish identity to a registry (nostr or dns)")),
 		func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			args := getArgs(request)
 			handle := getString(args, "handle", "")
-			registry := getString(args, "registry", "libp2p")
+			registry := getString(args, "registry", "nostr")
 			local, _ := args["local"].(bool)
-
-			var multiaddrs []string
-			if rawAddrs, ok := args["multiaddrs"].([]any); ok {
-				for _, a := range rawAddrs {
-					if str, ok := a.(string); ok {
-						multiaddrs = append(multiaddrs, str)
-					}
-				}
-			}
 
 			opts := crypto.IdentityPublishOptions{
 				Name:       getString(args, "name", ""),
 				Passphrase: viper.GetString("passphrase"),
 				Local:      local,
-				Multiaddrs: multiaddrs,
 			}
 
 			switch registry {
-			case "libp2p":
-				opts.LibP2P = true
 			case "nostr":
 				opts.Nostr = true
-			case "bep44":
-				opts.BEP44 = true
 			case "dns":
 				opts.DNS = true
 			default:
-				opts.LibP2P = true // default to libp2p DHT
+				opts.Nostr = true
 			}
 
 			err := engine.IdentityPublish(&crypto.EngineContext{Context: ctx}, handle, opts)
