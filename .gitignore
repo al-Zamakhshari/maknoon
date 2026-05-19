@@ -1,5 +1,6 @@
 # Binaries
 /maknoon
+/main
 *.exe
 *.exe~
 *.dll
@@ -11,11 +12,16 @@ LargeFile.mp4*
 *.makn
 *.restored
 test_key*
+out.txt
+test_out.txt
 
 # Keys (Never commit these!)
 id_ahmed*
 maknoon.key
 maknoon.pub
+relay.pub
+sink.pub
+*.pub
 
 # OS specific
 .DS_Store
@@ -30,6 +36,9 @@ LargeFile
 # Lint & Reports
 lint_report.json
 .gemini_security/
+
+# Claude Code skill files (local tooling, not project artifacts)
+*.skill
 
 # Python
 __pycache__/
