@@ -36,6 +36,7 @@ LargeFile
 # Lint & Reports
 lint_report.json
 .gemini_security/
+api/
 
 # Claude Code skill files (local tooling, not project artifacts)
 *.skill
