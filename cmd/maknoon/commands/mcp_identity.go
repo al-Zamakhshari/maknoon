@@ -130,26 +130,29 @@ func registerIdentityTools(s *server.MCPServer, engine crypto.MaknoonEngine) {
 	})
 
 	s.AddTool(mcp.NewTool("identity_publish",
-		mcp.WithDescription("Publish an identity to a registry (nostr, wkd, or dns)"),
-		mcp.WithString("handle", mcp.Required(), mcp.Description("Public handle to publish (e.g. @alice or @alice@example.com)")),
+		mcp.WithDescription("Publish an identity to a registry (wkd or dns)"),
+		mcp.WithString("handle", mcp.Required(), mcp.Description("Public handle to publish (e.g. @alice@example.com)")),
 		mcp.WithString("name", mcp.Description("Local identity name (uses default identity if omitted)")),
-		mcp.WithString("registry", mcp.Description("Registry: nostr (default), wkd (HTTPS static file, requires alice@domain handle), dns")),
+		mcp.WithString("registry", mcp.Description("Registry: wkd (HTTPS static file, default; requires alice@domain handle), dns, desec, local")),
 	), func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		args := getArgs(request)
 		handle := getString(args, "handle", "")
-		registry := getString(args, "registry", "nostr")
+		registry := getString(args, "registry", "wkd")
 
 		opts := crypto.IdentityPublishOptions{
 			Name:       getString(args, "name", ""),
 			Passphrase: viper.GetString("passphrase"),
 		}
 		switch registry {
-		case "wkd":
-			opts.WKD = true
 		case "dns":
 			opts.DNS = true
+		case "desec":
+			opts.Desec = true
+			opts.DesecToken = viper.GetString("desec_token")
+		case "local":
+			opts.Local = true
 		default:
-			opts.Nostr = true
+			opts.WKD = true
 		}
 
 		err := engine.IdentityPublish(&crypto.EngineContext{Context: ctx}, handle, opts)

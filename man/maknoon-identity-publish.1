@@ -2,7 +2,7 @@
 .TH "MAKNOON" "1" "Jan 2024" "Maknoon Post-Quantum Engine" "Maknoon Manual"
 
 .SH NAME
-maknoon-identity-publish - Anchor your active identity to a registry (Nostr, WKD, or DNS)
+maknoon-identity-publish - Publish your identity to a registry (WKD, DNS, or local)
 
 
 .SH SYNOPSIS
@@ -15,14 +15,12 @@ so that other Maknoon users can encrypt directly to you by handle.
 
 .PP
 Registries:
-  --nostr     Publish to Nostr relays (default). No infrastructure required.
-              Recipients resolve you via @handle or user@domain.com (NIP-05).
-  --wkd       Web Key Directory — place a JSON file on your own HTTPS server at
+  --wkd       Web Key Directory — place a signed JSON file on your HTTPS server at
               https:///.well-known/maknoon/\&.json
               Works for alice@example.com handles. No DNS changes required.
-  --dns       Generate a DNS TXT record (_maknoon.) for manual setup.
-  --desec     Auto-publish the DNS record via deSEC.io API.
-  --local     Pin to local contacts only (no network publishing).
+  --dns       Generate a _maknoon. DNS TXT record (printed for manual setup).
+  --desec     Auto-publish the DNS TXT record via deSEC.io API.
+  --local     Pin identity to local contacts only (no network publishing).
 
 
 .SH OPTIONS
@@ -35,7 +33,7 @@ Registries:
 
 .PP
 \fB--dns\fP[=false]
-	Generate a _maknoon DNS TXT record (manual setup)
+	Generate a _maknoon DNS TXT record (printed for manual setup)
 
 .PP
 \fB-h\fP, \fB--help\fP[=false]
@@ -46,12 +44,8 @@ Registries:
 	Pin identity to local contacts only (no network)
 
 .PP
-\fB--nostr\fP[=false]
-	Publish to Nostr relays (default when no other registry is specified)
-
-.PP
 \fB--wkd\fP[=false]
-	Web Key Directory: publish as an HTTPS static file (requires alice@domain.com handle)
+	Web Key Directory: publish as a signed HTTPS JSON file (requires alice@domain.com handle)
 
 
 .SH OPTIONS INHERITED FROM PARENT COMMANDS

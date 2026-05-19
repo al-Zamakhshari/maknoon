@@ -660,7 +660,7 @@
       {
         "name": "publish",
         "path": "maknoon identity publish",
-        "description": "Anchor your active identity to a registry (Nostr, WKD, or DNS)",
+        "description": "Publish your identity to a registry (WKD, DNS, or local)",
         "arguments": [
           {
             "name": "handle",
@@ -687,7 +687,7 @@
           {
             "name": "dns",
             "shorthand": "",
-            "description": "Generate a _maknoon DNS TXT record (manual setup)",
+            "description": "Generate a _maknoon DNS TXT record (printed for manual setup)",
             "type": "bool",
             "default": "false",
             "required": false
@@ -701,17 +701,9 @@
             "required": false
           },
           {
-            "name": "nostr",
-            "shorthand": "",
-            "description": "Publish to Nostr relays (default when no other registry is specified)",
-            "type": "bool",
-            "default": "false",
-            "required": false
-          },
-          {
             "name": "wkd",
             "shorthand": "",
-            "description": "Web Key Directory: publish as an HTTPS static file (requires alice@domain.com handle)",
+            "description": "Web Key Directory: publish as a signed HTTPS JSON file (requires alice@domain.com handle)",
             "type": "bool",
             "default": "false",
             "required": false
@@ -1201,31 +1193,6 @@
         "type": "int",
         "default": "4",
         "required": false
-      }
-    ]
-  },
-  {
-    "name": "registry",
-    "path": "maknoon registry",
-    "description": "Identity registry operations (health, status)",
-    "arguments": null,
-    "flags": null,
-    "subcommands": [
-      {
-        "name": "health",
-        "path": "maknoon registry health",
-        "description": "Check connectivity of configured Nostr relays",
-        "arguments": null,
-        "flags": [
-          {
-            "name": "discover",
-            "shorthand": "",
-            "description": "Also probe well-known public relays beyond the configured set",
-            "type": "bool",
-            "default": "false",
-            "required": false
-          }
-        ]
       }
     ]
   },

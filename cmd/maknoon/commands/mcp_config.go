@@ -26,7 +26,6 @@ func registerConfigTools(s *server.MCPServer, engine crypto.MaknoonEngine) {
 		mcp.WithNumber("profile_id", mcp.Description("Default cryptographic profile ID (1=NIST, 3=Conservative)")),
 		mcp.WithNumber("concurrency", mcp.Description("Number of parallel encryption workers")),
 		mcp.WithBoolean("stealth_mode", mcp.Description("Enable fingerprint-resistant headers by default")),
-		mcp.WithString("nostr_relays", mcp.Description("Comma-separated list of Nostr relay URLs")),
 	), func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		args := getArgs(request)
 		conf := engine.GetConfig()
@@ -42,18 +41,6 @@ func registerConfigTools(s *server.MCPServer, engine crypto.MaknoonEngine) {
 		}
 		if val, ok := args["stealth_mode"].(bool); ok {
 			conf.Performance.DefaultStealth = val
-		}
-		// Accept nostr_relays as either a comma-separated string or a JSON array
-		if relays := getStringSlice(args, "nostr_relays"); len(relays) > 0 {
-			conf.Nostr.Relays = relays
-		} else if relayStr := getString(args, "nostr_relays", ""); relayStr != "" {
-			var relays []string
-			for _, r := range strings.Split(relayStr, ",") {
-				if r = strings.TrimSpace(r); r != "" {
-					relays = append(relays, r)
-				}
-			}
-			conf.Nostr.Relays = relays
 		}
 
 		err := engine.UpdateConfig(&crypto.EngineContext{Context: ctx}, conf)

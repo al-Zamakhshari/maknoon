@@ -165,11 +165,9 @@ func NewIdentityRegistry(conf *Config) IdentityRegistry {
 	}
 	active := conf.IdentityRegistries
 	if len(active) == 0 {
-		// Nostr is the primary registry (concurrent relay fan-out).
-		// DNS is a real fallback via _maknoon.<domain> TXT records + deSEC API publishing.
-		// BEP-44 DHT is available as an explicit opt-in (add "bep44" to Config.IdentityRegistries)
-		// but resolution is disabled since full-record fetch requires P2P transport.
-		active = []string{"nostr", "dns"}
+		// WKD (HTTPS static file) is the default primary registry — no infrastructure required.
+		// DNS (_maknoon.<domain> TXT record) is the authoritative fallback.
+		active = []string{"wkd", "dns"}
 	}
 
 	mr := &MultiRegistry{}

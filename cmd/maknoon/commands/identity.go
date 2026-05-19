@@ -118,7 +118,6 @@ func identityReconstructCmd() *cobra.Command {
 
 func identityPublishCmd() *cobra.Command {
 	var useDNS bool
-	var useNostr bool
 	var useDesec bool
 	var useLocal bool
 	var useWKD bool
@@ -126,19 +125,17 @@ func identityPublishCmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "publish [handle]",
-		Short: "Anchor your active identity to a registry (Nostr, WKD, or DNS)",
+		Short: "Publish your identity to a registry (WKD, DNS, or local)",
 		Long: `Publishes your identity (ML-KEM + ML-DSA public keys) to one or more registries
 so that other Maknoon users can encrypt directly to you by handle.
 
 Registries:
-  --nostr     Publish to Nostr relays (default). No infrastructure required.
-              Recipients resolve you via @handle or user@domain.com (NIP-05).
-  --wkd       Web Key Directory — place a JSON file on your own HTTPS server at
+  --wkd       Web Key Directory — place a signed JSON file on your HTTPS server at
               https://<domain>/.well-known/maknoon/<localpart>.json
               Works for alice@example.com handles. No DNS changes required.
-  --dns       Generate a DNS TXT record (_maknoon.<domain>) for manual setup.
-  --desec     Auto-publish the DNS record via deSEC.io API.
-  --local     Pin to local contacts only (no network publishing).`,
+  --dns       Generate a _maknoon.<domain> DNS TXT record (printed for manual setup).
+  --desec     Auto-publish the DNS TXT record via deSEC.io API.
+  --local     Pin identity to local contacts only (no network publishing).`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			p := GlobalContext.UI.GetPresenter()
@@ -151,7 +148,6 @@ Registries:
 				Name:       identityName,
 				Passphrase: passphrase,
 				Local:      useLocal,
-				Nostr:      useNostr,
 				DNS:        useDNS,
 				Desec:      useDesec,
 				DesecToken: desecToken,
@@ -190,9 +186,8 @@ Registries:
 		},
 	}
 
-	cmd.Flags().BoolVar(&useDNS, "dns", false, "Generate a _maknoon DNS TXT record (manual setup)")
-	cmd.Flags().BoolVar(&useNostr, "nostr", false, "Publish to Nostr relays (default when no other registry is specified)")
-	cmd.Flags().BoolVar(&useWKD, "wkd", false, "Web Key Directory: publish as an HTTPS static file (requires alice@domain.com handle)")
+	cmd.Flags().BoolVar(&useDNS, "dns", false, "Generate a _maknoon DNS TXT record (printed for manual setup)")
+	cmd.Flags().BoolVar(&useWKD, "wkd", false, "Web Key Directory: publish as a signed HTTPS JSON file (requires alice@domain.com handle)")
 	cmd.Flags().BoolVar(&useDesec, "desec", false, "Auto-publish DNS record via deSEC.io (requires --desec-token or DESEC_TOKEN)")
 	cmd.Flags().BoolVar(&useLocal, "local", false, "Pin identity to local contacts only (no network)")
 	cmd.Flags().StringVar(&desecToken, "desec-token", "", "deSEC.io API token")

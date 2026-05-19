@@ -9,6 +9,8 @@ import (
 	"time"
 )
 
+
+
 // MultiaddrsProvider can return the node's current P2P multiaddresses.
 type MultiaddrsProvider interface {
 	Multiaddrs(ctx context.Context, identityName string) []string
@@ -20,7 +22,6 @@ type IdentityPublishOptions struct {
 	Passphrase string // Passphrase to unlock local identity
 	Local      bool   // Add to local contacts only
 	LibP2P     bool   // Deprecated: libp2p-kad-dht was removed; ignored
-	Nostr      bool   // Publish to Nostr relays (default when nothing else is set)
 	DNS        bool   // Generate DNS TXT record instructions
 	Desec      bool   // Publish to DNS via deSEC.io API
 	DesecToken string // deSEC API token
@@ -105,16 +106,8 @@ func (m *IdentityManager) IdentityPublish(ctx context.Context, handle string, op
 		published = true
 	}
 
-	// Default to Nostr when no other registry is selected.
-	if opts.Nostr || !published {
-		nostrPriv, err := DeriveNostrKeypair(id.SIGPriv)
-		if err != nil {
-			return fmt.Errorf("nostr key derivation failed: %w", err)
-		}
-		nostrReg := NewNostrRegistry(m.Config)
-		if err := nostrReg.PublishWithKey(ctx, record, nostrPriv); err != nil {
-			return fmt.Errorf("nostr publish failed: %w", err)
-		}
+	if !published {
+		return fmt.Errorf("no registry selected — use --wkd, --dns, --desec, or --local")
 	}
 
 	return nil

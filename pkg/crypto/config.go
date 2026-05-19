@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -28,7 +27,6 @@ type Config struct {
 	Performance          PerformanceConfig          `json:"performance" mapstructure:"performance"`
 	AgentLimits          AgentLimitsConfig          `json:"agent_limits" mapstructure:"agent_limits"`
 	BEP44                BEP44Config                `json:"bep44" mapstructure:"bep44"`
-	Nostr                NostrConfig                `json:"nostr" mapstructure:"nostr"`
 	Tunnel               TunnelConfig               `json:"tunnel" mapstructure:"tunnel"`
 	Paths                PathConfig                 `json:"paths" mapstructure:"paths"`
 	VaultBackend         string                     `json:"vault_backend" mapstructure:"vault_backend"`                     // bbolt or badger
@@ -81,12 +79,6 @@ type PerformanceConfig struct {
 // The standard BitTorrent bootstrap nodes are used automatically; no configuration is required.
 type BEP44Config struct{}
 
-// NostrConfig holds Nostr relay registry configuration.
-type NostrConfig struct {
-	Relays          []string `json:"relays" mapstructure:"relays"`
-	BootstrapRelays []string `json:"bootstrap_relays" mapstructure:"bootstrap_relays"`
-	PublishMetadata bool     `json:"publish_metadata" mapstructure:"publish_metadata"`
-}
 
 type PathConfig struct {
 	KeysDir   string `json:"keys_dir" mapstructure:"keys_dir"`
@@ -118,7 +110,7 @@ func DefaultConfig() *Config {
 	home := GetUserHomeDir()
 	return &Config{
 		DefaultIdentity:    "default",
-		IdentityRegistries: []string{"nostr", "bep44", "dns"},
+		IdentityRegistries: []string{"wkd", "dns"},
 		Audit: AuditConfig{
 			Enabled: false,
 			LogFile: filepath.Join(home, MaknoonDir, "audit.log"),
@@ -142,18 +134,6 @@ func DefaultConfig() *Config {
 			MaxThreads:  4,
 			MaxWorkers:  2,
 			AllowedURLs: []string{},
-		},
-		Nostr: NostrConfig{
-			Relays: []string{
-				"wss://relay.damus.io",
-				"wss://nos.lol",
-				"wss://relay.nostr.band",
-			},
-			BootstrapRelays: []string{
-				"wss://relay.damus.io",
-				"wss://nos.lol",
-			},
-			PublishMetadata: true,
 		},
 		Tunnel: TunnelConfig{
 			MaxStreams:       256,
@@ -193,13 +173,6 @@ func (c *Config) Validate() error {
 	}
 	if c.Security.ArgonThreads < 1 {
 		return errors.New("security.argon_threads must be at least 1")
-	}
-
-	for _, r := range c.Nostr.Relays {
-		u, err := url.Parse(r)
-		if err != nil || (u.Scheme != "ws" && u.Scheme != "wss") {
-			return fmt.Errorf("invalid nostr relay URL: %s (must be ws:// or wss://)", r)
-		}
 	}
 
 	if c.Paths.KeysDir == "" || c.Paths.VaultsDir == "" {
