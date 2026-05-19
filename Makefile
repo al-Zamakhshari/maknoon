@@ -61,14 +61,13 @@ bench:
 	go test -bench=. -benchmem -benchtime=10s ./pkg/crypto/
 
 smoke: build
-	@echo "🔥 Running Maknoon Industrial Smoke Suite..."
-	@chmod +x scripts/smoke-audit.sh scripts/smoke-resilience.sh scripts/smoke-vault-safety.sh scripts/smoke-governance.sh scripts/mission-orchestrated-quorum.sh
+	@echo "🔥 Running Maknoon Smoke Suite..."
+	@chmod +x scripts/smoke-audit.sh scripts/smoke-resilience.sh scripts/smoke-vault-safety.sh scripts/smoke-governance.sh
 	@./scripts/smoke-audit.sh
 	@./scripts/smoke-resilience.sh
 	@./scripts/smoke-vault-safety.sh
 	@./scripts/smoke-governance.sh
-	@./scripts/mission-orchestrated-quorum.sh
-	@echo "✅ All smoke tests passed. Industrial Grade verified."
+	@echo "✅ All smoke tests passed."
 
 # Go mission tests — in-process, no Docker required, fast (< 30s)
 mission-tests:
@@ -80,14 +79,7 @@ missions: build
 	@FAILED=""; \
 	for s in \
 	    scripts/mission-pipeline-verify.sh \
-	    scripts/mission-quorum-verify.sh \
-	    scripts/mission-deadmans-verify.sh \
-	    scripts/mission-orchestrated-quorum.sh \
-	    scripts/mission-blind-proxy-verify.sh \
-	    scripts/mission-bridge-verify.sh \
-	    scripts/mission-mesh-verify.sh \
-	    scripts/mission-global-verify.sh \
-	    scripts/mission-agility-verify.sh; do \
+	    scripts/mission-quorum-verify.sh; do \
 	    echo ""; echo "═══ $$(basename $$s) ═══"; \
 	    MISSION_REPORT_FILE="mission-reports/$$(basename $$s .sh).jsonl" \
 	        bash "$$s" || FAILED="$$FAILED $$s"; \

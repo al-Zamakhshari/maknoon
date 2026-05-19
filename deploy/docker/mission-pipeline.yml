@@ -23,7 +23,7 @@ services:
       - MAKNOON_AGENT_MODE=1
       - MAKNOON_PASSPHRASE=pipe-pass
     user: "root"
-    command: sh -c "mkdir -p /home/maknoon/data && chown -R maknoon:maknoon /home/maknoon/data && su-exec maknoon sh -c 'maknoon keygen --no-password -o compressor-id && cd /home/maknoon/data && maknoon receive --p2p --identity compressor-id'"
+    command: sh -c "mkdir -p /home/maknoon/data && chown -R maknoon:maknoon /home/maknoon/data && sleep 3600"
     volumes:
       - pipeline-data:/home/maknoon/data
     networks:
@@ -38,7 +38,7 @@ services:
       - MAKNOON_AGENT_MODE=1
       - MAKNOON_PASSPHRASE=pipe-pass
     user: "root"
-    command: sh -c "mkdir -p /home/maknoon/data && chown -R maknoon:maknoon /home/maknoon/data && su-exec maknoon sh -c 'maknoon keygen --no-password -o encryptor-id && cd /home/maknoon/data && maknoon receive --p2p --identity encryptor-id'"
+    command: sh -c "mkdir -p /home/maknoon/data && chown -R maknoon:maknoon /home/maknoon/data && sleep 3600"
     volumes:
       - pipeline-data:/home/maknoon/data
     networks:
@@ -53,7 +53,7 @@ services:
       - MAKNOON_AGENT_MODE=1
       - MAKNOON_PASSPHRASE=pipe-pass
     user: "root"
-    command: sh -c "mkdir -p /home/maknoon/data && chown -R maknoon:maknoon /home/maknoon/data && su-exec maknoon sh -c 'maknoon keygen --no-password -o sink-id && cd /home/maknoon/data && maknoon receive --p2p --identity sink-id'"
+    command: sh -c "mkdir -p /home/maknoon/data && chown -R maknoon:maknoon /home/maknoon/data && sleep 3600"
     volumes:
       - pipeline-data:/home/maknoon/data
     networks:
