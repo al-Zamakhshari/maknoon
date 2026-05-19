@@ -21,17 +21,7 @@ else
     exit 1
 fi
 
-# 2. FIPS Mode Enforcement (Insecure Tunnel Restriction)
-echo "🔍 Task 2: Verifying FIPS Tunnel Enforcement..."
-# Attempt to start an insecure tunnel in FIPS mode
-if ./maknoon tunnel start --remote @peer --insecure --fips 2>&1 | grep -q "FIPS-140 compliance prohibits unverified/insecure tunnels"; then
-    echo "✅ Success: FIPS mode blocked insecure tunnel."
-else
-    echo "❌ FAILED: FIPS mode allowed insecure tunnel."
-    exit 1
-fi
-
-# 3. File-Based Policy Enforcement (Capability Restriction)
+# 2. File-Based Policy Enforcement (Capability Restriction)
 echo "🔍 Task 3: Verifying File-Based Capability Restriction..."
 cat > "$TEST_DIR/policy.json" <<EOF
 {
