@@ -66,7 +66,7 @@ func TestRegistryConstructors(t *testing.T) {
 		t.Error("NostrRegistry should have default relays")
 	}
 
-	// MultiRegistry default chain: nostr → bep44 → dns.
+	// MultiRegistry default chain: nostr → dns (BEP-44 is opt-in via Config.IdentityRegistries).
 	multi := NewIdentityRegistry(conf)
 	if multi == nil {
 		t.Error("NewIdentityRegistry returned nil")

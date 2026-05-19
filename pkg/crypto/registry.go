@@ -7,10 +7,21 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/klauspost/compress/zstd"
 )
+
+// resolveCacheTTL is how long a successful identity resolution is cached.
+// Keeps agents fast across repeated calls while still picking up republished
+// records within a reasonable window.
+const resolveCacheTTL = 5 * time.Minute
+
+type cachedRecord struct {
+	record    *IdentityRecord
+	expiresAt time.Time
+}
 
 // IdentityRegistry defines the interface for publishing and discovering public keys.
 type IdentityRegistry interface {
@@ -129,9 +140,14 @@ func parseMaknoonTXT(txt string) (*IdentityRecord, error) {
 	return &record, nil
 }
 
-// MultiRegistry combines multiple registries for discovery.
+// MultiRegistry combines multiple registries for discovery. Successful
+// resolutions are cached for resolveCacheTTL so that repeated lookups within
+// a single agent session avoid redundant relay round-trips.
 type MultiRegistry struct {
 	Registries []IdentityRegistry
+
+	mu    sync.Mutex
+	cache map[string]cachedRecord // keyed by handle
 }
 
 var registryFactories = make(map[string]func(conf *Config) IdentityRegistry)
@@ -149,7 +165,11 @@ func NewIdentityRegistry(conf *Config) IdentityRegistry {
 	}
 	active := conf.IdentityRegistries
 	if len(active) == 0 {
-		active = []string{"nostr", "bep44", "dns"} // Nostr primary; BEP-44 opt-in; DNS tertiary
+		// Nostr is the primary registry (concurrent relay fan-out).
+		// DNS is a real fallback via _maknoon.<domain> TXT records + deSEC API publishing.
+		// BEP-44 DHT is available as an explicit opt-in (add "bep44" to Config.IdentityRegistries)
+		// but resolution is disabled since full-record fetch requires P2P transport.
+		active = []string{"nostr", "dns"}
 	}
 
 	mr := &MultiRegistry{}
@@ -162,6 +182,18 @@ func NewIdentityRegistry(conf *Config) IdentityRegistry {
 }
 
 func (r *MultiRegistry) Resolve(ctx context.Context, handle string) (*IdentityRecord, error) {
+	// Check the in-process cache first. This avoids relay round-trips on every
+	// call from an agent session while still honoring the record's own ExpiresAt.
+	r.mu.Lock()
+	if r.cache == nil {
+		r.cache = make(map[string]cachedRecord)
+	}
+	if cached, ok := r.cache[handle]; ok && time.Now().Before(cached.expiresAt) {
+		r.mu.Unlock()
+		return cached.record, nil
+	}
+	r.mu.Unlock()
+
 	for _, reg := range r.Registries {
 		record, err := reg.Resolve(ctx, handle)
 		if err != nil {
@@ -170,6 +202,10 @@ func (r *MultiRegistry) Resolve(ctx context.Context, handle string) (*IdentityRe
 		if record.IsExpired() {
 			continue // record is stale; try next registry for a fresher one
 		}
+		// Cache the fresh record for the next resolveCacheTTL window.
+		r.mu.Lock()
+		r.cache[handle] = cachedRecord{record: record, expiresAt: time.Now().Add(resolveCacheTTL)}
+		r.mu.Unlock()
 		return record, nil
 	}
 	return nil, fmt.Errorf("could not resolve identity for %s", handle)

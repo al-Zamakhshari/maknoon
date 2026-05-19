@@ -9,13 +9,47 @@ import (
 )
 
 // FormatMCPError converts a Go error into a structured MCP ToolResultError.
+// The JSON payload always contains "error" (human message) and "tool" (originating tool).
+// Additional fields are set based on the concrete error type so that AI agents
+// can branch on "type" without parsing error strings:
+//
+//   - "authentication_failure"      — wrong passphrase, no matching recipient key,
+//     signature verification failed; agent hint: "check key/passphrase"
+//   - "security_policy_violation"   — capability or path blocked by active policy
+//   - "format_error"                — file is not a valid .makn archive (corrupt/wrong format)
+//   - "crypto_failure"              — MAC mismatch or low-level AEAD failure (file tampered?)
+//   - "io_error"                    — file not found or permission denied
+//   - "network_error"               — registry relay unreachable
 func FormatMCPError(err error, tool string) (*mcp.CallToolResult, error) {
 	resp := map[string]interface{}{"error": err.Error(), "tool": tool}
-	var policyErr *ErrPolicyViolation
-	if As(err, &policyErr) {
+
+	switch {
+	case errors.As(err, new(*ErrPolicyViolation)):
 		resp["type"] = "security_policy_violation"
 		resp["is_security_violation"] = true
+		resp["hint"] = "operation blocked by the active security policy"
+
+	case errors.As(err, new(*ErrAuthentication)):
+		resp["type"] = "authentication_failure"
+		resp["hint"] = "check that the passphrase is correct and the private key matches a recipient in the file"
+
+	case errors.As(err, new(*ErrFormat)):
+		resp["type"] = "format_error"
+		resp["hint"] = "the file does not appear to be a valid .makn archive — it may be corrupt or in the wrong format"
+
+	case errors.As(err, new(*ErrCrypto)):
+		resp["type"] = "crypto_failure"
+		resp["hint"] = "ciphertext authentication failed — the file may have been tampered with or decrypted with the wrong key"
+
+	case errors.As(err, new(*ErrIO)):
+		resp["type"] = "io_error"
+		resp["hint"] = "check that the file path exists and is readable"
+
+	case errors.As(err, new(*ErrNetwork)):
+		resp["type"] = "network_error"
+		resp["hint"] = "check network connectivity and retry; use 'maknoon registry health' to diagnose relay reachability"
 	}
+
 	raw, _ := json.Marshal(resp)
 	return mcp.NewToolResultError(string(raw)), nil
 }
