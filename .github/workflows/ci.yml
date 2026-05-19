@@ -123,6 +123,13 @@ jobs:
       - name: Run Tests
         run: go test -race -short -v ./...
 
+      - name: Coverage Gate (pkg/crypto ≥ 65%)
+        run: |
+          go test -short -coverprofile=/tmp/cover.out ./pkg/crypto/... -timeout 120s
+          COVERAGE=$(go tool cover -func=/tmp/cover.out | tail -1 | awk '{gsub(/%/,"",$3); print $3}')
+          echo "pkg/crypto coverage: ${COVERAGE}%"
+          awk -v cov="$COVERAGE" 'BEGIN { if (cov+0 < 65) { print "FAIL: coverage " cov "% < 65% threshold"; exit 1 } }'
+
       - name: Fuzz (seed corpus)
         run: |
           go test -run='^$' -fuzz=FuzzStreamEncryptDecrypt -fuzztime=20s ./pkg/crypto/
