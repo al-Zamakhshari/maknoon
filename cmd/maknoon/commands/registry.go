@@ -19,6 +19,7 @@ func RegistryCmd() *cobra.Command {
 }
 
 func registryHealthCmd() *cobra.Command {
+	var discover bool
 	cmd := &cobra.Command{
 		Use:   "health",
 		Short: "Check connectivity of configured Nostr relays",
@@ -30,7 +31,12 @@ func registryHealthCmd() *cobra.Command {
 				conf = crypto.DefaultConfig()
 			}
 
-			reg := crypto.NewNostrRegistry(conf)
+			relays := conf.Nostr.Relays
+			if discover {
+				relays = deduplicateRelays(append(relays, crypto.WellKnownRelays...))
+			}
+
+			reg := &crypto.NostrRegistry{Relays: relays}
 			results := reg.HealthCheck(context.Background())
 
 			if GlobalContext.UI.JSON {
@@ -62,5 +68,18 @@ func registryHealthCmd() *cobra.Command {
 			return nil
 		},
 	}
+	cmd.Flags().BoolVar(&discover, "discover", false, "Also probe well-known public relays beyond the configured set")
 	return cmd
+}
+
+func deduplicateRelays(in []string) []string {
+	seen := make(map[string]bool, len(in))
+	out := make([]string, 0, len(in))
+	for _, r := range in {
+		if !seen[r] {
+			seen[r] = true
+			out = append(out, r)
+		}
+	}
+	return out
 }

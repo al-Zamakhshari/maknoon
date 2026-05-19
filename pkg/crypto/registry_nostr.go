@@ -23,6 +23,16 @@ func init() {
 	})
 }
 
+// WellKnownRelays is a curated list of stable public Nostr relays used by --discover.
+var WellKnownRelays = []string{
+	"wss://relay.damus.io",
+	"wss://nos.lol",
+	"wss://relay.nostr.band",
+	"wss://nostr.band",
+	"wss://relay.nostr.army",
+	"wss://nostr.wine",
+}
+
 // NostrRegistry implements IdentityRegistry using Nostr relays.
 type NostrRegistry struct {
 	Relays []string
