@@ -475,6 +475,14 @@
     ],
     "flags": [
       {
+        "name": "chunk-size",
+        "shorthand": "",
+        "description": "Shard chunk size in bytes (default: 65536; range: 4096–4194304)",
+        "type": "int",
+        "default": "0",
+        "required": false
+      },
+      {
         "name": "data",
         "shorthand": "d",
         "description": "Number of data shards",

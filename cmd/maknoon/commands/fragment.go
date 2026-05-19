@@ -45,6 +45,7 @@ Designed to compose with rclone for cloud distribution:
 			sigKeyPath, _ := cmd.Flags().GetString("sign-with")
 			passphrase, _ := cmd.Flags().GetString("passphrase")
 			manifestPath, _ := cmd.Flags().GetString("output-manifest")
+			chunkSize, _ := cmd.Flags().GetInt("chunk-size")
 
 			if outDir == "" {
 				outDir = filePath + "_fragments"
@@ -80,14 +81,15 @@ Designed to compose with rclone for cloud distribution:
 
 			hash, _ := crypto.HashFile(filePath)
 			opts := crypto.FragmentOptions{
-				DataShards:   dataShards,
-				ParityShards: parityShards,
-				TargetDir:    outDir,
-				OriginalSize: fi.Size(),
-				OriginalName: fi.Name(),
-				OriginalHash: hash,
-				SigningKey:   sigKey,
-				ManifestPath: manifestPath,
+				DataShards:     dataShards,
+				ParityShards:   parityShards,
+				TargetDir:      outDir,
+				OriginalSize:   fi.Size(),
+				OriginalName:   fi.Name(),
+				OriginalHash:   hash,
+				SigningKey:     sigKey,
+				ManifestPath:   manifestPath,
+				ShardChunkSize: chunkSize,
 			}
 
 			fw, err := crypto.NewFragmentWriter(opts)
@@ -120,6 +122,7 @@ Designed to compose with rclone for cloud distribution:
 	cmd.Flags().String("output-manifest", "", "Write manifest to this path instead of alongside shards (useful with rclone)")
 	cmd.Flags().String("sign-with", "", "ML-DSA private key to sign each shard block")
 	cmd.Flags().StringP("passphrase", "s", "", "Passphrase for the signing key")
+	cmd.Flags().Int("chunk-size", 0, "Shard chunk size in bytes (default: 65536; range: 4096–4194304)")
 
 	return cmd
 }
