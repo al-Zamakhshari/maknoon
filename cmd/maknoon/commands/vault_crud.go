@@ -1,7 +1,10 @@
 package commands
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/al-Zamakhshari/maknoon/pkg/crypto"
@@ -413,5 +416,207 @@ func vaultGetBlobCmd() *cobra.Command {
 			return nil
 		},
 	}
+	return cmd
+}
+
+func vaultExportCmd() *cobra.Command {
+	var output string
+	cmd := &cobra.Command{
+		Use:   "export",
+		Short: "Export all vault entries as an encrypted .makn bundle",
+		Long: `Exports every entry in a vault into a single encrypted .makn file using the
+vault passphrase for symmetric encryption. The bundle can be decrypted with
+'maknoon decrypt' and imported on another machine with 'maknoon vault import'.`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			p := GlobalContext.UI.GetPresenter()
+
+			path, err := resolveVaultPath(vaultName)
+			if err != nil {
+				p.RenderError(err)
+				return err
+			}
+
+			var vPass []byte
+			if vaultPassphrase != "" {
+				vPass = []byte(vaultPassphrase)
+			} else {
+				vPass, _, err = getPassphrase("Enter Vault Master Passphrase: ")
+				if err != nil {
+					p.RenderError(err)
+					return err
+				}
+			}
+			defer crypto.SafeClear(vPass)
+
+			entries, err := GlobalContext.Engine.VaultList(nil, path, vPass)
+			if err != nil {
+				p.RenderError(err)
+				return err
+			}
+
+			type exportEntry struct {
+				Service  string `json:"service"`
+				Username string `json:"username,omitempty"`
+				Password string `json:"password,omitempty"`
+				Blob     string `json:"blob,omitempty"`
+				URL      string `json:"url,omitempty"`
+				Note     string `json:"note,omitempty"`
+			}
+			var full []exportEntry
+			for _, e := range entries {
+				entry, err := GlobalContext.Engine.VaultGet(nil, path, e.Service, vPass, "")
+				if err != nil || entry == nil {
+					continue
+				}
+				full = append(full, exportEntry{
+					Service:  entry.Service,
+					Username: entry.Username,
+					Password: string(entry.Password),
+					Blob:     string(entry.Blob),
+					URL:      entry.URL,
+					Note:     entry.Note,
+				})
+				crypto.SafeClear(entry.Password)
+				crypto.SafeClear(entry.Blob)
+			}
+
+			data, err := json.MarshalIndent(full, "", "  ")
+			if err != nil {
+				p.RenderError(err)
+				return err
+			}
+
+			if output == "" {
+				output = vaultName + ".vault.makn"
+			}
+			outFile, err := os.Create(output)
+			if err != nil {
+				p.RenderError(err)
+				return err
+			}
+			defer outFile.Close()
+
+			opts := crypto.Options{Passphrase: crypto.SecretBytes(vPass)}
+			if _, err := GlobalContext.Engine.Protect(nil, "vault-export", bytes.NewReader(data), outFile, opts); err != nil {
+				p.RenderError(err)
+				return err
+			}
+
+			res := map[string]any{
+				"status":           "success",
+				"entries_exported": len(full),
+				"output":           output,
+			}
+			p.RenderSuccess(res)
+			if !GlobalContext.UI.JSON {
+				p.RenderMessage(fmt.Sprintf("✅ %d entries exported to %s", len(full), output))
+			}
+			return nil
+		},
+	}
+	cmd.Flags().StringVarP(&output, "output", "o", "", "Output path (default: <vault>.vault.makn)")
+	return cmd
+}
+
+func vaultImportCmd() *cobra.Command {
+	var input string
+	var overwrite bool
+	cmd := &cobra.Command{
+		Use:   "import",
+		Short: "Import vault entries from an encrypted .makn bundle",
+		Long: `Decrypts a bundle created by 'maknoon vault export' and imports all entries
+into the target vault. Skips entries that already exist unless --overwrite is set.`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			p := GlobalContext.UI.GetPresenter()
+
+			if input == "" {
+				err := fmt.Errorf("--input is required")
+				p.RenderError(err)
+				return err
+			}
+
+			inFile, err := os.Open(input)
+			if err != nil {
+				p.RenderError(err)
+				return err
+			}
+			defer inFile.Close()
+
+			var vPass []byte
+			if vaultPassphrase != "" {
+				vPass = []byte(vaultPassphrase)
+			} else {
+				vPass, _, err = getPassphrase("Enter Bundle Passphrase: ")
+				if err != nil {
+					p.RenderError(err)
+					return err
+				}
+			}
+			defer crypto.SafeClear(vPass)
+
+			var buf bytes.Buffer
+			opts := crypto.Options{Passphrase: crypto.SecretBytes(vPass)}
+			if _, err := GlobalContext.Engine.Unprotect(nil, inFile, &buf, "", opts); err != nil {
+				p.RenderError(err)
+				return err
+			}
+
+			type exportEntry struct {
+				Service  string `json:"service"`
+				Username string `json:"username,omitempty"`
+				Password string `json:"password,omitempty"`
+				Blob     string `json:"blob,omitempty"`
+				URL      string `json:"url,omitempty"`
+				Note     string `json:"note,omitempty"`
+			}
+			var importedEntries []exportEntry
+			if err := json.Unmarshal(buf.Bytes(), &importedEntries); err != nil {
+				err = fmt.Errorf("invalid bundle format: %w", err)
+				p.RenderError(err)
+				return err
+			}
+
+			targetPath, err := resolveVaultPath(vaultName)
+			if err != nil {
+				p.RenderError(err)
+				return err
+			}
+
+			vPassTarget := crypto.SecretBytes(vPass)
+			imported, skipped := 0, 0
+			for _, e := range importedEntries {
+				entry := &crypto.VaultEntry{
+					Service:  e.Service,
+					Username: e.Username,
+					Password: crypto.SecretBytes(e.Password),
+					Blob:     crypto.SecretBytes(e.Blob),
+					URL:      e.URL,
+					Note:     e.Note,
+				}
+				if err := GlobalContext.Engine.VaultSet(nil, targetPath, entry, vPassTarget, "", overwrite); err != nil {
+					skipped++
+				} else {
+					imported++
+				}
+				crypto.SafeClear(entry.Password)
+				crypto.SafeClear(entry.Blob)
+			}
+			crypto.SafeClear(vPassTarget)
+
+			res := map[string]any{
+				"status":   "success",
+				"vault":    vaultName,
+				"imported": imported,
+				"skipped":  skipped,
+			}
+			p.RenderSuccess(res)
+			if !GlobalContext.UI.JSON {
+				p.RenderMessage(fmt.Sprintf("✅ Imported %d entries into vault '%s' (%d skipped — use --overwrite to replace)", imported, vaultName, skipped))
+			}
+			return nil
+		},
+	}
+	cmd.Flags().StringVarP(&input, "input", "i", "", "Path to the encrypted .makn bundle (required)")
+	cmd.Flags().BoolVar(&overwrite, "overwrite", false, "Overwrite existing entries")
 	return cmd
 }

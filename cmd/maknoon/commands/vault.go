@@ -37,6 +37,8 @@ func VaultCmd() *cobra.Command {
 	cmd.AddCommand(vaultRecoverCmd())
 	cmd.AddCommand(vaultRotateCmd())
 	cmd.AddCommand(vaultCheckShardsCmd())
+	cmd.AddCommand(vaultExportCmd())
+	cmd.AddCommand(vaultImportCmd())
 
 	return cmd
 }
