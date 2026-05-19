@@ -68,7 +68,7 @@ jobs:
           go-version-file: 'go.mod'
           cache: true
       - name: Verify Man Page Sync
-        run: go run ./cmd/maknoon man --verify
+        run: go run ./cmd/maknoon man --verify --dir man
       - name: Verify MCP Tool Reference is up to date
         run: |
           go run ./cmd/maknoon schema > /tmp/tool-reference-current.json
