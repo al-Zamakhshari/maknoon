@@ -1,4 +1,4 @@
-.PHONY: build test bench docker-build clean completion man build-matrix
+.PHONY: build test bench docker-build clean completion man man-verify install-hooks build-matrix
 
 # Build parameters
 BINARY_NAME=maknoon
@@ -30,10 +30,22 @@ completion:
 	./$(BINARY_NAME) completion bash > maknoon.completion
 	@echo "Source 'maknoon.completion' to enable."
 
-# Verify and update the manual page
-man:
-	@echo "📖  Verifying manual page integrity..."
-	go run $(PKG) man --verify
+# Regenerate all 72 per-command man pages into man/ (run after adding/renaming commands)
+man: build
+	@echo "📖  Generating man pages..."
+	./$(BINARY_NAME) man --generate --dir man
+	@echo "   Run 'git add man/' to stage the updated pages."
+
+# Verify man pages are in sync with the current CLI (used by CI)
+man-verify: build
+	@echo "📖  Verifying man pages are up to date..."
+	./$(BINARY_NAME) man --verify --dir man
+
+# Install the .githooks pre-commit hook for automatic man page regeneration
+install-hooks:
+	@echo "🪝  Installing pre-commit hook..."
+	git config core.hooksPath .githooks
+	@echo "✅  Pre-commit hook active. Man pages will auto-regenerate on commit."
 
 # Launch local documentation server (Industrial API browsing)
 serve-docs:

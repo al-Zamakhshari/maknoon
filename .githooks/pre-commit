@@ -1,0 +1,29 @@
+#!/bin/sh
+# Maknoon pre-commit hook — auto-regenerates man pages when CLI source changes.
+# Install with: make install-hooks  (or: git config core.hooksPath .githooks)
+
+# Only run if command files changed in this commit.
+CHANGED=$(git diff --cached --name-only | grep -E 'cmd/maknoon/(commands/|main\.go)' | head -1)
+if [ -z "$CHANGED" ]; then
+    exit 0
+fi
+
+echo "📖 CLI source changed — regenerating man pages..."
+
+# Prefer the built binary (fast); fall back to go run (always works).
+if [ -x "./maknoon" ]; then
+    ./maknoon man --generate --dir man 2>/dev/null
+elif command -v maknoon >/dev/null 2>&1; then
+    maknoon man --generate --dir man 2>/dev/null
+else
+    go run ./cmd/maknoon man --generate --dir man 2>/dev/null
+fi
+
+if [ $? -ne 0 ]; then
+    echo "❌ Man page generation failed — commit aborted."
+    exit 1
+fi
+
+# Stage any updated or new man pages automatically.
+git add man/
+echo "✅ Man pages regenerated and staged."
