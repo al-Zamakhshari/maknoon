@@ -156,7 +156,9 @@ type KMSService interface {
 
 // DispersalService handles RAID-for-Privacy data dispersal.
 type DispersalService interface {
+	FragmentFile(ctx *EngineContext, inputPath string, opts FragmentOptions) error
 	ReassembleFragments(srcDir string, w io.Writer, authorizedPubKey []byte) error
+	ReassembleToPath(ctx *EngineContext, srcDir, outputPath string, authorizedPubKey []byte) error
 }
 
 // MaknoonEngine is the primary high-level facade for all Maknoon services.

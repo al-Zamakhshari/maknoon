@@ -476,12 +476,38 @@ func (e *AuditEngine) Unwrap(ectx *EngineContext, wrappedKey []byte, privKey []b
 	return res, err
 }
 
+func (e *AuditEngine) FragmentFile(ctx *EngineContext, inputPath string, opts FragmentOptions) error {
+	start := time.Now()
+	err := e.Engine.FragmentFile(ctx, inputPath, opts)
+	duration := time.Since(start)
+	e.Logger.LogEvent("fragment_file", map[string]any{
+		"input":         e.sanitizePath(inputPath),
+		"target_dir":    e.sanitizePath(opts.TargetDir),
+		"data_shards":   opts.DataShards,
+		"parity_shards": opts.ParityShards,
+		"duration_ms":   duration.Milliseconds(),
+	}, err)
+	return err
+}
+
 func (e *AuditEngine) ReassembleFragments(srcDir string, w io.Writer, authorizedPubKey []byte) error {
 	start := time.Now()
 	err := e.Engine.ReassembleFragments(srcDir, w, authorizedPubKey)
 	duration := time.Since(start)
 	e.Logger.LogEvent("fragment_reassemble", map[string]any{
 		"src_dir":     e.sanitizePath(srcDir),
+		"duration_ms": duration.Milliseconds(),
+	}, err)
+	return err
+}
+
+func (e *AuditEngine) ReassembleToPath(ctx *EngineContext, srcDir, outputPath string, authorizedPubKey []byte) error {
+	start := time.Now()
+	err := e.Engine.ReassembleToPath(ctx, srcDir, outputPath, authorizedPubKey)
+	duration := time.Since(start)
+	e.Logger.LogEvent("fragment_reassemble", map[string]any{
+		"src_dir":     e.sanitizePath(srcDir),
+		"output":      e.sanitizePath(outputPath),
 		"duration_ms": duration.Milliseconds(),
 	}, err)
 	return err

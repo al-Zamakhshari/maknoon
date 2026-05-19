@@ -14,6 +14,9 @@ import (
 const (
 	FragmentMagic = "MAKF"
 	VersionV1     = 1
+	VersionV2     = 2 // V2 adds SigSize field to header, making format self-describing
+	headerSizeV1  = 16
+	headerSizeV2  = 18
 )
 
 // FragmentOptions defines the configuration for data fragmentation.
@@ -67,19 +70,30 @@ func NewFragmentWriterWithWriters(opts FragmentOptions, writers []io.WriteCloser
 		return nil, err
 	}
 
+	// Compute sig size up front so we can store it in the V2 header.
+	var sigSize uint16
+	if len(opts.SigningKey) > 0 {
+		testSig, err := SignData([]byte{0}, opts.SigningKey)
+		if err != nil {
+			return nil, fmt.Errorf("invalid signing key: %w", err)
+		}
+		sigSize = uint16(len(testSig))
+	}
+
 	totalShards := opts.DataShards + opts.ParityShards
 	for i := 0; i < totalShards; i++ {
 		if writers[i] == nil {
 			continue
 		}
-		// V1 Header: Magic(4) + Ver(1) + ShardIdx(1) + Data(1) + Parity(1) + OrigSize(8)
-		header := make([]byte, 16)
+		// V2 Header: Magic(4) + Ver(1) + ShardIdx(1) + Data(1) + Parity(1) + OrigSize(8) + SigSize(2)
+		header := make([]byte, headerSizeV2)
 		copy(header[0:4], FragmentMagic)
-		header[4] = VersionV1
+		header[4] = VersionV2
 		header[5] = byte(i)
 		header[6] = byte(opts.DataShards)
 		header[7] = byte(opts.ParityShards)
 		binary.LittleEndian.PutUint64(header[8:16], uint64(opts.OriginalSize))
+		binary.LittleEndian.PutUint16(header[16:18], sigSize)
 
 		if _, err := writers[i].Write(header); err != nil {
 			return nil, err
@@ -138,25 +152,18 @@ func (fw *FragmentWriter) flushChunk(chunk []byte) error {
 }
 
 func (fw *FragmentWriter) Close() error {
+	var closeErr error
 	if len(fw.buffer) > 0 {
-		shards, err := fw.enc.Split(fw.buffer)
-		if err == nil {
-			if err := fw.enc.Encode(shards); err == nil {
-				for i, shard := range shards {
-					if len(fw.opts.SigningKey) > 0 {
-						sig, _ := SignData(shard, fw.opts.SigningKey)
-						_, _ = fw.writers[i].Write(sig)
-					}
-					_, _ = fw.writers[i].Write(shard)
-				}
-			}
+		if err := fw.flushChunk(fw.buffer); err != nil {
+			closeErr = err
 		}
+		fw.buffer = fw.buffer[:0]
 	}
 
 	for _, w := range fw.writers {
 		_ = w.Close()
 	}
-	return nil
+	return closeErr
 }
 
 func ReassembleFragments(srcDir string, w io.Writer, authorizedPubKey []byte) error {
@@ -173,15 +180,21 @@ func ReassembleFragments(srcDir string, w io.Writer, authorizedPubKey []byte) er
 	var shardPaths []string
 	var dataShards, parityShards int
 	var originalSize int64
+	var sigSize int
 	for _, f := range files {
 		if !f.IsDir() && filepath.Ext(f.Name()) == ".maknf" {
 			shardPath := filepath.Join(safeDir, f.Name())
 			if dataShards == 0 {
 				data, err := os.ReadFile(shardPath)
-				if err == nil && len(data) >= 16 && string(data[:4]) == FragmentMagic {
+				if err == nil && len(data) >= headerSizeV1 && string(data[:4]) == FragmentMagic {
 					dataShards = int(data[6])
 					parityShards = int(data[7])
 					originalSize = int64(binary.LittleEndian.Uint64(data[8:16]))
+					if data[4] >= VersionV2 && len(data) >= headerSizeV2 {
+						sigSize = int(binary.LittleEndian.Uint16(data[16:18]))
+					} else if len(authorizedPubKey) > 0 {
+						sigSize = 4627 // V1 backward compat: ML-DSA-87 was the only signer
+					}
 				}
 			}
 			shardPaths = append(shardPaths, shardPath)
@@ -212,20 +225,23 @@ func ReassembleFragments(srcDir string, w io.Writer, authorizedPubKey []byte) er
 		if err != nil {
 			continue
 		}
-		header := make([]byte, 16)
-		if _, err := io.ReadFull(f, header); err != nil {
+		// Read the base V1 header first, then consume the extra 2 bytes for V2.
+		base := make([]byte, headerSizeV1)
+		if _, err := io.ReadFull(f, base); err != nil {
 			_ = f.Close()
 			continue
 		}
-		idx := int(header[5])
+		if base[4] >= VersionV2 {
+			extra := make([]byte, headerSizeV2-headerSizeV1)
+			if _, err := io.ReadFull(f, extra); err != nil {
+				_ = f.Close()
+				continue
+			}
+		}
+		idx := int(base[5])
 		if idx < totalShards {
 			shardFiles[idx] = f
 		}
-	}
-
-	sigSize := 0
-	if len(authorizedPubKey) > 0 {
-		sigSize = 4627
 	}
 
 	remaining := originalSize
