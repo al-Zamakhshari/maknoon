@@ -36,24 +36,6 @@ These commands manage the primary data protection pipeline, including hybrid enc
 
 ---
 
-## Tunnel & Gateway Commands
-Commands for establishing post-quantum secured network perimeters.
-
-| Command | Functionality | Key Parameters |
-| :--- | :--- | :--- |
-| `tunnel listen` | Starts a PQC tunnel server. | `--p2p`, `--address`, `--yamux` |
-| `tunnel start` | Starts a local SOCKS5 gateway. | `--remote`, `--data-lanes`, `--parity-lanes`, `--port` |
-
-### Tunnel Resilience Examples
-```bash
-# High-reliability mode: 4 total lanes, survives 2 failures
-maknoon tunnel start --remote "gateway:4433" --data-lanes 2 --parity-lanes 2
-
-# Stealth P2P mode with identity binding
-maknoon tunnel start --p2p --identity "work_id" --p2p-addr "/p2p/..."
-```
-
-
 ## Configuration Management (Viper)
 Maknoon uses the **Viper** framework to manage configuration across flags, environment variables, and configuration files.
 

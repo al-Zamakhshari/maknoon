@@ -6,17 +6,16 @@ Maknoon is architected as a high-performance, constant-memory cryptographic engi
 
 ```mermaid
 graph TD
-    User[Human Operator] -- CLI / Ghost Chat --> Maknoon
+    User[Human Operator] -- CLI --> Maknoon
     Agent[AI Agent] -- MCP stdio/sse --> Maknoon
-    
+
     subgraph Maknoon [Maknoon Platform]
         Engine[Engine Core]
     end
-    
-    Maknoon -- identity publish --> Registry[libp2p DHT / Nostr / DNS]
-    Maknoon -- Tunnel --> Wormhole[Magic Wormhole Relay]
+
+    Maknoon -- identity publish --> Registry[Nostr / DNS]
     Maknoon -- Audit --> Logs[Compliance Logs]
-    Maknoon -- Storage --> FS[Local Filesystem / Cloud Sidecar]
+    Maknoon -- Storage --> FS[Local Filesystem]
 ```
 
 The system utilizes a modular streaming pipeline that decouples I/O operations from cryptographic transformations.
@@ -24,28 +23,28 @@ The system utilizes a modular streaming pipeline that decouples I/O operations f
 ---
 
 ## Unified Binary Architecture
-Starting with V3, Maknoon implements a **Unified Binary** design. A single statically linked binary hosts the CLI, the cryptographic engine, and the native Model Context Protocol (MCP) server.
+Maknoon implements a **Unified Binary** design. A single statically linked binary (~14 MB) hosts the CLI, the cryptographic engine, and the native Model Context Protocol (MCP) server.
 
 ```mermaid
 graph TD
     Entry[Binary Entry Point] --> Parse{Command Resolution}
     Parse -- "encrypt/decrypt/..." --> CLI[CLI Controller]
     Parse -- "mcp" --> MCP{Transport Selection}
-    
+
     CLI --> Engine[Central Engine Core]
-    
+
     MCP -- "--transport stdio" --> Stdio[Stdio Transport]
     MCP -- "--transport sse" --> SSE[Secure SSE Transport]
-    
+
     Stdio --> Engine
     SSE --> Engine
-    
+
     Engine --> Policy{AgentPolicy?}
     Policy -- Yes --> Sandbox[Restricted OS View]
     Policy -- No --> OS[Standard OS View]
 ```
 
-*   **Logic Consolidation**: The core logic resides in `pkg/crypto/engine.go`, which is consumed by both the CLI and MCP layers.
+*   **Logic Consolidation**: The core logic resides in `pkg/crypto/engine.go`, consumed by both the CLI and MCP layers.
 *   **Reduced Attack Surface**: By eliminating external dependencies and shared libraries, the binary provides a consistent security posture across all operational modes.
 *   **Mode Selection**: The mode of operation is determined by the command-line entry point (e.g., `maknoon mcp` for server mode vs. `maknoon encrypt` for CLI mode).
 
@@ -73,17 +72,17 @@ graph LR
     Reader --> W1[Worker 1]
     Reader --> W2[Worker 2]
     Reader --> Wn[Worker N]
-    
+
     subgraph Transformation [Transformations]
         W1 -- Encrypt --> S1[Segment 1]
         W2 -- Encrypt --> S2[Segment 2]
         Wn -- Encrypt --> Sn[Segment N]
     end
-    
+
     S1 --> Seq[Sequencer]
     S2 --> Seq
     Sn --> Seq
-    
+
     Seq --> Output[Authenticated Ciphertext]
 ```
 
@@ -109,17 +108,17 @@ graph TD
             Config[config.json]
         end
     end
-    
+
     subgraph Sandbox [Isolated Container Sandbox]
         direction TB
         Proc[Running Process UID 1000]
         Policy{AgentPolicy}
-        
+
         Proc -- Validates --> Policy
         Policy -- "Allow (~/)" --> Workspace[Persistent Workspace]
         Policy -- "Block (/etc/)" --> Denied[Host Access DENIED]
     end
-    
+
     Docker -- "volume mount" --> Workspace
     Docker -- "immutable" --> Bin
 ```
@@ -137,7 +136,7 @@ Maknoon implements a hybrid cryptographic stack that combines NIST-standardized 
 
 ### Hybrid Key Encapsulation (HPKE)
 The system utilizes **HPKE (RFC 9180)** to wrap File Encryption Keys (FEKs). This implementation employs a composite KEM:
-*   **Lattice Component**: ML-KEM-1024 (Kyber) providing quantum resistance.
+*   **Lattice Component**: ML-KEM-768 (NIST standard) providing quantum resistance.
 *   **Elliptic Curve Component**: X25519 for classical security and performance.
 
 ### Context-Aware Security
@@ -145,54 +144,29 @@ All cryptographic operations are bound to the file's metadata via the HPKE `info
 
 ---
 
-## Post-Quantum L4 Tunnel Gateway
-Maknoon implements a user-space **Post-Quantum L4 Tunnel** that allows AI Agents and human operators to provision secure network perimeters without requiring kernel-level modifications or root privileges.
-
-```mermaid
-graph TD
-    Client[SOCKS5 Client] --> Proxy[SOCKS5 Gateway]
-    Proxy -- Encapsulate --> QUIC[QUIC Stream]
-    
-    subgraph Tunnel [PQC Transport Layer]
-        QUIC -- PQ-TLS 1.3 --> UDP[UDP Socket]
-    end
-    
-    UDP -- ML-KEM Hybrid --> Peer[Remote Maknoon Peer]
-```
-
-*   **QUIC Transport**: Uses `github.com/quic-go/quic-go` for native user-space multiplexing and congestion control.
-*   **Encapsulation Protocol**: Local TCP connections are bridged into independent QUIC streams. The destination address is transmitted as a post-quantum-secured metadata header during stream initiation.
-*   **Memory Hygiene**: Plaintext network data is processed exclusively within hardware-locked **memguard enclaves**, with deterministic zeroization of buffers after every packet transmission.
-*   **Zero-Trust Identity**: Tunnel handshakes utilize the platform's **ML-KEM-1024 + X25519** hybrid posture, neutralizing "harvest now, decrypt later" transport threats.
-
----
-
 ## Identity Registry Stack
 
-Maknoon uses a three-tier decentralised identity registry for publishing and resolving PQC public keys.
+Maknoon uses a decentralised identity registry for publishing and resolving PQC public keys.
 
 | Tier | Protocol | Handle Format | Notes |
 |------|----------|--------------|-------|
-| **Primary** | libp2p Kademlia DHT (`/maknoon` protocol) | `@alice` | Stores full ML-DSA-87 record; works when publisher is offline |
-| **Fallback** | Nostr relays (kind:0 events) | `@alice`, `alice@domain.com` (NIP-05) | Secp256k1 key derived ephemerally via HKDF from SIG private key — never stored on disk |
+| **Primary** | Nostr relays (kind:0 events) | `@alice`, `alice@domain.com` (NIP-05) | Secp256k1 key derived ephemerally via HKDF — never stored on disk; concurrent multi-relay fan-out |
 | **Authoritative** | DNS TXT records | `@alice.example.com` | Requires domain ownership; supports deSEC.io auto-publish |
-| **Opt-in** | BitTorrent BEP-44 DHT | `@bep44:<ed25519-hex>` | Stores multiaddrs only; peer must be online for full record fetch |
 
-### Publish defaults
+### Publishing
 ```bash
-maknoon identity publish @alice               # → libp2p DHT (default)
-maknoon identity publish @alice --nostr       # → also Nostr relays
-maknoon identity publish @alice --dns --desec # → DNS via deSEC.io
-maknoon identity publish @alice --bep44       # → BEP-44 peer-discovery (opt-in)
+maknoon identity publish @alice               # → Nostr relays (default)
+maknoon identity publish @alice --dns         # → DNS TXT record
+maknoon identity publish @alice --dns --desec # → DNS via deSEC.io auto-publish
 ```
 
 ### Resolve flow
-`MultiRegistry` tries tiers in order: libp2p DHT (10s timeout) → Nostr → DNS. A 10-second cap on the libp2p step ensures fast fallthrough when no `/maknoon/kad` peers are reachable.
+`MultiRegistry` tries Nostr first (10-second timeout per relay, concurrent fan-out across all configured relays), then falls back to DNS TXT. The ephemeral Nostr key is derived from the identity's SIG private key via HKDF-SHA256 — it is never persisted to disk.
 
 ---
 
 ## Configuration Management (Viper)
-V3 standardizes configuration using the **Viper** framework, providing a strict hierarchy for parameter resolution.
+Maknoon standardizes configuration using the **Viper** framework, providing a strict hierarchy for parameter resolution.
 
 1.  **CLI Flags**: Immediate overrides provided during execution.
 2.  **Environment Variables**: Prefixed with `MAKNOON_` (e.g., `MAKNOON_AGENT_MODE`).
@@ -202,7 +176,7 @@ V3 standardizes configuration using the **Viper** framework, providing a strict 
 ---
 
 ## Testing Strategy
-The V3 suite introduces a **Transport-Agnostic Mission** testing model.
+The suite implements a **Transport-Agnostic Mission** testing model.
 
 *   **Mission Suites**: Tests verify engine behavior through high-level missions that run identically over CLI, Stdio-MCP, and SSE-MCP transports.
-*   **Short Standardization**: Use of `testing.Short()` to skip network-intensive or hardware-bound (FIDO2) tests during rapid local iteration, while ensuring full coverage in CI/CD pipelines.
+*   **Short Standardization**: Use of `testing.Short()` to skip network-intensive or hardware-bound (TPM) tests during rapid local iteration, while ensuring full coverage in CI/CD pipelines.

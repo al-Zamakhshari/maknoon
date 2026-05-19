@@ -1,62 +1,39 @@
-# Hardware Hardening Guide (Phase 8)
-> **Binding Maknoon Identities to Silicon Trust (TPM 2.0 & FIDO2)**
+# Hardware Hardening Guide
+> **Binding Maknoon Identities to Silicon Trust (TPM 2.0)**
 
-Maknoon's Phase 8 introduces industrial-grade hardware hardening, ensuring that private cryptographic material never exists in plain-text within host memory. This guide covers the integration of TPM 2.0 (for platform binding) and FIDO2 (for human-presence verification).
+Maknoon supports industrial-grade hardware hardening via TPM 2.0, ensuring that private cryptographic material never exists in plaintext within host memory.
 
 ---
 
 ## 🛡️ TPM 2.0: Platform Configuration Binding
 
-TPM hardening allows you to seal keys to the specific state of your hardware. If the bootloader is tampered with or Secure Boot is disabled, the TPM will refuse to unseal the keys.
+TPM hardening seals keys to the specific state of your hardware. If the bootloader is tampered with or Secure Boot is disabled, the TPM will refuse to unseal the keys.
 
-### 1. Requirements
+### Requirements
 *   A Linux environment with `/dev/tpmrm0` (TPM Resource Manager).
-*   `go-tpm` compliant hardware (TPM 2.0).
+*   TPM 2.0 compliant hardware.
 
-### 2. Basic Sealing
+### Basic Sealing
 Generate an identity where the private keys are encrypted by the TPM's Storage Root Key (SRK).
 ```bash
 maknoon keygen corporate-id --tpm
 ```
 
-### 3. PCR-Bound Sealing (Advanced)
-You can bind keys to specific **Platform Configuration Registers (PCRs)**. Common PCRs include:
+### PCR-Bound Sealing (Advanced)
+Bind keys to specific **Platform Configuration Registers (PCRs)**:
 *   **PCR 0**: Core System Firmware.
 *   **PCR 7**: Secure Boot State.
 *   **PCR 14**: Kernel Measurement.
 
-To generate a key that only unlocks if Secure Boot is active and the Kernel hasn't changed:
 ```bash
+# Key only unlocks if Secure Boot is active and the kernel hasn't changed
 maknoon keygen secure-id --tpm --tpm-pcrs 7,14
 ```
 
-### 4. Usage
-When performing any operation (encryption, signing, vault access), simply pass the `--tpm` flag:
+### Usage
+Pass `--tpm` to any operation using a TPM-protected identity:
 ```bash
 maknoon encrypt sensitive.pdf --identity secure-id --tpm
-```
-
----
-
-## 🔑 FIDO2: Human-Presence Verification
-
-FIDO2 hardening binds key unlocking to a physical gesture (tapping a YubiKey or Nitrokey). This prevents "headless" malware from using your keys even if your machine is compromised.
-
-### 1. Enrollment
-Enroll your physical security key during identity generation. You will be prompted for your FIDO2 PIN.
-```bash
-maknoon keygen personal-id --fido2
-```
-*Note: This creates a `.fido2` metadata file alongside your `.key` file.*
-
-### 2. Multi-Factor Unlocking
-When using a FIDO2-protected identity, Maknoon will require:
-1.  Your **Passphrase** (Something you know).
-2.  Your **FIDO2 PIN** (Something you have/know).
-3.  A **Physical Touch** (Something you do).
-
-```bash
-maknoon sign critical-manifest.json --identity personal-id
 ```
 
 ---
@@ -64,9 +41,9 @@ maknoon sign critical-manifest.json --identity personal-id
 ## 🏗️ Technical Architecture
 
 Maknoon uses a **Layered KeyStore Wrapper** pattern:
-1.  **Base Layer**: Filesystem (Encrypted Blobs).
-2.  **Middle Layer**: TPM Wrapper (Seals/Unseals the blobs using hardware-protected policy sessions).
-3.  **App Layer**: The Engine interacts with the standard `KeyStore` interface, remaining agnostic to the hardware complexity.
+1.  **Base Layer**: Filesystem (encrypted blobs).
+2.  **Middle Layer**: TPM Wrapper (seals/unseals blobs using hardware-protected policy sessions).
+3.  **App Layer**: The Engine interacts with the standard `KeyStore` interface, remaining agnostic to hardware complexity.
 
 ```mermaid
 graph LR
@@ -78,7 +55,7 @@ graph LR
 ```
 
 ### Forensic Integrity
-All hardware access attempts (success or failure) are recorded in the **Chained Forensic Audit Log**.
+All hardware access attempts (success or failure) are recorded in the **Chained Forensic Audit Log**:
 *   **Action**: `load_identity`
 *   **Meta**: `tpm: true, pcrs: [7,14]`
 
@@ -90,11 +67,11 @@ Maknoon's `--shred` flag performs a single-pass zero-overwrite, random rename, a
 
 ### Why SSDs defeat logical overwrite
 
-SSDs and NVMe drives use a Flash Translation Layer (FTL) that maps logical block addresses (LBAs) to physical NAND cells for wear-leveling. When a block is overwritten, the FTL typically:
+SSDs and NVMe drives use a Flash Translation Layer (FTL) that maps logical block addresses to physical NAND cells for wear-leveling. When a block is overwritten, the FTL typically:
 1. Writes new data to a **different** physical cell
 2. Marks the old cell as available for deferred garbage collection
 
-The old cell — containing original plaintext — may remain physically readable for days to weeks until the internal garbage collector reclaims it. Specialized forensic hardware can read NAND chips directly, bypassing the FTL entirely.
+The old cell — containing original plaintext — may remain physically readable for days to weeks until the internal garbage collector reclaims it.
 
 ### Mitigation: Full Disk Encryption is the primary control
 

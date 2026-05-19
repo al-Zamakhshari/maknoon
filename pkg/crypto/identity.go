@@ -247,7 +247,8 @@ func (m *IdentityManager) LoadPrivateKey(path string, passphrase []byte, pin str
 		return nil, &ErrIO{Path: path, Reason: "key file not found"}
 	}
 
-	// Case 1: Decrypt using FIDO2 if .fido2 file exists
+	// Case 1: Backward-compat path for keys enrolled with FIDO2 hardware tokens
+	// (--fido2 CLI flag removed in v1.3; this path handles existing .fido2 keys).
 	fidoPath := path + ".fido2"
 	if m.Store.Exists(fidoPath) {
 		return m.UnlockPrivateKeyWithFIDOOrPass(passphrase, pin, path, isStdin)
