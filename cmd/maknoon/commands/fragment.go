@@ -65,11 +65,14 @@ require manual placement. For production use, combine with an object store.`,
 				defer crypto.SafeClear(sigKey)
 			}
 
+			hash, _ := crypto.HashFile(filePath)
 			opts := crypto.FragmentOptions{
 				DataShards:   dataShards,
 				ParityShards: parityShards,
 				TargetDir:    outDir,
 				OriginalSize: fi.Size(),
+				OriginalName: fi.Name(),
+				OriginalHash: hash,
 				SigningKey:   sigKey,
 			}
 

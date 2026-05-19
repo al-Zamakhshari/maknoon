@@ -27,13 +27,25 @@ func (s *CryptoService) FragmentFile(_ *EngineContext, inputPath string, opts Fr
 	if err != nil {
 		return fmt.Errorf("cannot stat input: %w", err)
 	}
+
+	opts.OriginalSize = fi.Size()
+	if opts.OriginalName == "" {
+		opts.OriginalName = fi.Name()
+	}
+	if opts.OriginalHash == "" {
+		hash, err := HashFile(inputPath)
+		if err != nil {
+			return fmt.Errorf("hashing input: %w", err)
+		}
+		opts.OriginalHash = hash
+	}
+
 	f, err := os.Open(inputPath)
 	if err != nil {
 		return err
 	}
 	defer f.Close()
 
-	opts.OriginalSize = fi.Size()
 	fw, err := NewFragmentWriter(opts)
 	if err != nil {
 		return err

@@ -1,12 +1,16 @@
 package crypto
 
 import (
+	"crypto/sha256"
 	"encoding/binary"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/klauspost/reedsolomon"
 )
@@ -26,6 +30,29 @@ type FragmentOptions struct {
 	TargetDir    string
 	SigningKey   []byte
 	OriginalSize int64
+	OriginalName string // original filename, written to manifest
+	OriginalHash string // hex(sha256) of original file, written to manifest
+}
+
+// FragmentManifest records shard metadata for reassembly and integrity verification.
+type FragmentManifest struct {
+	Version      int         `json:"version"`
+	CreatedAt    time.Time   `json:"created_at"`
+	OriginalName string      `json:"original_name,omitempty"`
+	OriginalSize int64       `json:"original_size"`
+	OriginalHash string      `json:"original_hash,omitempty"` // hex(sha256)
+	DataShards   int         `json:"data_shards"`
+	ParityShards int         `json:"parity_shards"`
+	TotalShards  int         `json:"total_shards"`
+	Signed       bool        `json:"signed"`
+	SigSize      int         `json:"sig_size,omitempty"`
+	Shards       []ShardInfo `json:"shards"`
+}
+
+// ShardInfo records a single shard's location.
+type ShardInfo struct {
+	Index    int    `json:"index"`
+	Filename string `json:"filename"`
 }
 
 // FragmentWriter implements io.Writer by splitting data into erasure-coded shards.
@@ -59,6 +86,14 @@ func NewFragmentWriter(opts FragmentOptions) (*FragmentWriter, error) {
 			writers[i] = f
 		}
 		opts.TargetDir = safeDir
+
+		// Write manifest alongside the shards.
+		if err := writeFragmentManifest(opts, writers); err != nil {
+			for _, w := range writers {
+				_ = w.Close()
+			}
+			return nil, fmt.Errorf("writing manifest: %w", err)
+		}
 	}
 
 	return NewFragmentWriterWithWriters(opts, writers)
@@ -172,6 +207,10 @@ func ReassembleFragments(srcDir string, w io.Writer, authorizedPubKey []byte) er
 	if strings.HasPrefix(safeDir, "..") || strings.Contains(safeDir, string(filepath.Separator)+".."+string(filepath.Separator)) {
 		return fmt.Errorf("source dir contains path traversal: %q", srcDir)
 	}
+
+	// Read manifest if present — used for validation and better error messages.
+	manifest, _ := ReadFragmentManifest(safeDir)
+
 	files, err := os.ReadDir(safeDir)
 	if err != nil {
 		return err
@@ -203,6 +242,16 @@ func ReassembleFragments(srcDir string, w io.Writer, authorizedPubKey []byte) er
 
 	if dataShards == 0 {
 		return fmt.Errorf("no valid fragments found in %s", srcDir)
+	}
+
+	// Validate against manifest if present.
+	if manifest != nil {
+		foundCount := len(shardPaths)
+		expectedTotal := manifest.DataShards + manifest.ParityShards
+		if foundCount < manifest.DataShards {
+			return fmt.Errorf("insufficient shards: need at least %d data shards, found %d of %d total",
+				manifest.DataShards, foundCount, expectedTotal)
+		}
 	}
 
 	enc, err := reedsolomon.New(dataShards, parityShards)
@@ -320,4 +369,69 @@ func ReassembleFragments(srcDir string, w io.Writer, authorizedPubKey []byte) er
 	}
 
 	return nil
+}
+
+// writeFragmentManifest writes manifest.json to opts.TargetDir describing the shards.
+func writeFragmentManifest(opts FragmentOptions, writers []io.WriteCloser) error {
+	if opts.TargetDir == "" {
+		return nil
+	}
+	total := opts.DataShards + opts.ParityShards
+	shards := make([]ShardInfo, total)
+	for i := 0; i < total; i++ {
+		shards[i] = ShardInfo{
+			Index:    i,
+			Filename: fmt.Sprintf("shard_%03d.maknf", i),
+		}
+	}
+	_ = writers // shard file handles already created; manifest references filenames only
+	m := FragmentManifest{
+		Version:      1,
+		CreatedAt:    time.Now().UTC(),
+		OriginalName: opts.OriginalName,
+		OriginalSize: opts.OriginalSize,
+		OriginalHash: opts.OriginalHash,
+		DataShards:   opts.DataShards,
+		ParityShards: opts.ParityShards,
+		TotalShards:  total,
+		Signed:       len(opts.SigningKey) > 0,
+		Shards:       shards,
+	}
+	data, err := json.MarshalIndent(m, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(opts.TargetDir, "manifest.json"), data, 0600)
+}
+
+// ReadFragmentManifest reads manifest.json from srcDir if it exists.
+// Returns nil without error if the file is absent (backward compat).
+func ReadFragmentManifest(srcDir string) (*FragmentManifest, error) {
+	path := filepath.Join(filepath.Clean(srcDir), "manifest.json")
+	data, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	var m FragmentManifest
+	if err := json.Unmarshal(data, &m); err != nil {
+		return nil, fmt.Errorf("invalid manifest.json: %w", err)
+	}
+	return &m, nil
+}
+
+// HashFile computes the SHA-256 of the file at path and returns it as a hex string.
+func HashFile(path string) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
 }
