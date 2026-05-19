@@ -32,8 +32,7 @@ archives:
       {{- .Os }}_
       {{- .Arch }}
     files:
-      - src: man/*.1
-        dst: man
+      - man/
     format_overrides:
       - goos: windows
         formats: [zip]
