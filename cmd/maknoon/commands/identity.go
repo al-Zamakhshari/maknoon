@@ -119,14 +119,12 @@ func identityPublishCmd() *cobra.Command {
 	var useDNS bool
 	var useNostr bool
 	var useDesec bool
-	var useBEP44 bool
 	var useLocal bool
 	var desecToken string
-	var multiaddrs []string
 
 	cmd := &cobra.Command{
 		Use:   "publish [handle]",
-		Short: "Anchor your active identity to a global registry (libp2p DHT / Nostr / DNS)",
+		Short: "Anchor your active identity to a global registry (Nostr / DNS)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			p := GlobalContext.UI.GetPresenter()
@@ -143,8 +141,6 @@ func identityPublishCmd() *cobra.Command {
 				DNS:        useDNS,
 				Desec:      useDesec,
 				DesecToken: desecToken,
-				BEP44:      useBEP44,
-				Multiaddrs: multiaddrs,
 			}
 
 			if err := GlobalContext.Engine.IdentityPublish(nil, handle, opts); err != nil {
@@ -167,10 +163,8 @@ func identityPublishCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&useDNS, "dns", false, "Generate a DNS TXT record for decentralized discovery")
 	cmd.Flags().BoolVar(&useNostr, "nostr", false, "Publish to Nostr relays (secp256k1 key derived ephemerally)")
 	cmd.Flags().BoolVar(&useDesec, "desec", false, "Automatically publish to deSEC.io (requires --desec-token or DESEC_TOKEN)")
-	cmd.Flags().BoolVar(&useBEP44, "bep44", false, "Publish peer-discovery mini-record to BitTorrent BEP-44 DHT (requires peer online for resolution)")
 	cmd.Flags().BoolVar(&useLocal, "local", false, "Pin identity to local contacts only")
 	cmd.Flags().StringVar(&desecToken, "desec-token", "", "deSEC.io API token")
-	cmd.Flags().StringSliceVar(&multiaddrs, "multiaddr", nil, "Explicit Multiaddrs to broadcast (overrides auto-capture)")
 
 	return cmd
 }

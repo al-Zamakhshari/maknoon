@@ -176,24 +176,6 @@ func SecurePrintf(format string, args ...any) {
 	GlobalContext.UI.SecurePrintf(format, args...)
 }
 
-// getPIN prompts the user for a FIDO2 PIN if not provided via environment or in agent mode.
-func getPIN() (string, error) {
-	if env := viper.GetString("fido2_pin"); env != "" {
-		return env, nil
-	}
-	if GlobalContext.Engine != nil && GlobalContext.Engine.GetPolicy().IsAgent() {
-		return "", nil // Library will handle the "PIN required" error if needed
-	}
-
-	fmt.Print("Enter FIDO2 Security Key PIN: ")
-	p, err := term.ReadPassword(int(os.Stdin.Fd()))
-	fmt.Println()
-	if err != nil {
-		return "", err
-	}
-	return string(p), nil
-}
-
 // getPassphrase prompts the user for a passphrase if not provided and not in agent mode.
 var stdinReader = bufio.NewReader(os.Stdin)
 

@@ -25,7 +25,7 @@ func ContactCmd() *cobra.Command {
 }
 
 func contactAddCmd() *cobra.Command {
-	var kemPubPath, sigPubPath, note, peerID string
+	var kemPubPath, sigPubPath, note string
 	cmd := &cobra.Command{
 		Use:   "add [petname]",
 		Short: "Add a new trusted contact",
@@ -71,7 +71,6 @@ func contactAddCmd() *cobra.Command {
 
 	cmd.Flags().StringVar(&kemPubPath, "kem-pub", "", "Path to the contact's ML-KEM public key")
 	cmd.Flags().StringVar(&sigPubPath, "sig-pub", "", "Path to the contact's ML-DSA public key")
-	cmd.Flags().StringVar(&peerID, "peer-id", "", "Explicit libp2p Peer ID (optional)")
 	cmd.Flags().StringVarP(&note, "note", "n", "", "Optional note for this contact")
 
 	return cmd

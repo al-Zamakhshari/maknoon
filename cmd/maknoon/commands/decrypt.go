@@ -21,7 +21,6 @@ func DecryptCmd() *cobra.Command {
 	var passphrase string
 	var sessionKeyHex string
 	var concurrency int
-	var useFido2 bool
 	var quiet bool
 	var verbose bool
 	var profileFile string
@@ -68,7 +67,7 @@ func DecryptCmd() *cobra.Command {
 				flags = header[1]
 
 				// Infer magic based on provided decryption params
-				if keyPath != "" || useFido2 || viper.GetString("private_key") != "" {
+				if keyPath != "" || viper.GetString("private_key") != "" {
 					magic = crypto.MagicHeaderAsym
 				} else {
 					magic = crypto.MagicHeader
@@ -87,7 +86,7 @@ func DecryptCmd() *cobra.Command {
 			}
 
 			// 2. Handle Passphrase/Identity logic
-			password, finalKey, finalPriv, err := resolveDecryptionKey(magic, passphrase, keyPath, useFido2, inputFile == "-")
+			password, finalKey, finalPriv, err := resolveDecryptionKey(magic, passphrase, keyPath, inputFile == "-")
 			if err != nil {
 				p.RenderError(err)
 				return err
@@ -252,7 +251,6 @@ func DecryptCmd() *cobra.Command {
 	cmd.Flags().StringVarP(&passphrase, "passphrase", "s", "", "Passphrase for decryption")
 	cmd.Flags().StringVar(&sessionKeyHex, "session-key", "", "Pre-derived 64-char hex key (bypasses KDF)")
 	cmd.Flags().IntVarP(&concurrency, "concurrency", "j", 0, "Number of parallel workers (0 for auto)")
-	cmd.Flags().BoolVarP(&useFido2, "fido2", "f", false, "Use FIDO2 security key for authentication")
 	cmd.Flags().BoolVarP(&quiet, "quiet", "q", false, "Suppress progress bars and informational messages")
 	cmd.Flags().BoolVar(&verbose, "verbose", false, "Enable internal pipeline tracing (slog)")
 	cmd.Flags().BoolVar(&stealth, "stealth", false, "Enable fingerprint resistance (headerless)")
@@ -304,7 +302,7 @@ func resolveDecryptionOutputPath(output, inputFile string, flags byte) (string, 
 	return outPath, nil
 }
 
-func resolveDecryptionKey(magic, manualPass, keyPath string, useFido2 bool, isStdin bool) ([]byte, []byte, []byte, error) {
+func resolveDecryptionKey(magic, manualPass, keyPath string, isStdin bool) ([]byte, []byte, []byte, error) {
 	var password []byte
 	if manualPass != "" {
 		password = []byte(manualPass)
@@ -313,9 +311,6 @@ func resolveDecryptionKey(magic, manualPass, keyPath string, useFido2 bool, isSt
 	}
 
 	if magic == crypto.MagicHeader {
-		if useFido2 {
-			return nil, nil, nil, fmt.Errorf("FIDO2-backed symmetric encryption is currently only supported via the 'vault' command")
-		}
 		if len(password) == 0 {
 			var err error
 			password, _, err = getPassphrase("Enter passphrase: ")
@@ -332,17 +327,7 @@ func resolveDecryptionKey(magic, manualPass, keyPath string, useFido2 bool, isSt
 			return nil, nil, nil, fmt.Errorf("private key required via -k or MAKNOON_PRIVATE_KEY")
 		}
 
-		// Check for FIDO2 and get PIN if needed
-		var pin string
-		if _, err := os.Stat(strings.TrimSuffix(resolvedPath, ".key") + ".fido2"); err == nil {
-			var err2 error
-			pin, err2 = getPIN()
-			if err2 != nil {
-				return nil, nil, nil, err2
-			}
-		}
-
-		priv, err := GlobalContext.Engine.LoadPrivateKey(nil, resolvedPath, password, pin, isStdin)
+		priv, err := GlobalContext.Engine.LoadPrivateKey(nil, resolvedPath, password, "", isStdin)
 		if err != nil {
 			return nil, nil, nil, err
 		}
