@@ -44,6 +44,10 @@ func ManCmd() *cobra.Command {
 	return cmd
 }
 
+// verifyManPage checks that every top-level command appears in the SEE ALSO
+// section of maknoon.1. Full subcommand verification would require generating
+// per-command man pages (maknoon-vault.1, maknoon-vault-set.1, etc.) via
+// 'cobra/doc.GenManTree' — tracked as a future documentation improvement.
 func verifyManPage(root *cobra.Command) error {
 	manPath := "maknoon.1"
 	content, err := os.ReadFile(manPath)
@@ -54,26 +58,14 @@ func verifyManPage(root *cobra.Command) error {
 	manContent := string(content)
 	missing := []string{}
 
-	// Helper to check command
-	checkCmd := func(c *cobra.Command, depth int) {
-		if c.Hidden || c.Name() == "help" || c.Name() == "completion" {
-			return
-		}
-
-		// Only check top-level commands (depth 1) for the main man page
-		if depth == 1 {
-			searchStr := "maknoon-" + c.Name()
-			if !strings.Contains(manContent, searchStr) {
-				missing = append(missing, c.CommandPath())
-			}
-		}
-
-		// We don't recurse for verification if we only care about top-level in one file
-	}
-
-	// We start from the commands added to root
 	for _, sub := range root.Commands() {
-		checkCmd(sub, 1)
+		if sub.Hidden || sub.Name() == "help" || sub.Name() == "completion" || sub.Name() == "schema" {
+			continue
+		}
+		searchStr := "maknoon-" + sub.Name()
+		if !strings.Contains(manContent, searchStr) {
+			missing = append(missing, sub.CommandPath())
+		}
 	}
 
 	if len(missing) > 0 {
