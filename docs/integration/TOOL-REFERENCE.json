@@ -482,7 +482,7 @@
   {
     "name": "fragment",
     "path": "maknoon fragment",
-    "description": "Split a file into redundant erasure-coded fragments (RAID-for-Privacy)",
+    "description": "Split a file into erasure-coded fragments [EXPERIMENTAL]",
     "arguments": [
       {
         "name": "file",
@@ -1157,7 +1157,7 @@
   {
     "name": "reassemble",
     "path": "maknoon reassemble",
-    "description": "Reconstruct a file from fragments",
+    "description": "Reconstruct a file from fragments [EXPERIMENTAL]",
     "arguments": [
       {
         "name": "dir",

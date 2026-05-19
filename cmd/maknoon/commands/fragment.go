@@ -13,9 +13,13 @@ import (
 func FragmentCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "fragment [file]",
-		Short: "Split a file into redundant erasure-coded fragments (RAID-for-Privacy)",
-		Long:  `Breaks a file into multiple redundant shards using Reed-Solomon erasure coding. The original data can be reconstructed from a subset of the fragments.`,
-		Args:  cobra.ExactArgs(1),
+		Short: "Split a file into erasure-coded fragments [EXPERIMENTAL]",
+		Long: `Breaks a file into redundant shards using Reed-Solomon erasure coding.
+The original data can be reconstructed from any subset of size >= threshold.
+
+NOTE: Fragment dispersal is experimental. Without a storage backend, shards
+require manual placement. For production use, combine with an object store.`,
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := InitEngine(); err != nil {
 				return err
@@ -99,7 +103,7 @@ func FragmentCmd() *cobra.Command {
 func ReassembleCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "reassemble [dir]",
-		Short: "Reconstruct a file from fragments",
+		Short: "Reconstruct a file from fragments [EXPERIMENTAL]",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := InitEngine(); err != nil {
