@@ -36,8 +36,9 @@ type EventEmitter interface {
 // EngineContext carries the execution state, telemetry stream, and policy for an operation.
 type EngineContext struct {
 	context.Context
-	Events chan<- EngineEvent
-	Policy SecurityPolicy
+	Events  chan<- EngineEvent
+	Policy  SecurityPolicy
+	TraceID string
 }
 
 // NewEngineContext creates a new context with an optional event stream.
@@ -53,12 +54,18 @@ func NewEngineContext(ctx context.Context, events chan<- EngineEvent, policy Sec
 }
 
 // Emit safely sends an event to the telemetry stream, preventing panics on closed channels.
+// The send is non-blocking: if the consumer is slow and the channel is full, the event is
+// dropped silently so the encrypt/decrypt pipeline never stalls.
 func (c *EngineContext) Emit(ev EngineEvent) {
 	if c == nil || c.Events == nil {
 		return
 	}
 	defer func() { _ = recover() }()
-	c.Events <- ev
+	select {
+	case c.Events <- ev:
+	default:
+		// consumer too slow — drop event silently
+	}
 }
 
 // Protector handles encryption and decryption pipelines.

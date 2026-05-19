@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/nbd-wtf/go-nostr"
@@ -134,7 +135,7 @@ func (r *NostrRegistry) Resolve(ctx context.Context, handle string) (*IdentityRe
 		return nil, fmt.Errorf("unsupported nostr handle format or resolution failed: %s", handle)
 	}
 
-	// 3. Query relays for Kind 0 event
+	// 3. Query relays for Kind 0 event — fan out in parallel, 5s per relay.
 	filter := nostr.Filter{
 		Kinds:   []int{0},
 		Authors: []string{pubkey},
@@ -145,31 +146,57 @@ func (r *NostrRegistry) Resolve(ctx context.Context, handle string) (*IdentityRe
 		return nil, fmt.Errorf("no Nostr relays configured for resolution")
 	}
 
+	type relayResult struct {
+		event *nostr.Event
+		err   error
+	}
+	relayResults := make(chan relayResult, len(r.Relays))
+	resolveCtx, resolveCancel := context.WithCancel(ctx)
+	defer resolveCancel()
+
+	var wg sync.WaitGroup
+	for _, relayURL := range r.Relays {
+		wg.Add(1)
+		go func(u string) {
+			defer wg.Done()
+			dialCtx, dialCancel := context.WithTimeout(resolveCtx, 5*time.Second)
+			defer dialCancel()
+
+			relay, err := nostr.RelayConnect(dialCtx, u)
+			if err != nil {
+				relayResults <- relayResult{nil, err}
+				return
+			}
+			events, err := relay.QuerySync(dialCtx, filter)
+			relay.Close()
+			if err != nil || len(events) == 0 {
+				relayResults <- relayResult{nil, fmt.Errorf("no events from relay %s: %v", u, err)}
+				return
+			}
+			event := events[0]
+			// VERIFY: Try to parse this specific event. If it's malformed, skip it!
+			var md map[string]interface{}
+			if err := json.Unmarshal([]byte(event.Content), &md); err != nil {
+				relayResults <- relayResult{nil, fmt.Errorf("malformed event from relay %s: %v", u, err)}
+				return
+			}
+			relayResults <- relayResult{event, nil}
+		}(relayURL)
+	}
+
+	// Close the channel once all goroutines finish.
+	go func() {
+		wg.Wait()
+		close(relayResults)
+	}()
+
 	var latestEvent *nostr.Event
-	for _, url := range r.Relays {
-		relay, err := nostr.RelayConnect(ctx, url)
-		if err != nil {
+	for res := range relayResults {
+		if res.err != nil || res.event == nil {
 			continue
 		}
-
-		events, err := relay.QuerySync(ctx, filter)
-		relay.Close()
-		if err != nil {
-			continue
-		}
-		if len(events) == 0 {
-			continue
-		}
-
-		event := events[0]
-		// VERIFY: Try to parse this specific event. If it's malformed, skip it!
-		var metadata map[string]interface{}
-		if err := json.Unmarshal([]byte(event.Content), &metadata); err != nil {
-			continue // Skip malformed content from this relay
-		}
-
-		if latestEvent == nil || event.CreatedAt > latestEvent.CreatedAt {
-			latestEvent = event
+		if latestEvent == nil || res.event.CreatedAt > latestEvent.CreatedAt {
+			latestEvent = res.event
 		}
 	}
 
@@ -177,7 +204,7 @@ func (r *NostrRegistry) Resolve(ctx context.Context, handle string) (*IdentityRe
 		return nil, fmt.Errorf("no valid maknoon identity found on Nostr relays for %s", pubkey)
 	}
 
-	// 3. Parse the verified latest event
+	// Parse the verified latest event
 	var metadata map[string]interface{}
 	json.Unmarshal([]byte(latestEvent.Content), &metadata)
 
@@ -200,7 +227,8 @@ func (r *NostrRegistry) PublishWithKey(ctx context.Context, record *IdentityReco
 		return fmt.Errorf("invalid nostr private key: %w", err)
 	}
 
-	// 1. Fetch current metadata to avoid overwriting other fields
+	// 1. Fetch current metadata to avoid overwriting other fields — sequential is
+	//    intentional; we stop at the first relay that has an existing profile.
 	var metadata map[string]interface{}
 	filter := nostr.Filter{
 		Kinds:   []int{0},
@@ -208,13 +236,16 @@ func (r *NostrRegistry) PublishWithKey(ctx context.Context, record *IdentityReco
 		Limit:   1,
 	}
 
-	for _, url := range r.Relays {
-		relay, err := nostr.RelayConnect(ctx, url)
+	for _, relayURL := range r.Relays {
+		fetchCtx, fetchCancel := context.WithTimeout(ctx, 10*time.Second)
+		relay, err := nostr.RelayConnect(fetchCtx, relayURL)
 		if err != nil {
+			fetchCancel()
 			continue
 		}
-		events, err := relay.QuerySync(ctx, filter)
+		events, err := relay.QuerySync(fetchCtx, filter)
 		relay.Close()
+		fetchCancel()
 		if err == nil && len(events) > 0 {
 			json.Unmarshal([]byte(events[0].Content), &metadata)
 			break
@@ -263,15 +294,20 @@ func (r *NostrRegistry) PublishWithKey(ctx context.Context, record *IdentityReco
 		return fmt.Errorf("failed to sign nostr event: %w", err)
 	}
 
-	// 4. Publish to relays
+	// 4. Publish to all relays sequentially — intentional so every relay receives
+	//    the event. A per-relay 10s timeout prevents a stalled relay from blocking
+	//    the rest indefinitely.
 	publishedCount := 0
-	for _, url := range r.Relays {
-		relay, err := nostr.RelayConnect(ctx, url)
+	for _, relayURL := range r.Relays {
+		pubCtx, pubCancel := context.WithTimeout(ctx, 10*time.Second)
+		relay, err := nostr.RelayConnect(pubCtx, relayURL)
 		if err != nil {
+			pubCancel()
 			continue
 		}
-		err = relay.Publish(ctx, ev)
+		err = relay.Publish(pubCtx, ev)
 		relay.Close()
+		pubCancel()
 		if err == nil {
 			publishedCount++
 		}

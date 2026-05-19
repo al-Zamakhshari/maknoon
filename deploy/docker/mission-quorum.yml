@@ -20,7 +20,7 @@ services:
       - MAKNOON_AGENT_MODE=1
       - MAKNOON_PASSPHRASE=quorum-pass
     user: "root"
-    command: sh -c "maknoon keygen --no-password -o g1 && maknoon tunnel listen --p2p --address 0.0.0.0:4000 --identity g1"
+    command: sh -c "su-exec maknoon maknoon keygen --no-password -o g1 && sleep 3600"
     networks:
       - quorum-net
 
@@ -32,7 +32,7 @@ services:
       - MAKNOON_AGENT_MODE=1
       - MAKNOON_PASSPHRASE=quorum-pass
     user: "root"
-    command: sh -c "maknoon keygen --no-password -o g2 && maknoon tunnel listen --p2p --address 0.0.0.0:4000 --identity g2"
+    command: sh -c "su-exec maknoon maknoon keygen --no-password -o g2 && sleep 3600"
     networks:
       - quorum-net
 
@@ -44,7 +44,7 @@ services:
       - MAKNOON_AGENT_MODE=1
       - MAKNOON_PASSPHRASE=quorum-pass
     user: "root"
-    command: sh -c "maknoon keygen --no-password -o g3 && maknoon tunnel listen --p2p --address 0.0.0.0:4000 --identity g3"
+    command: sh -c "su-exec maknoon maknoon keygen --no-password -o g3 && sleep 3600"
     networks:
       - quorum-net
 
@@ -56,7 +56,7 @@ services:
       - MAKNOON_AGENT_MODE=1
       - MAKNOON_PASSPHRASE=quorum-pass
     user: "root"
-    command: sh -c "maknoon keygen --no-password -o g4 && maknoon tunnel listen --p2p --address 0.0.0.0:4000 --identity g4"
+    command: sh -c "su-exec maknoon maknoon keygen --no-password -o g4 && sleep 3600"
     networks:
       - quorum-net
 

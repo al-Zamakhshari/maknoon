@@ -29,8 +29,8 @@ checked_compose_exec "$COMPOSE_FILE" recovery-node \
 
 # Step 2: Split Vault into 3-of-4 shards
 echo "✂️  Splitting Vault into 3-of-4 shards..."
-SHARDS_JSON=$(checked_compose_exec "$COMPOSE_FILE" recovery-node \
-    maknoon vault split -s quorum-pass --json --shares 4 --threshold 3)
+SHARDS_JSON=$(docker compose -f "$COMPOSE_FILE" exec -T recovery-node \
+    maknoon vault split -s quorum-pass --json --shares 4 --threshold 3 2>/dev/null)
 echo "💎 Shards generated."
 
 # Step 3: Distribute shards and vault file to Guardians
@@ -74,8 +74,8 @@ checked_compose_exec "$COMPOSE_FILE" recovery-node \
 
 # Step 7: Verify Secret
 echo "🧪 Verifying recovered secret integrity..."
-SECRET_JSON=$(checked_compose_exec "$COMPOSE_FILE" recovery-node \
-    maknoon vault get MASTER_SECRET -v recovered -s quorum-pass --json)
+SECRET_JSON=$(docker compose -f "$COMPOSE_FILE" exec -T recovery-node \
+    maknoon vault get MASTER_SECRET -v recovered -s quorum-pass --json 2>/dev/null)
 assert_json_field "$SECRET_JSON" ".password" "SuperSecret123"
 
 print_result PASS "Threshold Quorum verified — master secret recovered from 3-of-4 nodes"

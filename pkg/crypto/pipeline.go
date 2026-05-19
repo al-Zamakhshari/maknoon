@@ -50,6 +50,7 @@ func (e *Engine) ProtectStream(ectx *EngineContext, inputName string, r io.Reade
 	if traceID == "" {
 		traceID = GenerateTraceID()
 	}
+	ectx.TraceID = traceID
 	log := e.Logger.With("trace_id", traceID, "action", "protect", "input", inputName)
 
 	if opts.EventStream != nil && ectx.Events == nil {
@@ -203,6 +204,7 @@ func (e *Engine) UnprotectStream(ectx *EngineContext, r io.Reader, w io.Writer, 
 	if traceID == "" {
 		traceID = GenerateTraceID()
 	}
+	ectx.TraceID = traceID
 	log := e.Logger.With("trace_id", traceID, "action", "unprotect", "output", outPath)
 
 	if opts.EventStream != nil && ectx.Events == nil {
