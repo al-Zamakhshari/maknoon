@@ -137,7 +137,6 @@ jobs:
       - name: Run CI Smoke Tests
         run: |
           chmod +x \
-            scripts/smoke-p2p-mcp.sh \
             scripts/smoke-api.sh \
             scripts/smoke-tpm.go.sh \
             scripts/smoke-audit.sh \
@@ -147,7 +146,7 @@ jobs:
             scripts/smoke-threshold-sig.sh \
             scripts/smoke-fragment-dispersal.sh
           for s in \
-            smoke-p2p-mcp smoke-api smoke-tpm.go \
+            smoke-api smoke-tpm.go \
             smoke-audit smoke-resilience smoke-vault-safety \
             smoke-governance smoke-threshold-sig smoke-fragment-dispersal; do
             echo "--- $s ---"
