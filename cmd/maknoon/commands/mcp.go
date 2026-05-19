@@ -133,3 +133,24 @@ func getInt(args map[string]any, key string, def int) int {
 	}
 	return def
 }
+
+func getBool(args map[string]any, key string, def bool) bool {
+	if val, ok := args[key].(bool); ok {
+		return val
+	}
+	return def
+}
+
+func getStringSlice(args map[string]any, key string) []string {
+	raw, ok := args[key].([]any)
+	if !ok {
+		return nil
+	}
+	out := make([]string, 0, len(raw))
+	for _, v := range raw {
+		if s, ok := v.(string); ok {
+			out = append(out, s)
+		}
+	}
+	return out
+}
