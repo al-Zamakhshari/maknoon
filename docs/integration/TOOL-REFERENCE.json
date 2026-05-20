@@ -542,15 +542,31 @@
       {
         "name": "passphrase",
         "path": "maknoon gen passphrase",
-        "description": "Generate a mnemonic passphrase from a 1885-word list (~10.9 bits/word). Entropy annotation is written to stderr; JSON output adds entropy_bits and entropy_bits_pq fields.",
+        "description": "Generate a mnemonic passphrase",
         "arguments": null,
         "flags": [
           {
-            "name": "words",
-            "shorthand": "w",
-            "description": "Number of words for the passphrase",
+            "name": "min-entropy",
+            "shorthand": "",
+            "description": "Minimum required entropy in bits (0 = no check)",
             "type": "int",
-            "default": "6",
+            "default": "0",
+            "required": false
+          },
+          {
+            "name": "overwrite",
+            "shorthand": "",
+            "description": "Overwrite existing vault entry",
+            "type": "bool",
+            "default": "false",
+            "required": false
+          },
+          {
+            "name": "passphrase",
+            "shorthand": "s",
+            "description": "Master passphrase for vault storage",
+            "type": "string",
+            "default": "",
             "required": false
           },
           {
@@ -562,17 +578,17 @@
             "required": false
           },
           {
-            "name": "min-entropy",
+            "name": "store",
             "shorthand": "",
-            "description": "Minimum required entropy in bits; returns error if not met (0 = no check)",
-            "type": "int",
-            "default": "0",
+            "description": "Store in vault under this service name",
+            "type": "string",
+            "default": "",
             "required": false
           },
           {
-            "name": "store",
+            "name": "username",
             "shorthand": "",
-            "description": "Store generated passphrase in vault under this service name",
+            "description": "Username field for vault entry",
             "type": "string",
             "default": "",
             "required": false
@@ -580,33 +596,17 @@
           {
             "name": "vault",
             "shorthand": "v",
-            "description": "Vault name to store into (used with --store)",
+            "description": "Vault name to store into",
             "type": "string",
             "default": "default",
             "required": false
           },
           {
-            "name": "username",
-            "shorthand": "",
-            "description": "Username field for vault entry (used with --store)",
-            "type": "string",
-            "default": "",
-            "required": false
-          },
-          {
-            "name": "overwrite",
-            "shorthand": "",
-            "description": "Overwrite existing vault entry (used with --store)",
-            "type": "bool",
-            "default": "false",
-            "required": false
-          },
-          {
-            "name": "passphrase",
-            "shorthand": "s",
-            "description": "Master passphrase for vault storage (used with --store)",
-            "type": "string",
-            "default": "",
+            "name": "words",
+            "shorthand": "w",
+            "description": "Number of words for the passphrase",
+            "type": "int",
+            "default": "6",
             "required": false
           }
         ]
@@ -614,7 +614,7 @@
       {
         "name": "password",
         "path": "maknoon gen password",
-        "description": "Generate a CSPRNG character password. Entropy annotation is written to stderr; JSON output adds entropy_bits and entropy_bits_pq fields.",
+        "description": "Generate a random character password",
         "arguments": null,
         "flags": [
           {
@@ -626,6 +626,14 @@
             "required": false
           },
           {
+            "name": "min-entropy",
+            "shorthand": "",
+            "description": "Minimum required entropy in bits (0 = no check)",
+            "type": "int",
+            "default": "0",
+            "required": false
+          },
+          {
             "name": "no-symbols",
             "shorthand": "n",
             "description": "Exclude symbols from the password",
@@ -634,41 +642,9 @@
             "required": false
           },
           {
-            "name": "min-entropy",
-            "shorthand": "",
-            "description": "Minimum required entropy in bits; returns error if not met (0 = no check)",
-            "type": "int",
-            "default": "0",
-            "required": false
-          },
-          {
-            "name": "store",
-            "shorthand": "",
-            "description": "Store generated password in vault under this service name",
-            "type": "string",
-            "default": "",
-            "required": false
-          },
-          {
-            "name": "vault",
-            "shorthand": "v",
-            "description": "Vault name to store into (used with --store)",
-            "type": "string",
-            "default": "default",
-            "required": false
-          },
-          {
-            "name": "username",
-            "shorthand": "",
-            "description": "Username field for vault entry (used with --store)",
-            "type": "string",
-            "default": "",
-            "required": false
-          },
-          {
             "name": "overwrite",
             "shorthand": "",
-            "description": "Overwrite existing vault entry (used with --store)",
+            "description": "Overwrite existing vault entry",
             "type": "bool",
             "default": "false",
             "required": false
@@ -676,9 +652,33 @@
           {
             "name": "passphrase",
             "shorthand": "s",
-            "description": "Master passphrase for vault storage (used with --store)",
+            "description": "Master passphrase for vault storage",
             "type": "string",
             "default": "",
+            "required": false
+          },
+          {
+            "name": "store",
+            "shorthand": "",
+            "description": "Store in vault under this service name",
+            "type": "string",
+            "default": "",
+            "required": false
+          },
+          {
+            "name": "username",
+            "shorthand": "",
+            "description": "Username field for vault entry",
+            "type": "string",
+            "default": "",
+            "required": false
+          },
+          {
+            "name": "vault",
+            "shorthand": "v",
+            "description": "Vault name to store into",
+            "type": "string",
+            "default": "default",
             "required": false
           }
         ]
