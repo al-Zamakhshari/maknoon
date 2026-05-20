@@ -123,12 +123,12 @@ jobs:
       - name: Run Tests
         run: go test -race -short -v ./...
 
-      - name: Coverage Gate (pkg/crypto ≥ 70%)
+      - name: Coverage Gate (pkg/crypto ≥ 75%)
         run: |
           go test -short -coverprofile=/tmp/cover.out ./pkg/crypto/... -timeout 300s
           COVERAGE=$(go tool cover -func=/tmp/cover.out | tail -1 | awk '{gsub(/%/,"",$3); print $3}')
           echo "pkg/crypto coverage: ${COVERAGE}%"
-          awk -v cov="$COVERAGE" 'BEGIN { if (cov+0 < 70) { print "FAIL: coverage " cov "% < 70% threshold"; exit 1 } }'
+          awk -v cov="$COVERAGE" 'BEGIN { if (cov+0 < 75) { print "FAIL: coverage " cov "% < 75% threshold"; exit 1 } }'
 
       - name: Fuzz (seed corpus)
         run: |
