@@ -387,9 +387,9 @@ func TestEffectiveChunkSize(t *testing.T) {
 		input int
 		want  int
 	}{
-		{0, ChunkSize},      // default
-		{-1, ChunkSize},     // negative → default
-		{100, MinChunkSize}, // below min → clamped to min
+		{0, DefaultFragmentChunkSize},  // default (256 KB, separate from streaming ChunkSize)
+		{-1, DefaultFragmentChunkSize}, // negative → default
+		{100, MinChunkSize},            // below min → clamped to min
 		{MinChunkSize, MinChunkSize},
 		{MaxChunkSize, MaxChunkSize},
 		{MaxChunkSize + 1, MaxChunkSize}, // above max → clamped to max

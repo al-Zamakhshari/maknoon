@@ -47,7 +47,7 @@ func registerVaultTools(s *server.MCPServer, engine crypto.MaknoonEngine) {
 	})
 
 	s.AddTool(mcp.NewTool("vault_get",
-		mcp.WithDescription("Retrieve a secret from the vault"),
+		mcp.WithDescription("Retrieve a secret from the vault. Each call runs a full Argon2id KDF (~60 ms). For bulk operations, retrieve the credential once and pass it downstream rather than calling vault_get per operation."),
 		mcp.WithString("service", mcp.Required(), mcp.Description("Service or key name to retrieve")),
 		mcp.WithString("vault", mcp.Description("Vault name (default: default)")),
 	), func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {

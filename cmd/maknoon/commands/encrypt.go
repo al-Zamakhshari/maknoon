@@ -169,7 +169,7 @@ func EncryptCmd() *cobra.Command {
 	cmd.Flags().StringVarP(&passphrase, "passphrase", "s", "", "Passphrase for symmetric encryption")
 	cmd.Flags().StringVar(&sessionKeyHex, "session-key", "", "Pre-derived 64-char hex key (bypasses KDF — use 'maknoon session derive' to generate)")
 	cmd.Flags().BoolVarP(&compress, "compress", "c", false, "Enable Zstd compression")
-	cmd.Flags().IntVarP(&concurrency, "concurrency", "j", 0, "Number of parallel workers (0 for auto)")
+	cmd.Flags().IntVarP(&concurrency, "concurrency", "j", 0, "Number of parallel workers (0 for auto); note: AES-NI hardware saturates at concurrency=1, so this flag only helps on non-AES-NI targets")
 	cmd.Flags().BoolVarP(&quiet, "quiet", "q", false, "Suppress progress bars and informational messages")
 	cmd.Flags().BoolVar(&verbose, "verbose", false, "Enable internal pipeline tracing (slog)")
 	cmd.Flags().BoolVar(&stealth, "stealth", false, "Enable fingerprint resistance (headerless)")

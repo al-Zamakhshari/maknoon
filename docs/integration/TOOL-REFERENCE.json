@@ -360,7 +360,7 @@
       {
         "name": "concurrency",
         "shorthand": "j",
-        "description": "Number of parallel workers (0 for auto)",
+        "description": "Number of parallel workers (0 for auto); note: AES-NI hardware saturates at concurrency=1, so this flag only helps on non-AES-NI targets",
         "type": "int",
         "default": "0",
         "required": false

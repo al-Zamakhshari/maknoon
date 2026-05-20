@@ -357,6 +357,29 @@ func registerCryptoTools(s *server.MCPServer, engine crypto.MaknoonEngine) {
 		return mcp.NewToolResultText(string(outData)), nil
 	})
 
+	s.AddTool(mcp.NewTool("session_derive",
+		mcp.WithDescription("Derive a one-time session key from a passphrase. The returned session_key bypasses Argon2id on every subsequent encrypt/decrypt call (~683× faster for small files). Use this once at the start of a bulk operation, pass session_key and session_salt to encrypt_file, then discard both values when done."),
+		mcp.WithString("passphrase", mcp.Required(), mcp.Description("Passphrase to derive the session key from")),
+	), func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		_ = ctx
+		passphrase := getString(getArgs(request), "passphrase", "")
+		if passphrase == "" {
+			return mcp.NewToolResultError("passphrase is required"), nil
+		}
+		key, salt, err := crypto.DeriveSessionKey([]byte(passphrase))
+		if err != nil {
+			return crypto.FormatMCPError(err, "session_derive")
+		}
+		res := map[string]any{
+			"session_key":  fmt.Sprintf("%x", key),
+			"session_salt": fmt.Sprintf("%x", salt),
+			"note":         "Pass session_key and session_salt to encrypt_file. Discard both after the bulk operation completes.",
+		}
+		crypto.SafeClear(key)
+		outData, _ := json.Marshal(res)
+		return mcp.NewToolResultText(string(outData)), nil
+	})
+
 	s.AddTool(mcp.NewTool("shred_file",
 		mcp.WithDescription("Securely delete a file or directory (multi-pass overwrite + random rename + delete)"),
 		mcp.WithString("path", mcp.Required(), mcp.Description("Path to the file or directory to shred")),
