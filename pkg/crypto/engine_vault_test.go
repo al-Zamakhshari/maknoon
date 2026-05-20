@@ -4,6 +4,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 )
 
 // engineForVault returns a fully initialised engine wired to a temp HOME.
@@ -260,5 +261,99 @@ func TestEngineSecureDelete(t *testing.T) {
 	}
 	if _, err := os.Stat(f); err == nil {
 		t.Error("file should not exist after SecureDelete")
+	}
+}
+
+// --- checkLockout: active lockout window ---
+
+func TestVaultGetLockedOut(t *testing.T) {
+	e := engineForVault(t)
+	e.Config.VaultMaxFailAttempts = 2
+	e.Config.VaultLockoutMinutes = 60
+
+	pass := []byte("correct-pass")
+	wrong := []byte("wrong-pass")
+	if err := e.VaultSet(nil, "lock.vault", &VaultEntry{Service: "svc", Password: []byte("secret")}, pass, "", false); err != nil {
+		t.Fatalf("VaultSet: %v", err)
+	}
+
+	// Two failed Get attempts to fill the sidecar counter.
+	e.VaultGet(nil, "lock.vault", "svc", wrong, "")
+	e.VaultGet(nil, "lock.vault", "svc", wrong, "")
+
+	// Third attempt — even with the correct passphrase — should hit the lockout.
+	_, err := e.VaultGet(nil, "lock.vault", "svc", pass, "")
+	if err == nil {
+		t.Fatal("expected lockout error after max failed attempts")
+	}
+	if !strings.Contains(err.Error(), "locked") {
+		t.Errorf("expected lockout message, got: %v", err)
+	}
+}
+
+// --- checkLockout: expired window clears and allows access ---
+
+func TestVaultGetLockoutExpired(t *testing.T) {
+	e := engineForVault(t)
+	e.Config.VaultMaxFailAttempts = 1
+	e.Config.VaultLockoutMinutes = 1
+
+	pass := []byte("expiry-pass")
+	wrong := []byte("bad")
+	if err := e.VaultSet(nil, "exp.vault", &VaultEntry{Service: "svc", Password: []byte("val")}, pass, "", false); err != nil {
+		t.Fatalf("VaultSet: %v", err)
+	}
+
+	// Trigger one failed attempt.
+	e.VaultGet(nil, "exp.vault", "svc", wrong, "")
+
+	// Manually backdate the sidecar's Since timestamp so the lockout window appears expired.
+	vs := e.Vault
+	resolvedPath, _ := vs.resolveVaultPath("exp.vault")
+	vs.writeAttempts(resolvedPath, vaultAttempts{Count: 1, Since: time.Now().Add(-2 * time.Minute)})
+
+	// Now a correct Get should succeed because the lockout window has passed.
+	entry, err := e.VaultGet(nil, "exp.vault", "svc", pass, "")
+	if err != nil {
+		t.Fatalf("expected success after lockout expiry, got: %v", err)
+	}
+	if string(entry.Password) != "val" {
+		t.Errorf("password = %q, want %q", entry.Password, "val")
+	}
+}
+
+// --- VaultRename: error paths ---
+
+func TestVaultRenameNonExistent(t *testing.T) {
+	e := engineForVault(t)
+	err := e.VaultRename(nil, "ghost.vault", "new.vault")
+	if err == nil {
+		t.Error("expected error renaming nonexistent vault")
+	}
+}
+
+func TestVaultRenameTargetExists(t *testing.T) {
+	e := engineForVault(t)
+	pass := []byte("p")
+	e.VaultSet(nil, "src.vault", &VaultEntry{Service: "s", Password: []byte("x")}, pass, "", false)
+	e.VaultSet(nil, "dst.vault", &VaultEntry{Service: "s", Password: []byte("x")}, pass, "", false)
+
+	err := e.VaultRename(nil, "src.vault", "dst.vault")
+	if err == nil {
+		t.Error("expected error renaming to an already-existing vault")
+	}
+}
+
+// --- VaultInitInstitutional: vault already exists ---
+
+func TestVaultInitInstitutionalAlreadyExists(t *testing.T) {
+	e := engineForVault(t)
+	pass := []byte("inst-pass")
+	// Create the vault first via a regular Set.
+	e.VaultSet(nil, "inst.vault", &VaultEntry{Service: "s", Password: []byte("x")}, pass, "", false)
+
+	_, err := e.VaultInitInstitutional(nil, "inst.vault", 2, 3, []string{"p1", "p2", "p3"}, pass)
+	if err == nil {
+		t.Error("expected error initializing institutional vault that already exists")
 	}
 }

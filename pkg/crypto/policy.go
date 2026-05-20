@@ -18,7 +18,6 @@ const (
 	CapVaultDelete Capability = "vault_delete"
 	CapIdentity    Capability = "identity"
 	CapConfig      Capability = "config"
-	CapP2P         Capability = "p2p"
 	CapCrypto      Capability = "crypto"
 	CapAudit       Capability = "audit"
 )

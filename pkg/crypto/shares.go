@@ -226,7 +226,7 @@ func (s *Share) ToMnemonic() string {
 	encoded := s.Encode()
 	words := make([]string, len(encoded))
 	for i, b := range encoded {
-		words[i] = WordList[b]
+		words[i] = ShareWordList[b]
 	}
 	return strings.Join(words, " ")
 }
@@ -239,7 +239,7 @@ func FromMnemonic(mnemonic string) (*Share, error) {
 	}
 
 	wordMap := make(map[string]byte)
-	for i, w := range WordList {
+	for i, w := range ShareWordList {
 		wordMap[w] = byte(i)
 	}
 

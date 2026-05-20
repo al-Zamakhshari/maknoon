@@ -1,3 +1,6 @@
+# Claude Code tooling (worktrees, session data)
+.claude/
+
 # Binaries
 /maknoon
 /main

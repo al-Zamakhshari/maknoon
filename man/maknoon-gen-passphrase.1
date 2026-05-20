@@ -18,11 +18,35 @@ Generate a mnemonic passphrase
 	help for passphrase
 
 .PP
+\fB--min-entropy\fP=0
+	Minimum required entropy in bits (0 = no check)
+
+.PP
+\fB--overwrite\fP[=false]
+	Overwrite existing vault entry
+
+.PP
+\fB-s\fP, \fB--passphrase\fP=""
+	Master passphrase for vault storage
+
+.PP
 \fB-p\fP, \fB--separator\fP="-"
 	Separator between words
 
 .PP
-\fB-w\fP, \fB--words\fP=4
+\fB--store\fP=""
+	Store in vault under this service name
+
+.PP
+\fB--username\fP=""
+	Username field for vault entry
+
+.PP
+\fB-v\fP, \fB--vault\fP="default"
+	Vault name to store into
+
+.PP
+\fB-w\fP, \fB--words\fP=6
 	Number of words for the passphrase
 
 

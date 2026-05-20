@@ -31,8 +31,10 @@ These commands manage the primary data protection pipeline, including hybrid enc
 | `info` | Provides deep technical metadata for encrypted files. | `--json` |
 | `sign` | Generates a standalone ML-DSA-87 signature. | `--identity`, `--output` |
 | `verify` | Validates data integrity and provenance. | `--public-key`, `--signature` |
-| `fragment` | Disperses a file into erasure-coded shards. | `--shards`, `--threshold`, `--out` |
-| `reassemble` | Reconstructs a file from fragments. | `--out` |
+| `fragment` | Disperses a file into erasure-coded shards. | `--shards`, `--threshold`, `--out`, `--chunk-size` |
+| `reassemble` | Reconstructs a file from fragments. | `--out`, `--verify` |
+| `gen password` | Generates a CSPRNG password; prints entropy to stderr. | `--length` (default 32), `--no-symbols`, `--min-entropy`, `--store`, `--vault`, `--username`, `--overwrite`, `--passphrase` |
+| `gen passphrase` | Generates a mnemonic passphrase from a 1885-word list (≈10.9 bits/word); prints entropy to stderr. | `--words` (default 6), `--separator`, `--min-entropy`, `--store`, `--vault`, `--username`, `--overwrite`, `--passphrase` |
 
 ---
 

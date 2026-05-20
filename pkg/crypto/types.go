@@ -182,8 +182,10 @@ type ProfileListResult struct {
 
 // GenResult is the structured output for generation tools.
 type GenResult struct {
-	Password   string `json:"password,omitempty"`
-	Passphrase string `json:"passphrase,omitempty"`
+	Password      string  `json:"password,omitempty"`
+	Passphrase    string  `json:"passphrase,omitempty"`
+	EntropyBits   float64 `json:"entropy_bits,omitempty"`
+	EntropyBitsPQ float64 `json:"entropy_bits_pq,omitempty"`
 }
 
 // ResolveResult is the structured output for identity resolution.

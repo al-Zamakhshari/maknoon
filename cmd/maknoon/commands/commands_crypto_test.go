@@ -8,6 +8,15 @@ import (
 	"testing"
 )
 
+// firstLine returns the first non-empty line from multi-line output.
+// gen commands now print the secret on line 1 and an entropy annotation on
+// line 2 (to stderr); since CaptureOutput merges both streams, tests must
+// only inspect line 1.
+func firstLine(output string) string {
+	lines := strings.SplitN(output, "\n", 2)
+	return strings.TrimSpace(lines[0])
+}
+
 func TestGenCmd(t *testing.T) {
 	SetJSONOutput(false)
 	t.Run("Default password", func(t *testing.T) {
@@ -18,8 +27,8 @@ func TestGenCmd(t *testing.T) {
 				t.Error(err)
 			}
 		})
-		if len(strings.TrimSpace(output)) != 32 {
-			t.Errorf("Expected default length 32, got %d", len(strings.TrimSpace(output)))
+		if got := len(firstLine(output)); got != 32 {
+			t.Errorf("Expected default length 32, got %d (raw output: %q)", got, output)
 		}
 	})
 
@@ -31,8 +40,8 @@ func TestGenCmd(t *testing.T) {
 				t.Error(err)
 			}
 		})
-		if len(strings.TrimSpace(output)) != 16 {
-			t.Errorf("Expected length 16, got %d", len(strings.TrimSpace(output)))
+		if got := len(firstLine(output)); got != 16 {
+			t.Errorf("Expected length 16, got %d (raw output: %q)", got, output)
 		}
 	})
 
@@ -44,9 +53,22 @@ func TestGenCmd(t *testing.T) {
 				t.Error(err)
 			}
 		})
-		words := strings.Split(strings.TrimSpace(output), "-")
+		words := strings.Split(firstLine(output), "-")
 		if len(words) != 5 {
-			t.Errorf("Expected 5 words, got %d. Output: %s", len(words), output)
+			t.Errorf("Expected 5 words, got %d. First line: %q", len(words), firstLine(output))
+		}
+	})
+
+	t.Run("Entropy annotation present", func(t *testing.T) {
+		cmd := GenCmd()
+		cmd.SetArgs([]string{"password"})
+		output := CaptureOutput(func() {
+			if err := cmd.Execute(); err != nil {
+				t.Error(err)
+			}
+		})
+		if !strings.Contains(output, "bits entropy") {
+			t.Errorf("Expected entropy annotation in output, got: %q", output)
 		}
 	})
 }

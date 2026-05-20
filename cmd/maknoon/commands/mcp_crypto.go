@@ -245,15 +245,34 @@ func registerCryptoTools(s *server.MCPServer, engine crypto.MaknoonEngine) {
 
 	s.AddTool(mcp.NewTool("gen_passphrase",
 		mcp.WithDescription("Generate a secure mnemonic passphrase from an entropy-backed word list"),
-		mcp.WithNumber("words", mcp.Description("Number of words (default: 4)")),
+		mcp.WithNumber("words", mcp.Description("Number of words (default: 6)")),
+		mcp.WithString("store_service", mcp.Description("If set, store result in vault under this service name")),
+		mcp.WithString("store_vault", mcp.Description("Vault name for storage (default: 'default')")),
 	), func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		args := getArgs(request)
-		words := getInt(args, "words", 4)
+		words := getInt(args, "words", 6)
 		pass, err := engine.GeneratePassphrase(&crypto.EngineContext{Context: ctx}, words, "-")
 		if err != nil {
 			return crypto.FormatMCPError(err, "gen_passphrase")
 		}
-		res := crypto.GenResult{Passphrase: pass}
+		bits := crypto.PassphraseEntropy(words, len(crypto.PassphraseWordList))
+		res := crypto.GenResult{
+			Passphrase:    pass,
+			EntropyBits:   bits,
+			EntropyBitsPQ: bits / 2,
+		}
+		if svc := getString(args, "store_service", ""); svc != "" {
+			vaultName := getString(args, "store_vault", "default")
+			vaultPath := viper.GetString("vault_path")
+			if vaultPath == "" {
+				vaultPath, _ = resolveVaultPath(vaultName)
+			}
+			vPass := []byte(viper.GetString("passphrase"))
+			entry := &crypto.VaultEntry{Service: svc, Password: crypto.SecretBytes(pass)}
+			if err := engine.VaultSet(&crypto.EngineContext{Context: ctx}, vaultPath, entry, vPass, "", false); err != nil {
+				return crypto.FormatMCPError(err, "gen_passphrase")
+			}
+		}
 		outData, _ := json.Marshal(res)
 		return mcp.NewToolResultText(string(outData)), nil
 	})
@@ -262,6 +281,8 @@ func registerCryptoTools(s *server.MCPServer, engine crypto.MaknoonEngine) {
 		mcp.WithDescription("Generate a high-entropy random password"),
 		mcp.WithNumber("length", mcp.Description("Password length in characters (default: 32)")),
 		mcp.WithBoolean("no_symbols", mcp.Description("Omit special characters (default: false)")),
+		mcp.WithString("store_service", mcp.Description("If set, store result in vault under this service name")),
+		mcp.WithString("store_vault", mcp.Description("Vault name for storage (default: 'default')")),
 	), func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		args := getArgs(request)
 		length := getInt(args, "length", 32)
@@ -270,7 +291,24 @@ func registerCryptoTools(s *server.MCPServer, engine crypto.MaknoonEngine) {
 		if err != nil {
 			return crypto.FormatMCPError(err, "gen_password")
 		}
-		res := crypto.GenResult{Password: pass}
+		bits := crypto.PasswordEntropy(length, crypto.PasswordCharsetSize(noSymbols))
+		res := crypto.GenResult{
+			Password:      pass,
+			EntropyBits:   bits,
+			EntropyBitsPQ: bits / 2,
+		}
+		if svc := getString(args, "store_service", ""); svc != "" {
+			vaultName := getString(args, "store_vault", "default")
+			vaultPath := viper.GetString("vault_path")
+			if vaultPath == "" {
+				vaultPath, _ = resolveVaultPath(vaultName)
+			}
+			vPass := []byte(viper.GetString("passphrase"))
+			entry := &crypto.VaultEntry{Service: svc, Password: crypto.SecretBytes(pass)}
+			if err := engine.VaultSet(&crypto.EngineContext{Context: ctx}, vaultPath, entry, vPass, "", false); err != nil {
+				return crypto.FormatMCPError(err, "gen_password")
+			}
+		}
 		outData, _ := json.Marshal(res)
 		return mcp.NewToolResultText(string(outData)), nil
 	})

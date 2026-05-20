@@ -18,14 +18,15 @@ import (
 const (
 	FragmentMagic = "MAKF"
 	VersionV1     = 1
-	VersionV2     = 2 // V2 adds SigSize field to header, making format self-describing
-	VersionV3     = 3 // V3 adds ChunkSize field, allowing per-archive tuning
+	VersionV2     = 2 // V2 adds SigSize field to header
+	VersionV3     = 3 // V3 adds ChunkSize field to header
 	headerSizeV1  = 16
 	headerSizeV2  = 18
 	headerSizeV3  = 22 // V2 + ChunkSize(4)
 
-	MinChunkSize = 4 * 1024        // 4 KB
-	MaxChunkSize = 4 * 1024 * 1024 // 4 MB
+	// MinChunkSize and MaxChunkSize bound the user-configurable per-shard chunk size.
+	MinChunkSize = 4 * 1024        // 4 KB  — minimum for RS to work sensibly
+	MaxChunkSize = 4 * 1024 * 1024 // 4 MB  — beyond L3 for most CPUs; diminishing returns
 )
 
 // FragmentOptions defines the configuration for data fragmentation.
@@ -42,12 +43,14 @@ type FragmentOptions struct {
 	// (e.g. with rclone: fragment → upload shards only → store manifest in safe location).
 	// When empty, manifest is written alongside the shards in TargetDir.
 	ManifestPath string
-	// ShardChunkSize overrides the default 64 KB chunk size. 0 means use default.
-	// Valid range: 4 KB – 4 MB. Values outside this range are clamped.
+	// ShardChunkSize overrides the per-shard chunk size (default: ChunkSize = 64 KB).
+	// Larger values reduce RS encode calls and write syscalls for big files, at the cost
+	// of more peak memory (ShardChunkSize × TotalShards). Must be in [MinChunkSize, MaxChunkSize].
+	// The value is stored in the V3 shard header so reassembly is always self-describing.
 	ShardChunkSize int
 }
 
-// effectiveChunkSize returns the chunk size to use, clamped to valid range.
+// effectiveChunkSize returns the validated per-shard chunk size for opts.
 func (o *FragmentOptions) effectiveChunkSize() int {
 	if o.ShardChunkSize <= 0 {
 		return ChunkSize
@@ -90,7 +93,7 @@ type FragmentWriter struct {
 	writers   []io.WriteCloser
 	buffer    []byte
 	written   int64
-	chunkSize int // effective chunk size for this writer
+	chunkSize int // effective per-shard chunk size (bytes)
 }
 
 func NewFragmentWriter(opts FragmentOptions) (*FragmentWriter, error) {
@@ -134,7 +137,7 @@ func NewFragmentWriterWithWriters(opts FragmentOptions, writers []io.WriteCloser
 		return nil, err
 	}
 
-	// Compute sig size up front so we can store it in the header.
+	// Compute sig size up front so we can store it in the V2 header.
 	var sigSize uint16
 	if len(opts.SigningKey) > 0 {
 		testSig, err := SignData([]byte{0}, opts.SigningKey)
@@ -144,35 +147,41 @@ func NewFragmentWriterWithWriters(opts FragmentOptions, writers []io.WriteCloser
 		sigSize = uint16(len(testSig))
 	}
 
-	chunkSize := opts.effectiveChunkSize()
-	useV3 := opts.ShardChunkSize > 0 && opts.ShardChunkSize != ChunkSize
-
-	headerVer := byte(VersionV2)
-	headerLen := headerSizeV2
-	if useV3 {
-		headerVer = VersionV3
-		headerLen = headerSizeV3
-	}
+	effectiveChunk := opts.effectiveChunkSize()
+	useV3 := opts.ShardChunkSize > 0 // custom chunk → V3 header so reassembly is self-describing
 
 	totalShards := opts.DataShards + opts.ParityShards
 	for i := 0; i < totalShards; i++ {
 		if writers[i] == nil {
 			continue
 		}
-		header := make([]byte, headerLen)
-		copy(header[0:4], FragmentMagic)
-		header[4] = headerVer
-		header[5] = byte(i)
-		header[6] = byte(opts.DataShards)
-		header[7] = byte(opts.ParityShards)
-		binary.LittleEndian.PutUint64(header[8:16], uint64(opts.OriginalSize))
-		binary.LittleEndian.PutUint16(header[16:18], sigSize)
 		if useV3 {
-			binary.LittleEndian.PutUint32(header[18:22], uint32(chunkSize))
-		}
-
-		if _, err := writers[i].Write(header); err != nil {
-			return nil, err
+			// V3 Header: V2(18 bytes) + ChunkSize(4) = 22 bytes
+			header := make([]byte, headerSizeV3)
+			copy(header[0:4], FragmentMagic)
+			header[4] = VersionV3
+			header[5] = byte(i)
+			header[6] = byte(opts.DataShards)
+			header[7] = byte(opts.ParityShards)
+			binary.LittleEndian.PutUint64(header[8:16], uint64(opts.OriginalSize))
+			binary.LittleEndian.PutUint16(header[16:18], sigSize)
+			binary.LittleEndian.PutUint32(header[18:22], uint32(effectiveChunk))
+			if _, err := writers[i].Write(header); err != nil {
+				return nil, err
+			}
+		} else {
+			// V2 Header: Magic(4) + Ver(1) + ShardIdx(1) + Data(1) + Parity(1) + OrigSize(8) + SigSize(2)
+			header := make([]byte, headerSizeV2)
+			copy(header[0:4], FragmentMagic)
+			header[4] = VersionV2
+			header[5] = byte(i)
+			header[6] = byte(opts.DataShards)
+			header[7] = byte(opts.ParityShards)
+			binary.LittleEndian.PutUint64(header[8:16], uint64(opts.OriginalSize))
+			binary.LittleEndian.PutUint16(header[16:18], sigSize)
+			if _, err := writers[i].Write(header); err != nil {
+				return nil, err
+			}
 		}
 	}
 
@@ -180,8 +189,8 @@ func NewFragmentWriterWithWriters(opts FragmentOptions, writers []io.WriteCloser
 		opts:      opts,
 		enc:       enc,
 		writers:   writers,
-		buffer:    make([]byte, 0, chunkSize*opts.DataShards),
-		chunkSize: chunkSize,
+		buffer:    make([]byte, 0, effectiveChunk*opts.DataShards),
+		chunkSize: effectiveChunk,
 	}, nil
 }
 
@@ -189,12 +198,12 @@ func (fw *FragmentWriter) Write(p []byte) (n int, err error) {
 	n = len(p)
 	fw.buffer = append(fw.buffer, p...)
 
-	blockSize := fw.chunkSize * fw.opts.DataShards
-	for len(fw.buffer) >= blockSize {
-		if err := fw.flushChunk(fw.buffer[:blockSize]); err != nil {
+	chunkSize := fw.chunkSize * fw.opts.DataShards
+	for len(fw.buffer) >= chunkSize {
+		if err := fw.flushChunk(fw.buffer[:chunkSize]); err != nil {
 			return 0, err
 		}
-		fw.buffer = fw.buffer[blockSize:]
+		fw.buffer = fw.buffer[chunkSize:]
 	}
 
 	fw.written += int64(n)
@@ -262,7 +271,7 @@ func ReassembleFragments(srcDir string, w io.Writer, authorizedPubKey []byte) er
 	var dataShards, parityShards int
 	var originalSize int64
 	var sigSize int
-	var storedChunkSize int
+	shardChunkSize := ChunkSize // default; overridden if V3 header found
 	for _, f := range files {
 		if !f.IsDir() && filepath.Ext(f.Name()) == ".maknf" {
 			shardPath := filepath.Join(safeDir, f.Name())
@@ -278,7 +287,7 @@ func ReassembleFragments(srcDir string, w io.Writer, authorizedPubKey []byte) er
 						sigSize = 4627 // V1 backward compat: ML-DSA-87 was the only signer
 					}
 					if data[4] >= VersionV3 && len(data) >= headerSizeV3 {
-						storedChunkSize = int(binary.LittleEndian.Uint32(data[18:22]))
+						shardChunkSize = int(binary.LittleEndian.Uint32(data[18:22]))
 					}
 				}
 			}
@@ -298,20 +307,11 @@ func ReassembleFragments(srcDir string, w io.Writer, authorizedPubKey []byte) er
 			return fmt.Errorf("insufficient shards: need at least %d data shards, found %d of %d total",
 				manifest.DataShards, foundCount, expectedTotal)
 		}
-		_ = expectedTotal
 	}
 
 	enc, err := reedsolomon.New(dataShards, parityShards)
 	if err != nil {
 		return err
-	}
-
-	// Resolve effective chunk size: V3 header > manifest > default.
-	effectiveChunk := ChunkSize
-	if storedChunkSize > 0 {
-		effectiveChunk = storedChunkSize
-	} else if manifest != nil && manifest.ShardChunkSize > 0 {
-		effectiveChunk = manifest.ShardChunkSize
 	}
 
 	totalShards := dataShards + parityShards
@@ -329,20 +329,19 @@ func ReassembleFragments(srcDir string, w io.Writer, authorizedPubKey []byte) er
 		if err != nil {
 			continue
 		}
-		// Read the base V1 header first, then consume extra bytes for V2/V3.
+		// Read and discard the full header so the file cursor sits at shard data.
 		base := make([]byte, headerSizeV1)
 		if _, err := io.ReadFull(f, base); err != nil {
 			_ = f.Close()
 			continue
 		}
-		ver := base[4]
-		if ver >= VersionV3 {
+		if base[4] >= VersionV3 {
 			extra := make([]byte, headerSizeV3-headerSizeV1)
 			if _, err := io.ReadFull(f, extra); err != nil {
 				_ = f.Close()
 				continue
 			}
-		} else if ver >= VersionV2 {
+		} else if base[4] >= VersionV2 {
 			extra := make([]byte, headerSizeV2-headerSizeV1)
 			if _, err := io.ReadFull(f, extra); err != nil {
 				_ = f.Close()
@@ -360,9 +359,9 @@ func ReassembleFragments(srcDir string, w io.Writer, authorizedPubKey []byte) er
 		shardData := make([][]byte, totalShards)
 		var shardLen int
 
-		// Determine shard length for this block
-		expectedShardLen := effectiveChunk
-		if remaining < int64(effectiveChunk*dataShards) {
+		// Determine shard length for this block (V3 uses header-stored chunk size).
+		expectedShardLen := shardChunkSize
+		if remaining < int64(shardChunkSize*dataShards) {
 			// Last block might be smaller
 			expectedShardLen = int((remaining + int64(dataShards) - 1) / int64(dataShards))
 		}
@@ -446,12 +445,6 @@ func writeFragmentManifest(opts FragmentOptions, writers []io.WriteCloser) error
 			Filename: fmt.Sprintf("shard_%03d.maknf", i),
 		}
 	}
-
-	chunkSizeStored := 0
-	if opts.ShardChunkSize > 0 && opts.ShardChunkSize != ChunkSize {
-		chunkSizeStored = opts.effectiveChunkSize()
-	}
-
 	m := FragmentManifest{
 		Version:        1,
 		CreatedAt:      time.Now().UTC(),
@@ -462,8 +455,12 @@ func writeFragmentManifest(opts FragmentOptions, writers []io.WriteCloser) error
 		ParityShards:   opts.ParityShards,
 		TotalShards:    total,
 		Signed:         len(opts.SigningKey) > 0,
-		ShardChunkSize: chunkSizeStored,
+		ShardChunkSize: opts.effectiveChunkSize(),
 		Shards:         shards,
+	}
+	// Omit ShardChunkSize from manifest when it's the default (matches legacy behaviour).
+	if opts.ShardChunkSize <= 0 {
+		m.ShardChunkSize = 0
 	}
 	data, err := json.MarshalIndent(m, "", "  ")
 	if err != nil {

@@ -92,7 +92,9 @@ maknoon identity publish @alice@example.com --desec  # automated DNS
 | `storage.go` | `FileSystemKeyStore`, `BboltStore`, `FileSystemVaultStore` |
 | `storage_tpm.go` | TPM 2.0 hardware KeyStore (Linux) |
 | `policy.go` | `HumanPolicy`, `AgentPolicy`, `CompositePolicy` (strictest-wins), `FIPSPolicy`; capability/path/quorum rules |
-| `shares.go` | Shamir Secret Sharing |
+| `shares.go` | Shamir Secret Sharing; `ToMnemonic`/`FromMnemonic` use `ShareWordList` |
+| `words.go` | `GeneratePassword`, `GeneratePassphrase`, `PasswordEntropy`, `PassphraseEntropy`, `PasswordCharsetSize`; `ShareWordList` (256 fixed words for mnemonic encoding) |
+| `passphrase_wordlist.go` | `PassphraseWordList` — 1885-word inline slice used by `GeneratePassphrase` (≈10.9 bits/word) |
 | `erasure.go` | Reed-Solomon fragment dispersal; V1/V2/V3 headers; manifest write/read; `VerifyReassembly()`; configurable chunk size (4 KB–4 MB) |
 | `profile_dynamic.go` | `DynamicProfile` — runtime custom profiles |
 | `config.go` | `Config`, `LoadConfig()`, `Config.Clone()`, `OnConfigChange()` |
@@ -114,6 +116,7 @@ maknoon identity publish @alice@example.com --desec  # automated DNS
 | `audit.go` | `maknoon audit export` / `maknoon audit verify` |
 | `config.go` | `maknoon config get/set/validate/export/import/list` |
 | `profiles.go` | `maknoon profiles list/gen/rm` |
+| `gen.go` | `maknoon gen password` / `maknoon gen passphrase` — entropy display on stderr; `--store/--vault/--username/--overwrite/--passphrase` for direct vault write; `--min-entropy` guard |
 | `mcp.go` | `maknoon mcp [--transport stdio\|sse]` |
 | `serve.go` | `maknoon serve` — MCP SSE + health probes (`/v1/live`, `/v1/ready`, `/v1/health`) |
 | `helpers.go` | `InitEngine()`, `LoadPrivateKey()`, presenter utilities |
@@ -126,7 +129,7 @@ All tools have typed argument schemas (`mcp.WithString` / `mcp.WithNumber` / `mc
 
 | Category | Tools |
 |---|---|
-| **crypto** | `encrypt_file`†, `decrypt_file`, `sign_file`, `verify_file`, `inspect_file`, `gen_passphrase`, `gen_password`, `reencrypt_file`, `shred_file` |
+| **crypto** | `encrypt_file`†, `decrypt_file`, `sign_file`, `verify_file`, `inspect_file`, `gen_passphrase`‖, `gen_password`‖, `reencrypt_file`, `shred_file` |
 | **vault** | `vault_get`, `vault_set`, `vault_list`, `vault_delete`, `vault_rename`, `vault_set_blob`, `vault_get_blob`, `vault_split`, `vault_recover`, `vault_init_institutional`, `vault_status`, `vault_check_shards` |
 | **identity** | `identity_list`, `identity_keygen`, `identity_info`, `identity_rename`, `identity_delete`, `identity_split`, `identity_combine`, `identity_publish`‡, `contact_list`, `contact_add`, `contact_delete`, `resolve_identity`, `aggregate_signatures` |
 | **config** | `config_list`, `config_update`, `config_init`, `diagnostic`, `audit_export`, `audit_verify` |
@@ -135,7 +138,8 @@ All tools have typed argument schemas (`mcp.WithString` / `mcp.WithNumber` / `mc
 
 † `encrypt_file` supports multi-recipient (`public_keys` comma-separated) and directories.  
 ‡ `identity_publish` registry: `wkd` (default), `dns`, `desec`, `local`.  
-§ `fragment_file` has `output_manifest` param; `reassemble_file` has `verify` param.
+§ `fragment_file` has `output_manifest` param; `reassemble_file` has `verify` param.  
+‖ `gen_passphrase` / `gen_password` both return `entropy_bits` and `entropy_bits_pq` fields; accept `store_service` / `store_vault` to write directly into a vault.
 
 **MCP error responses** include `"type"` and `"hint"` fields alongside `"error"`:
 `authentication_failure` / `security_policy_violation` / `format_error` / `crypto_failure` / `io_error` / `network_error`
@@ -168,7 +172,7 @@ Agent-mode path restrictions are enforced in `policy.go`. `AgentPolicy` blocks
 Run with `go test -short ./... -timeout 300s`. Smoke scripts: `scripts/smoke-*.sh`.
 Mission tests (Docker): `make missions`.
 
-Coverage: **570 tests, 76.4% on `pkg/crypto`**. CI gate enforces ≥ 75% — PRs that drop below fail.  
+Coverage: **555 tests (481 in `pkg/crypto`)**. CI gate enforces ≥ 75% coverage on `pkg/crypto` — PRs that drop below fail.  
 TDD applies to `pkg/crypto` (pure engine logic). CLI cobra handlers are tested via smoke scripts, not unit tests.  
 Slow tests (FrodoKEM-640 key generation) guard with `if testing.Short() { t.Skip(...) }`.
 

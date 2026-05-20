@@ -47,7 +47,7 @@ func FormatMCPError(err error, tool string) (*mcp.CallToolResult, error) {
 
 	case errors.As(err, new(*ErrNetwork)):
 		resp["type"] = "network_error"
-		resp["hint"] = "check network connectivity and retry; use 'maknoon registry health' to diagnose relay reachability"
+		resp["hint"] = "check network connectivity and retry; verify the registry handle (WKD URL or DNS TXT record) is correctly configured"
 	}
 
 	raw, _ := json.Marshal(resp)

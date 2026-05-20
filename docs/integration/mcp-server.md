@@ -173,7 +173,8 @@ go run ./cmd/maknoon schema 2>/dev/null > docs/integration/TOOL-REFERENCE.json
 | `audit_verify` | Config | Verify hash-chain integrity of the forensic audit log. |
 | `diagnostic` | Config | Full engine and environment manifest — call first to orient an agent. |
 | `config_update` | Config | Live-update engine settings (profile, concurrency, stealth mode). |
-| `gen_passphrase` | Crypto | High-entropy mnemonic generation. |
+| `gen_passphrase` | Crypto | Mnemonic passphrase from 1885-word list; response includes `entropy_bits` and `entropy_bits_pq`; optional `store_service`/`store_vault` writes directly to vault. |
+| `gen_password` | Crypto | CSPRNG character password; response includes `entropy_bits` and `entropy_bits_pq`; optional `store_service`/`store_vault` writes directly to vault. |
 
 
 ---
