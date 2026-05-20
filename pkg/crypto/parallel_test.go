@@ -118,19 +118,6 @@ func BenchmarkDecryption(b *testing.B) {
 	}
 }
 
-// BenchmarkKDF isolates Argon2id key derivation cost across the default profile.
-func BenchmarkKDF(b *testing.B) {
-	password := []byte("bench-kdf-password")
-	salt := make([]byte, 16)
-	_, _ = rand.Read(salt)
-
-	p := DefaultProfile()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_ = p.DeriveKey(password, salt)
-	}
-}
-
 // BenchmarkEncryptionDataSizes shows how throughput scales with payload size.
 func BenchmarkEncryptionDataSizes(b *testing.B) {
 	password := []byte("bench-size")
