@@ -1,0 +1,40 @@
+[Unit]
+Description=Maknoon MCP server — post-quantum cryptography gateway
+Documentation=https://github.com/al-Zamakhshari/maknoon
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=maknoon
+Group=maknoon
+ExecStart=/usr/bin/maknoon serve --address :8443 --tls-cert /etc/maknoon/tls.crt --tls-key /etc/maknoon/tls.key
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=30s
+
+# Data directory
+StateDirectory=maknoon
+StateDirectoryMode=0700
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=true
+RestrictRealtime=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+CapabilityBoundingSet=
+AmbientCapabilities=
+
+[Install]
+WantedBy=multi-user.target

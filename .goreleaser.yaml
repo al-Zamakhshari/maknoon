@@ -73,7 +73,47 @@ changelog:
       - Merge pull request
       - Merge branch
 
-# Homebrew Tap configuration (Standard Formula for CLI tools)
+# Native Linux packages — .deb (Debian/Ubuntu), .rpm (Fedora/RHEL), .apk (Alpine)
+nfpms:
+  - id: maknoon
+    package_name: maknoon
+    vendor: al-Zamakhshari
+    homepage: https://github.com/al-Zamakhshari/maknoon
+    maintainer: Ahmed Khallaf <akhallaf@gmail.com>
+    description: |
+      Post-quantum cryptography CLI and MCP server.
+      Hybrid ML-KEM/X25519 encryption, ML-DSA-87 signatures,
+      encrypted vault with Argon2id, and identity publishing via WKD/DNS.
+      Single static binary with no runtime dependencies.
+    license: MIT
+    formats:
+      - deb
+      - rpm
+      - apk
+    bindir: /usr/bin
+    section: utils
+    priority: optional
+    contents:
+      - src: ./man/*.1
+        dst: /usr/share/man/man1/
+        file_info:
+          mode: 0644
+      # systemd unit — deb and rpm only (Alpine uses OpenRC, not systemd)
+      - src: ./deploy/systemd/maknoon.service
+        dst: /lib/systemd/system/maknoon.service
+        file_info:
+          mode: 0644
+        packager: deb
+      - src: ./deploy/systemd/maknoon.service
+        dst: /lib/systemd/system/maknoon.service
+        file_info:
+          mode: 0644
+        packager: rpm
+    scripts:
+      postinstall: ./deploy/scripts/postinstall.sh
+      preremove: ./deploy/scripts/preremove.sh
+
+# Homebrew Tap configuration (macOS / Linux via Homebrew)
 brews:
   - name: maknoon
     repository:
@@ -81,7 +121,7 @@ brews:
       name: homebrew-tap
     directory: Formula
     homepage: "https://github.com/al-Zamakhshari/maknoon"
-    description: "Premier Post-Quantum Security Suite: Hybrid HPKE (ML-KEM + X25519) encryption."
+    description: "Post-quantum cryptography CLI and MCP server. Hybrid ML-KEM/X25519 encryption, ML-DSA-87 signatures, encrypted vault, and identity publishing via WKD/DNS."
     license: "MIT"
     test: |
       system "#{bin}/maknoon --version"
