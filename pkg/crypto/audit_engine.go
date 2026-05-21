@@ -55,6 +55,21 @@ func (e *AuditEngine) Protect(ectx *EngineContext, inputName string, r io.Reader
 	return res, err
 }
 
+func (e *AuditEngine) DecryptFiles(ectx *EngineContext, files []string, outputDir string, opts Options) (*RecursiveDecryptResult, error) {
+	start := time.Now()
+	res, err := e.Engine.DecryptFiles(ectx, files, outputDir, opts)
+	count := 0
+	if res != nil {
+		count = res.TotalFiles
+	}
+	e.Logger.LogEvent("decrypt_files", map[string]any{
+		"file_count":      len(files),
+		"files_decrypted": count,
+		"duration_ms":     time.Since(start).Milliseconds(),
+	}, err)
+	return res, err
+}
+
 func (e *AuditEngine) ProtectFiles(ectx *EngineContext, files []string, outputDir string, opts Options) (*RecursiveEncryptResult, error) {
 	start := time.Now()
 	res, err := e.Engine.ProtectFiles(ectx, files, outputDir, opts)

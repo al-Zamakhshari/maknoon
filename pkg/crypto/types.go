@@ -69,6 +69,15 @@ type TrustInfo struct {
 	Petname   string `json:"petname,omitempty"`
 }
 
+// RecursiveDecryptResult is the output of DecryptFiles.
+type RecursiveDecryptResult struct {
+	Status     string                `json:"status"` // "success" or "partial"
+	Decrypted  []RecursiveFileResult `json:"decrypted"`
+	Skipped    []string              `json:"skipped,omitempty"`
+	Errors     []RecursiveFileError  `json:"errors,omitempty"`
+	TotalFiles int                   `json:"total_files"`
+}
+
 // RecursiveEncryptResult is the output of ProtectDirectory.
 type RecursiveEncryptResult struct {
 	Status            string                `json:"status"` // "success" or "partial"

@@ -201,11 +201,19 @@
   {
     "name": "decrypt",
     "path": "maknoon decrypt",
-    "description": "Decrypt a .makn file or directory",
+    "description": "Decrypt one or more .makn files",
     "arguments": [
       {
-        "name": "file",
-        "required": false
+        "name": "file.makn",
+        "required": true
+      },
+      {
+        "name": "[file2.makn",
+        "required": true
+      },
+      {
+        "name": "...]",
+        "required": true
       }
     ],
     "flags": [

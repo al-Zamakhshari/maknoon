@@ -50,6 +50,13 @@ func EncryptCmd() *cobra.Command {
 				if cmd.Flags().Changed("stealth") {
 					opts.Stealth = crypto.BoolPtr(stealth)
 				}
+				if sessionKeyHex != "" {
+					key, err := decodeHexKey(sessionKeyHex)
+					if err != nil {
+						return fmt.Errorf("--session-key: %w", err)
+					}
+					opts.SessionKey = key
+				}
 				if err := resolveEncryptionKeysMulti(&opts, pubKeyPaths, passphrase, args[0], tofu); err != nil {
 					p.RenderError(err)
 					return err
@@ -325,6 +332,11 @@ func resolveEncryptOutput(outPath, inPath string) (io.Writer, string, error) {
 }
 
 func resolveEncryptionKeysMulti(opts *crypto.Options, pubKeyPaths []string, passphrase, inputPath string, tofu bool) error {
+	// Session key already set — no passphrase or recipient resolution needed.
+	if len(opts.SessionKey) > 0 {
+		return nil
+	}
+
 	if len(pubKeyPaths) == 0 {
 		if env := viper.GetString("public_key"); env != "" {
 			pubKeyPaths = append(pubKeyPaths, env)

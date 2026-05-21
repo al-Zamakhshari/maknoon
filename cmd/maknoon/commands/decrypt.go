@@ -29,11 +29,54 @@ func DecryptCmd() *cobra.Command {
 	var tofu bool
 
 	cmd := &cobra.Command{
-		Use:   "decrypt [file]",
-		Short: "Decrypt a .makn file or directory",
-		Args:  cobra.ExactArgs(1),
+		Use:   "decrypt <file.makn> [file2.makn ...]",
+		Short: "Decrypt one or more .makn files",
+		Args:  cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			p := GlobalContext.UI.GetPresenter()
+
+			// Multiple files — decrypt each individually.
+			// Pass --session-key for O(1) cost; passphrase path pays KDF per file.
+			if len(args) > 1 {
+				opts := crypto.Options{}
+				if sessionKeyHex != "" {
+					key, err := decodeHexKey(sessionKeyHex)
+					if err != nil {
+						return fmt.Errorf("--session-key: %w", err)
+					}
+					opts.SessionKey = key
+				} else {
+					pass, _, err := getPassphrase("Enter passphrase: ")
+					if err != nil {
+						p.RenderError(err)
+						return err
+					}
+					opts.Passphrase = pass
+					defer crypto.SafeClear(opts.Passphrase)
+				}
+				if cmd.Flags().Changed("concurrency") {
+					opts.Concurrency = crypto.IntPtr(concurrency)
+				}
+
+				res, err := GlobalContext.Engine.DecryptFiles(nil, args, output, opts)
+				if err != nil {
+					p.RenderError(err)
+					return err
+				}
+				if !quiet {
+					fmt.Fprintf(os.Stderr, "%s %d/%d file(s) decrypted\n",
+						icon("✓", "ok"), res.TotalFiles, len(args))
+					for _, e := range res.Errors {
+						fmt.Fprintf(os.Stderr, "  %s %s: %s\n", icon("✗", "FAIL"), e.Path, e.Err)
+					}
+				}
+				p.RenderSuccess(res)
+				if len(res.Errors) > 0 {
+					return fmt.Errorf("%d file(s) failed to decrypt", len(res.Errors))
+				}
+				return nil
+			}
+
 			inputFile := args[0]
 			in, _, totalSize, err := resolveDecryptInput(inputFile)
 			if err != nil {

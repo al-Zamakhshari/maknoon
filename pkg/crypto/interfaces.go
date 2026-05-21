@@ -73,6 +73,7 @@ type Protector interface {
 	Protect(ectx *EngineContext, inputName string, r io.Reader, w io.Writer, opts Options) (EncryptResult, error)
 	ProtectDirectory(ectx *EngineContext, inputDir, outputDir string, opts Options) (*RecursiveEncryptResult, error)
 	ProtectFiles(ectx *EngineContext, files []string, outputDir string, opts Options) (*RecursiveEncryptResult, error)
+	DecryptFiles(ectx *EngineContext, files []string, outputDir string, opts Options) (*RecursiveDecryptResult, error)
 	Unprotect(ectx *EngineContext, r io.Reader, w io.Writer, outPath string, opts Options) (DecryptResult, error)
 	FinalizeRestoration(ectx *EngineContext, pr io.Reader, w io.Writer, flags byte, outPath string, logger *slog.Logger) error
 	LoadCustomProfile(ectx *EngineContext, path string) (*DynamicProfile, error)

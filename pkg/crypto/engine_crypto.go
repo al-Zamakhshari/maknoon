@@ -26,6 +26,10 @@ func (e *Engine) ProtectFiles(ectx *EngineContext, files []string, outputDir str
 	return e.Crypto.ProtectFiles(ectx, files, outputDir, opts)
 }
 
+func (e *Engine) DecryptFiles(ectx *EngineContext, files []string, outputDir string, opts Options) (*RecursiveDecryptResult, error) {
+	return e.Crypto.DecryptFiles(ectx, files, outputDir, opts)
+}
+
 func (e *Engine) Unprotect(ectx *EngineContext, r io.Reader, w io.Writer, outPath string, opts Options) (DecryptResult, error) {
 	return e.Crypto.Unprotect(ectx, r, w, outPath, opts)
 }
@@ -248,6 +252,68 @@ func (s *CryptoService) ProtectFiles(ectx *EngineContext, files []string, output
 	}
 
 	result.TotalFiles = len(result.Encrypted)
+	result.Status = "success"
+	if len(result.Errors) > 0 {
+		result.Status = "partial"
+	}
+	return result, nil
+}
+
+// DecryptFiles decrypts a list of .makn files individually.
+// Output for each file strips the .makn suffix; if outputDir is set, files land
+// there preserving their base names. Non-zero exit (partial status) when any
+// file fails. For session-key-encrypted batches, pass opts.SessionKey to avoid
+// per-file KDF entirely; passphrase-based decryption pays Argon2id per file.
+func (s *CryptoService) DecryptFiles(ectx *EngineContext, files []string, outputDir string, opts Options) (*RecursiveDecryptResult, error) {
+	ectx = s.engine.context(ectx)
+	if err := s.engine.enforce(ectx, CapUnprotect); err != nil {
+		return nil, err
+	}
+
+	result := &RecursiveDecryptResult{}
+
+	for _, path := range files {
+		cleanPath := filepath.Clean(path)
+		if err := ectx.Policy.ValidatePath(cleanPath); err != nil {
+			result.Errors = append(result.Errors, RecursiveFileError{Path: path, Err: err.Error()})
+			continue
+		}
+
+		base := filepath.Base(cleanPath)
+		stripped := strings.TrimSuffix(base, ".makn")
+		var outPath string
+		if outputDir != "" {
+			outPath = filepath.Join(filepath.Clean(outputDir), stripped)
+		} else if strings.HasSuffix(cleanPath, ".makn") {
+			outPath = strings.TrimSuffix(cleanPath, ".makn")
+		} else {
+			outPath = cleanPath + ".dec"
+		}
+
+		in, err := os.Open(cleanPath)
+		if err != nil {
+			result.Errors = append(result.Errors, RecursiveFileError{Path: path, Err: err.Error()})
+			continue
+		}
+		fi, _ := in.Stat()
+		fileBytes := fi.Size()
+
+		if _, err := s.engine.UnprotectStream(ectx, in, nil, outPath, opts); err != nil {
+			in.Close()
+			_ = os.Remove(outPath)
+			result.Errors = append(result.Errors, RecursiveFileError{Path: path, Err: err.Error()})
+			continue
+		}
+		in.Close()
+
+		result.Decrypted = append(result.Decrypted, RecursiveFileResult{
+			Input:  path,
+			Output: outPath,
+			Bytes:  fileBytes,
+		})
+	}
+
+	result.TotalFiles = len(result.Decrypted)
 	result.Status = "success"
 	if len(result.Errors) > 0 {
 		result.Status = "partial"
