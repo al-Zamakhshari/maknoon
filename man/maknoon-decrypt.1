@@ -18,6 +18,10 @@ Decrypt one or more .makn files
 	Number of parallel workers (0 for auto)
 
 .PP
+\fB--dry-run\fP[=false]
+	Preview what would be decrypted without writing any files
+
+.PP
 \fB-h\fP, \fB--help\fP[=false]
 	help for decrypt
 
@@ -44,6 +48,10 @@ Decrypt one or more .makn files
 .PP
 \fB-q\fP, \fB--quiet\fP[=false]
 	Suppress progress bars and informational messages
+
+.PP
+\fB-r\fP, \fB--recursive\fP[=false]
+	Decrypt all .makn files in a directory (use --session-key for O(1) KDF cost)
 
 .PP
 \fB--sender-key\fP=""

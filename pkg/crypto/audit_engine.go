@@ -55,6 +55,22 @@ func (e *AuditEngine) Protect(ectx *EngineContext, inputName string, r io.Reader
 	return res, err
 }
 
+func (e *AuditEngine) DecryptDirectory(ectx *EngineContext, inputDir, outputDir string, opts Options) (*RecursiveDecryptResult, error) {
+	start := time.Now()
+	res, err := e.Engine.DecryptDirectory(ectx, inputDir, outputDir, opts)
+	count := 0
+	if res != nil {
+		count = res.TotalFiles
+	}
+	e.Logger.LogEvent("decrypt_directory", map[string]any{
+		"input_dir":       e.sanitizePath(inputDir),
+		"output_dir":      e.sanitizePath(outputDir),
+		"files_decrypted": count,
+		"duration_ms":     time.Since(start).Milliseconds(),
+	}, err)
+	return res, err
+}
+
 func (e *AuditEngine) DecryptFiles(ectx *EngineContext, files []string, outputDir string, opts Options) (*RecursiveDecryptResult, error) {
 	start := time.Now()
 	res, err := e.Engine.DecryptFiles(ectx, files, outputDir, opts)
@@ -348,6 +364,10 @@ func (e *AuditEngine) ContactDelete(ectx *EngineContext, petname string) error {
 
 func (e *AuditEngine) ResolvePublicKey(ectx *EngineContext, input string, tofu bool) ([]byte, error) {
 	return e.Engine.ResolvePublicKey(ectx, input, tofu)
+}
+
+func (e *AuditEngine) ResolveIdentityInfo(ectx *EngineContext, input string, tofu bool) (*IdentityRecord, error) {
+	return e.Engine.ResolveIdentityInfo(ectx, input, tofu)
 }
 
 func (e *AuditEngine) LoadPrivateKey(ectx *EngineContext, path string, passphrase []byte, pin string, agent bool) ([]byte, error) {

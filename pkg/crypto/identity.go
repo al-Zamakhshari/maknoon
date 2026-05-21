@@ -283,6 +283,44 @@ func (m *IdentityManager) UnlockPrivateKeyWithFIDOOrPass(password []byte, _ stri
 }
 
 // ResolvePublicKey takes a petname (@handle), a local path, or raw hex and returns the KEM public key.
+// ResolveIdentityInfo resolves a handle or file path and returns the full IdentityRecord.
+// For @handle recipients the record includes SIGPubKey, ExpiresAt, and the handle.
+// For file-path recipients only KEMPubKey is populated (no expiry or fingerprint).
+func (m *IdentityManager) ResolveIdentityInfo(input string, tofu bool) (*IdentityRecord, error) {
+	if strings.HasPrefix(input, "@") {
+		if m.Contacts != nil {
+			if c, err := m.Contacts.Get(input); err == nil {
+				return &IdentityRecord{
+					Handle:    input,
+					KEMPubKey: c.KEMPubKey,
+					SIGPubKey: c.SIGPubKey,
+				}, nil
+			}
+		}
+		reg := NewIdentityRegistry(nil)
+		record, err := reg.Resolve(context.Background(), input)
+		if err != nil {
+			return nil, fmt.Errorf("identity not found: %w", err)
+		}
+		if tofu && m.Contacts != nil {
+			_ = m.Contacts.Add(&Contact{
+				Petname:   input,
+				KEMPubKey: record.KEMPubKey,
+				SIGPubKey: record.SIGPubKey,
+				AddedAt:   time.Now(),
+				Notes:     "Automatically added via discovery (TOFU)",
+			})
+		}
+		return record, nil
+	}
+	// Local file path — return KEMPubKey only.
+	kemPub, err := m.ResolvePublicKey(input, tofu)
+	if err != nil {
+		return nil, err
+	}
+	return &IdentityRecord{KEMPubKey: kemPub}, nil
+}
+
 func (m *IdentityManager) ResolvePublicKey(input string, tofu bool) ([]byte, error) {
 	// 1. Handle Petnames (@handle)
 	if strings.HasPrefix(input, "@") {

@@ -3,8 +3,11 @@ package commands
 import (
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
+	"time"
 
 	"github.com/al-Zamakhshari/maknoon/pkg/crypto"
 	"github.com/spf13/cobra"
@@ -28,6 +31,7 @@ func EncryptCmd() *cobra.Command {
 	var tofu bool
 	var shred bool
 	var recursive bool
+	var dryRun bool
 
 	// KDF overrides
 	var argonTime uint32
@@ -101,9 +105,24 @@ func EncryptCmd() *cobra.Command {
 				}
 			}
 
+			// --dry-run for single file or non-recursive.
+			if dryRun && !recursive {
+				outPath := inputPath + ".makn"
+				if output != "" {
+					outPath = output
+				}
+				fmt.Fprintf(os.Stderr, "[dry-run] would encrypt: %s → %s\n", inputPath, outPath)
+				fmt.Fprintln(os.Stderr, "[dry-run] No files written.")
+				return nil
+			}
+
 			// --recursive: encrypt each file in the directory individually,
 			// auto-deriving one session key for the run (one Argon2id call total).
 			if recursive && isDir {
+				// --dry-run: walk and preview without encrypting.
+				if dryRun {
+					return dryRunEncryptDir(inputPath, output)
+				}
 				opts := crypto.Options{}
 				if cmd.Flags().Changed("compress") {
 					opts.Compress = crypto.BoolPtr(compress)
@@ -268,6 +287,7 @@ func EncryptCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&tofu, "trust-on-first-use", false, "Automatically add unknown signers to contacts")
 	cmd.Flags().BoolVar(&shred, "shred", false, "Securely delete original file after successful encryption")
 	cmd.Flags().BoolVarP(&recursive, "recursive", "r", false, "Encrypt each file in a directory individually (derives session key once — one KDF cost for the whole run)")
+	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Preview what would be encrypted without writing any files")
 	cmd.Flags().StringVar(&profileStr, "profile", "", "Cryptographic profile (nist, conservative)")
 	cmd.Flags().StringVar(&profileFile, "profile-file", "", "Path to a custom profile JSON file")
 
@@ -308,6 +328,35 @@ func resolveEncryptInput(path string) (io.Reader, string, int64, bool, error) {
 	return f, info.Name(), info.Size(), false, nil
 }
 
+// dryRunEncryptDir walks a directory and prints what would be encrypted.
+func dryRunEncryptDir(inputDir, outputDir string) error {
+	count, skipped := 0, 0
+	err := filepath.WalkDir(inputDir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		if strings.HasSuffix(path, ".makn") {
+			skipped++
+			return nil
+		}
+		var outPath string
+		if outputDir != "" {
+			rel, _ := filepath.Rel(inputDir, path)
+			outPath = filepath.Join(outputDir, rel+".makn")
+		} else {
+			outPath = path + ".makn"
+		}
+		fmt.Fprintf(os.Stderr, "[dry-run] would encrypt: %s → %s\n", path, outPath)
+		count++
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(os.Stderr, "[dry-run] %d file(s), %d skipped (already .makn). No files written.\n", count, skipped)
+	return nil
+}
+
 func resolveEncryptOutput(outPath, inPath string) (io.Writer, string, error) {
 	if outPath == "-" {
 		return os.Stdout, "stdout", nil
@@ -344,11 +393,30 @@ func resolveEncryptionKeysMulti(opts *crypto.Options, pubKeyPaths []string, pass
 	}
 
 	for _, path := range pubKeyPaths {
-		pk, err := GlobalContext.Engine.ResolvePublicKey(nil, path, tofu)
+		record, err := GlobalContext.Engine.ResolveIdentityInfo(nil, path, tofu)
 		if err != nil {
 			return err
 		}
-		opts.Recipients = append(opts.Recipients, pk)
+		opts.Recipients = append(opts.Recipients, record.KEMPubKey)
+
+		// Show fingerprint for registry-resolved handles (@alice@corp.com).
+		if strings.HasPrefix(path, "@") && len(record.SIGPubKey) > 0 {
+			fingerprint, ferr := crypto.DerivePeerID(record.SIGPubKey)
+			if ferr == nil {
+				fmt.Fprintf(os.Stderr, "%s encrypting to %s (%s)\n",
+					icon("»", ">>"), fingerprint, path)
+			}
+			// Warn if the key is close to expiry.
+			if !record.ExpiresAt.IsZero() {
+				remaining := time.Until(record.ExpiresAt)
+				if remaining < 0 {
+					return fmt.Errorf("key for %s has expired — ask them to republish their identity", path)
+				} else if remaining < 48*time.Hour {
+					fmt.Fprintf(os.Stderr, "%s key for %s expires in %s — ask them to republish\n",
+						icon("⚠️ ", "WARNING:"), path, remaining.Round(time.Minute))
+				}
+			}
+		}
 	}
 
 	if len(opts.Recipients) > 0 {

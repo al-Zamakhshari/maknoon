@@ -9,9 +9,42 @@
       {
         "name": "export",
         "path": "maknoon audit export",
-        "description": "Export a forensic summary of all cryptographic operations",
+        "description": "Export cryptographic audit log entries, with optional filtering",
         "arguments": null,
-        "flags": null
+        "flags": [
+          {
+            "name": "action",
+            "shorthand": "",
+            "description": "Filter by action name (e.g. protect, vault_get, identity_info)",
+            "type": "string",
+            "default": "",
+            "required": false
+          },
+          {
+            "name": "from",
+            "shorthand": "",
+            "description": "Include entries at or after this RFC3339 timestamp",
+            "type": "string",
+            "default": "",
+            "required": false
+          },
+          {
+            "name": "status",
+            "shorthand": "",
+            "description": "Filter by status: success or failure",
+            "type": "string",
+            "default": "",
+            "required": false
+          },
+          {
+            "name": "to",
+            "shorthand": "",
+            "description": "Include entries at or before this RFC3339 timestamp",
+            "type": "string",
+            "default": "",
+            "required": false
+          }
+        ]
       },
       {
         "name": "verify",
@@ -226,6 +259,14 @@
         "required": false
       },
       {
+        "name": "dry-run",
+        "shorthand": "",
+        "description": "Preview what would be decrypted without writing any files",
+        "type": "bool",
+        "default": "false",
+        "required": false
+      },
+      {
         "name": "output",
         "shorthand": "o",
         "description": "Output file path or directory (use - for stdout)",
@@ -269,6 +310,14 @@
         "name": "quiet",
         "shorthand": "q",
         "description": "Suppress progress bars and informational messages",
+        "type": "bool",
+        "default": "false",
+        "required": false
+      },
+      {
+        "name": "recursive",
+        "shorthand": "r",
+        "description": "Decrypt all .makn files in a directory (use --session-key for O(1) KDF cost)",
         "type": "bool",
         "default": "false",
         "required": false
@@ -379,6 +428,14 @@
         "description": "Number of parallel workers (0 for auto); note: AES-NI hardware saturates at concurrency=1, so this flag only helps on non-AES-NI targets",
         "type": "int",
         "default": "0",
+        "required": false
+      },
+      {
+        "name": "dry-run",
+        "shorthand": "",
+        "description": "Preview what would be encrypted without writing any files",
+        "type": "bool",
+        "default": "false",
         "required": false
       },
       {
@@ -722,6 +779,43 @@
         "description": "List absolute paths of available public keys for encryption",
         "arguments": null,
         "flags": null
+      },
+      {
+        "name": "backup",
+        "path": "maknoon identity backup",
+        "description": "Guided backup of an identity using Shamir Secret Sharing",
+        "arguments": [
+          {
+            "name": "name",
+            "required": false
+          }
+        ],
+        "flags": [
+          {
+            "name": "passphrase",
+            "shorthand": "s",
+            "description": "Passphrase protecting the identity",
+            "type": "string",
+            "default": "",
+            "required": false
+          },
+          {
+            "name": "shares",
+            "shorthand": "n",
+            "description": "Total number of shares to generate",
+            "type": "int",
+            "default": "3",
+            "required": false
+          },
+          {
+            "name": "threshold",
+            "shorthand": "m",
+            "description": "Minimum shares required to recover",
+            "type": "int",
+            "default": "2",
+            "required": false
+          }
+        ]
       },
       {
         "name": "combine",

@@ -3,6 +3,7 @@ package commands
 import (
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/al-Zamakhshari/maknoon/pkg/crypto"
@@ -32,6 +33,7 @@ func IdentityCmd() *cobra.Command {
 	cmd.AddCommand(identityInfoCmd())
 	cmd.AddCommand(identityRenameCmd())
 	cmd.AddCommand(identityDeleteCmd())
+	cmd.AddCommand(identityBackupCmd())
 
 	return cmd
 }
@@ -396,5 +398,65 @@ func identityRenameCmd() *cobra.Command {
 			return nil
 		},
 	}
+	return cmd
+}
+
+func identityBackupCmd() *cobra.Command {
+	var shares int
+	var threshold int
+	var passphrase string
+
+	cmd := &cobra.Command{
+		Use:               "backup [name]",
+		Short:             "Guided backup of an identity using Shamir Secret Sharing",
+		Long:              "Split an identity into N mnemonic shares where any K can recover it.\nStore each share in a separate secure location (password manager, printed paper, trusted person).",
+		Args:              cobra.MaximumNArgs(1),
+		ValidArgsFunction: completeIdentities,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			p := GlobalContext.UI.GetPresenter()
+			name := "default"
+			if len(args) > 0 {
+				name = args[0]
+			}
+
+			if passphrase == "" {
+				pass, _, err := getPassphrase("Passphrase for identity '" + name + "': ")
+				if err != nil {
+					p.RenderError(err)
+					return err
+				}
+				defer crypto.SafeClear(pass)
+				passphrase = string(pass)
+			}
+
+			shards, err := GlobalContext.Engine.IdentitySplit(nil, name, threshold, shares, passphrase)
+			if err != nil {
+				p.RenderError(err)
+				return err
+			}
+
+			if GlobalContext.UI.JSON {
+				p.RenderSuccess(map[string]interface{}{
+					"status":    "success",
+					"identity":  name,
+					"shares":    shards,
+					"threshold": threshold,
+				})
+				return nil
+			}
+
+			fmt.Fprintf(os.Stderr, "\nBacking up identity '%s' (%d-of-%d Shamir shares)\n\n", name, threshold, shares)
+			for i, s := range shards {
+				fmt.Fprintf(os.Stderr, "Share %d of %d:\n  %s\n\n", i+1, shares, s)
+			}
+			fmt.Fprintf(os.Stderr, "Store each share in a separate secure location.\n")
+			fmt.Fprintf(os.Stderr, "Recover with:\n  maknoon identity combine <share1> <share2> ... --output %s-restored\n\n", name)
+			return nil
+		},
+	}
+
+	cmd.Flags().IntVarP(&shares, "shares", "n", 3, "Total number of shares to generate")
+	cmd.Flags().IntVarP(&threshold, "threshold", "m", 2, "Minimum shares required to recover")
+	cmd.Flags().StringVarP(&passphrase, "passphrase", "s", "", "Passphrase protecting the identity")
 	return cmd
 }

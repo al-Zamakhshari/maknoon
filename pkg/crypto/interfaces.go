@@ -74,6 +74,7 @@ type Protector interface {
 	ProtectDirectory(ectx *EngineContext, inputDir, outputDir string, opts Options) (*RecursiveEncryptResult, error)
 	ProtectFiles(ectx *EngineContext, files []string, outputDir string, opts Options) (*RecursiveEncryptResult, error)
 	DecryptFiles(ectx *EngineContext, files []string, outputDir string, opts Options) (*RecursiveDecryptResult, error)
+	DecryptDirectory(ectx *EngineContext, inputDir, outputDir string, opts Options) (*RecursiveDecryptResult, error)
 	Unprotect(ectx *EngineContext, r io.Reader, w io.Writer, outPath string, opts Options) (DecryptResult, error)
 	FinalizeRestoration(ectx *EngineContext, pr io.Reader, w io.Writer, flags byte, outPath string, logger *slog.Logger) error
 	LoadCustomProfile(ectx *EngineContext, path string) (*DynamicProfile, error)
@@ -97,6 +98,9 @@ type IdentityCapabilities interface {
 
 	// Key Resolution and Loading
 	ResolvePublicKey(ectx *EngineContext, input string, tofu bool) ([]byte, error)
+	// ResolveIdentityInfo returns the full IdentityRecord for a recipient, giving callers
+	// access to SIGPubKey (fingerprint) and ExpiresAt (expiry warnings).
+	ResolveIdentityInfo(ectx *EngineContext, input string, tofu bool) (*IdentityRecord, error)
 	LoadPrivateKey(ectx *EngineContext, path string, passphrase []byte, pin string, agent bool) ([]byte, error)
 	LoadIdentity(ectx *EngineContext, name string, passphrase []byte, pin string, agent bool) (*Identity, error)
 	ResolveKeyPath(ectx *EngineContext, path, envVar string) string

@@ -5,7 +5,9 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/al-Zamakhshari/maknoon/pkg/crypto"
@@ -27,6 +29,8 @@ func DecryptCmd() *cobra.Command {
 	var overwrite bool
 	var stealth bool
 	var tofu bool
+	var recursive bool
+	var dryRun bool
 
 	cmd := &cobra.Command{
 		Use:   "decrypt <file.makn> [file2.makn ...]",
@@ -78,6 +82,60 @@ func DecryptCmd() *cobra.Command {
 			}
 
 			inputFile := args[0]
+
+			// --recursive: decrypt all *.makn files in a directory.
+			if info, statErr := os.Stat(inputFile); statErr == nil && info.IsDir() && recursive {
+				opts := crypto.Options{}
+				if sessionKeyHex != "" {
+					key, err := decodeHexKey(sessionKeyHex)
+					if err != nil {
+						return fmt.Errorf("--session-key: %w", err)
+					}
+					opts.SessionKey = key
+				} else {
+					pass, _, err := getPassphrase("Enter passphrase: ")
+					if err != nil {
+						p.RenderError(err)
+						return err
+					}
+					opts.Passphrase = pass
+					defer crypto.SafeClear(opts.Passphrase)
+				}
+
+				// --dry-run: walk and preview without decrypting.
+				if dryRun {
+					return dryRunDecryptDir(inputFile, output)
+				}
+
+				res, err := GlobalContext.Engine.DecryptDirectory(nil, inputFile, output, opts)
+				if err != nil {
+					p.RenderError(err)
+					return err
+				}
+				if !quiet {
+					fmt.Fprintf(os.Stderr, "%s %d file(s) decrypted\n", icon("✓", "ok"), res.TotalFiles)
+					for _, e := range res.Errors {
+						fmt.Fprintf(os.Stderr, "  %s %s: %s\n", icon("✗", "FAIL"), e.Path, e.Err)
+					}
+				}
+				p.RenderSuccess(res)
+				if len(res.Errors) > 0 {
+					return fmt.Errorf("%d file(s) failed to decrypt", len(res.Errors))
+				}
+				return nil
+			}
+
+			// --dry-run for single file.
+			if dryRun {
+				outPath := strings.TrimSuffix(inputFile, ".makn")
+				if output != "" {
+					outPath = output
+				}
+				fmt.Fprintf(os.Stderr, "[dry-run] would decrypt: %s → %s\n", inputFile, outPath)
+				fmt.Fprintln(os.Stderr, "[dry-run] No files written.")
+				return nil
+			}
+
 			in, _, totalSize, err := resolveDecryptInput(inputFile)
 			if err != nil {
 				p.RenderError(err)
@@ -300,7 +358,37 @@ func DecryptCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&tofu, "trust-on-first-use", false, "Automatically add unknown signers to contacts")
 	cmd.Flags().StringVar(&profileFile, "profile-file", "", "Path to a custom profile JSON file")
 	cmd.Flags().BoolVar(&overwrite, "overwrite", false, "Overwrite existing files")
+	cmd.Flags().BoolVarP(&recursive, "recursive", "r", false, "Decrypt all .makn files in a directory (use --session-key for O(1) KDF cost)")
+	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Preview what would be decrypted without writing any files")
 	return cmd
+}
+
+// dryRunDecryptDir walks a directory and prints what would be decrypted.
+func dryRunDecryptDir(inputDir, outputDir string) error {
+	count := 0
+	err := filepath.WalkDir(inputDir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		if !strings.HasSuffix(path, ".makn") {
+			return nil
+		}
+		var outPath string
+		if outputDir != "" {
+			rel, _ := filepath.Rel(inputDir, path)
+			outPath = filepath.Join(outputDir, strings.TrimSuffix(rel, ".makn"))
+		} else {
+			outPath = strings.TrimSuffix(path, ".makn")
+		}
+		fmt.Fprintf(os.Stderr, "[dry-run] would decrypt: %s → %s\n", path, outPath)
+		count++
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(os.Stderr, "[dry-run] %d file(s) found. No files written.\n", count)
+	return nil
 }
 
 func resolveDecryptInput(path string) (io.Reader, string, int64, error) {

@@ -2,28 +2,33 @@
 .TH "MAKNOON" "1" "Jan 2024" "Maknoon Post-Quantum Engine" "Maknoon Manual"
 
 .SH NAME
-maknoon-identity - Manage Post-Quantum cryptographic identities
+maknoon-identity-backup - Guided backup of an identity using Shamir Secret Sharing
 
 
 .SH SYNOPSIS
-\fBmaknoon identity [flags]\fP
+\fBmaknoon identity backup [name] [flags]\fP
 
 
 .SH DESCRIPTION
-Manage Post-Quantum cryptographic identities
+Split an identity into N mnemonic shares where any K can recover it.
+Store each share in a separate secure location (password manager, printed paper, trusted person).
 
 
 .SH OPTIONS
 \fB-h\fP, \fB--help\fP[=false]
-	help for identity
-
-.PP
-\fB-i\fP, \fB--name\fP="default"
-	Identity name
+	help for backup
 
 .PP
 \fB-s\fP, \fB--passphrase\fP=""
-	Passphrase for the identity
+	Passphrase protecting the identity
+
+.PP
+\fB-n\fP, \fB--shares\fP=3
+	Total number of shares to generate
+
+.PP
+\fB-m\fP, \fB--threshold\fP=2
+	Minimum shares required to recover
 
 
 .SH OPTIONS INHERITED FROM PARENT COMMANDS
@@ -33,6 +38,10 @@ Manage Post-Quantum cryptographic identities
 .PP
 \fB--json\fP[=false]
 	Output results in JSON format
+
+.PP
+\fB-i\fP, \fB--name\fP="default"
+	Identity name
 
 .PP
 \fB--passphrase-fd\fP=0
@@ -64,7 +73,7 @@ Manage Post-Quantum cryptographic identities
 
 
 .SH SEE ALSO
-\fBmaknoon(1)\fP, \fBmaknoon-identity-active(1)\fP, \fBmaknoon-identity-backup(1)\fP, \fBmaknoon-identity-combine(1)\fP, \fBmaknoon-identity-delete(1)\fP, \fBmaknoon-identity-info(1)\fP, \fBmaknoon-identity-publish(1)\fP, \fBmaknoon-identity-reconstruct(1)\fP, \fBmaknoon-identity-rename(1)\fP, \fBmaknoon-identity-shard(1)\fP, \fBmaknoon-identity-split(1)\fP
+\fBmaknoon-identity(1)\fP
 
 
 .SH HISTORY

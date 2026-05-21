@@ -39,6 +39,10 @@ func (e *Engine) ResolvePublicKey(ectx *EngineContext, input string, tofu bool) 
 	return e.Identity.ResolvePublicKey(ectx, input, tofu)
 }
 
+func (e *Engine) ResolveIdentityInfo(ectx *EngineContext, input string, tofu bool) (*IdentityRecord, error) {
+	return e.Identity.ResolveIdentityInfo(ectx, input, tofu)
+}
+
 func (e *Engine) LoadPrivateKey(ectx *EngineContext, path string, passphrase []byte, pin string, agent bool) ([]byte, error) {
 	return e.Identity.LoadPrivateKey(ectx, path, passphrase, pin, agent)
 }
@@ -135,6 +139,13 @@ func (s *IdentityService) Combine(ectx *EngineContext, mnemonics []string, outpu
 
 func (s *IdentityService) ResolvePublicKey(ectx *EngineContext, input string, tofu bool) ([]byte, error) {
 	return s.Mgr.ResolvePublicKey(input, tofu)
+}
+
+// ResolveIdentityInfo resolves a recipient handle and returns the full IdentityRecord,
+// giving callers access to SIGPubKey (for fingerprinting) and ExpiresAt (for expiry
+// warnings). For local file-path recipients the record contains only KEMPubKey.
+func (s *IdentityService) ResolveIdentityInfo(ectx *EngineContext, input string, tofu bool) (*IdentityRecord, error) {
+	return s.Mgr.ResolveIdentityInfo(input, tofu)
 }
 
 func (s *IdentityService) LoadPrivateKey(ectx *EngineContext, path string, passphrase []byte, pin string, agent bool) ([]byte, error) {

@@ -2,7 +2,7 @@
 .TH "MAKNOON" "1" "Jan 2024" "Maknoon Post-Quantum Engine" "Maknoon Manual"
 
 .SH NAME
-maknoon-audit-export - Export a forensic summary of all cryptographic operations
+maknoon-audit-export - Export cryptographic audit log entries, with optional filtering
 
 
 .SH SYNOPSIS
@@ -10,12 +10,34 @@ maknoon-audit-export - Export a forensic summary of all cryptographic operations
 
 
 .SH DESCRIPTION
-Export a forensic summary of all cryptographic operations
+Export the forensic audit log. Filters are ANDed together.
+
+.PP
+Examples:
+  maknoon audit export
+  maknoon audit export --action vault_get --status failure
+  maknoon audit export --from 2026-01-01T00:00:00Z --to 2026-06-01T00:00:00Z
 
 
 .SH OPTIONS
+\fB--action\fP=""
+	Filter by action name (e.g. protect, vault_get, identity_info)
+
+.PP
+\fB--from\fP=""
+	Include entries at or after this RFC3339 timestamp
+
+.PP
 \fB-h\fP, \fB--help\fP[=false]
 	help for export
+
+.PP
+\fB--status\fP=""
+	Filter by status: success or failure
+
+.PP
+\fB--to\fP=""
+	Include entries at or before this RFC3339 timestamp
 
 
 .SH OPTIONS INHERITED FROM PARENT COMMANDS

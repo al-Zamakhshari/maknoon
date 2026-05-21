@@ -40,6 +40,8 @@ git clone https://github.com/al-Zamakhshari/maknoon
 cd maknoon && make build
 ```
 
+**New to Maknoon?** Start with the [5-minute Quick Start](docs/getting-started/QUICKSTART.md).
+
 `mkn` is installed as a short alias alongside the binary by all package managers. To add it manually:
 ```bash
 alias mkn=maknoon   # add to ~/.bashrc or ~/.zshrc
