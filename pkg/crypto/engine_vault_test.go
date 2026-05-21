@@ -1,7 +1,9 @@
 package crypto
 
 import (
+	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -471,5 +473,60 @@ func TestVaultInitInstitutionalAlreadyExists(t *testing.T) {
 	_, err := e.VaultInitInstitutional(nil, "inst.vault", 2, 3, []string{"p1", "p2", "p3"}, pass)
 	if err == nil {
 		t.Error("expected error initializing institutional vault that already exists")
+	}
+}
+
+// --- ProtectDirectory ---
+
+func TestProtectDirectorySessionKeyDerived(t *testing.T) {
+	e := engineForVault(t)
+	src := t.TempDir()
+	dst := t.TempDir()
+
+	// Create three files.
+	for i, content := range []string{"alpha", "beta", "gamma"} {
+		os.WriteFile(filepath.Join(src, fmt.Sprintf("file%d.txt", i)), []byte(content), 0600)
+	}
+
+	pass := []byte("dir-pass")
+	opts := Options{Passphrase: pass}
+	res, err := e.ProtectDirectory(nil, src, dst, opts)
+	if err != nil {
+		t.Fatalf("ProtectDirectory: %v", err)
+	}
+	if res.TotalFiles != 3 {
+		t.Errorf("expected 3 files encrypted, got %d", res.TotalFiles)
+	}
+	if !res.SessionKeyDerived {
+		t.Error("expected session_key_derived=true for passphrase-based recursive encrypt")
+	}
+	if res.Status != "success" {
+		t.Errorf("status = %q, want success", res.Status)
+	}
+	// Verify .makn files exist in dst.
+	for i := range []string{"alpha", "beta", "gamma"} {
+		p := filepath.Join(dst, fmt.Sprintf("file%d.txt.makn", i))
+		if _, err := os.Stat(p); err != nil {
+			t.Errorf("expected %s to exist: %v", p, err)
+		}
+	}
+}
+
+func TestProtectDirectorySkipsAlreadyEncrypted(t *testing.T) {
+	e := engineForVault(t)
+	src := t.TempDir()
+
+	os.WriteFile(filepath.Join(src, "a.txt"), []byte("data"), 0600)
+	os.WriteFile(filepath.Join(src, "b.makn"), []byte("already encrypted"), 0600)
+
+	res, err := e.ProtectDirectory(nil, src, "", Options{Passphrase: []byte("p")})
+	if err != nil {
+		t.Fatalf("ProtectDirectory: %v", err)
+	}
+	if res.TotalFiles != 1 {
+		t.Errorf("expected 1 file encrypted, got %d", res.TotalFiles)
+	}
+	if len(res.Skipped) != 1 {
+		t.Errorf("expected 1 skipped file, got %d", len(res.Skipped))
 	}
 }

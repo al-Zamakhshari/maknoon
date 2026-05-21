@@ -62,6 +62,10 @@ Encrypt a file or directory symmetrically or asymmetrically
 	Suppress progress bars and informational messages
 
 .PP
+\fB-r\fP, \fB--recursive\fP[=false]
+	Encrypt each file in a directory individually (derives session key once — one KDF cost for the whole run)
+
+.PP
 \fB--session-key\fP=""
 	Pre-derived 64-char hex key (bypasses KDF — use 'maknoon session derive' to generate)
 

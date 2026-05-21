@@ -27,6 +27,7 @@ func EncryptCmd() *cobra.Command {
 	var profileFile string
 	var tofu bool
 	var shred bool
+	var recursive bool
 
 	// KDF overrides
 	var argonTime uint32
@@ -49,6 +50,45 @@ func EncryptCmd() *cobra.Command {
 				if f, ok := input.(*os.File); ok && f != os.Stdin {
 					_ = f.Close()
 				}
+			}
+
+			// --recursive: encrypt each file in the directory individually,
+			// auto-deriving one session key for the run (one Argon2id call total).
+			if recursive && isDir {
+				opts := crypto.Options{}
+				if cmd.Flags().Changed("compress") {
+					opts.Compress = crypto.BoolPtr(compress)
+				}
+				if cmd.Flags().Changed("stealth") {
+					opts.Stealth = crypto.BoolPtr(stealth)
+				}
+				if err := resolveEncryptionKeysMulti(&opts, pubKeyPaths, passphrase, inputPath, tofu); err != nil {
+					p.RenderError(err)
+					return err
+				}
+				defer func() {
+					crypto.SafeClear(opts.Passphrase)
+					crypto.SafeClear(opts.SigningKey)
+				}()
+
+				res, err := GlobalContext.Engine.ProtectDirectory(nil, inputPath, output, opts)
+				if err != nil {
+					p.RenderError(err)
+					return err
+				}
+
+				if !quiet {
+					kdfNote := ""
+					if res.SessionKeyDerived {
+						kdfNote = " (session key auto-derived — KDF ran once)"
+					}
+					fmt.Fprintf(os.Stderr, "✓ %d file(s) encrypted%s\n", res.TotalFiles, kdfNote)
+					for _, e := range res.Errors {
+						fmt.Fprintf(os.Stderr, "  ✗ %s: %s\n", e.Path, e.Err)
+					}
+				}
+				p.RenderSuccess(res)
+				return nil
 			}
 
 			out, _, err := resolveEncryptOutput(output, inputPath)
@@ -175,6 +215,7 @@ func EncryptCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&stealth, "stealth", false, "Enable fingerprint resistance (headerless)")
 	cmd.Flags().BoolVar(&tofu, "trust-on-first-use", false, "Automatically add unknown signers to contacts")
 	cmd.Flags().BoolVar(&shred, "shred", false, "Securely delete original file after successful encryption")
+	cmd.Flags().BoolVarP(&recursive, "recursive", "r", false, "Encrypt each file in a directory individually (derives session key once — one KDF cost for the whole run)")
 	cmd.Flags().StringVar(&profileStr, "profile", "", "Cryptographic profile (nist, conservative)")
 	cmd.Flags().StringVar(&profileFile, "profile-file", "", "Path to a custom profile JSON file")
 

@@ -55,6 +55,23 @@ func (e *AuditEngine) Protect(ectx *EngineContext, inputName string, r io.Reader
 	return res, err
 }
 
+func (e *AuditEngine) ProtectDirectory(ectx *EngineContext, inputDir, outputDir string, opts Options) (*RecursiveEncryptResult, error) {
+	start := time.Now()
+	res, err := e.Engine.ProtectDirectory(ectx, inputDir, outputDir, opts)
+	files := 0
+	if res != nil {
+		files = res.TotalFiles
+	}
+	e.Logger.LogEvent("protect_directory", map[string]any{
+		"input_dir":           e.sanitizePath(inputDir),
+		"output_dir":          e.sanitizePath(outputDir),
+		"files_encrypted":     files,
+		"session_key_derived": res != nil && res.SessionKeyDerived,
+		"duration_ms":         time.Since(start).Milliseconds(),
+	}, err)
+	return res, err
+}
+
 func (e *AuditEngine) Unprotect(ectx *EngineContext, r io.Reader, w io.Writer, outPath string, opts Options) (DecryptResult, error) {
 	start := time.Now()
 	res, err := e.Engine.Unprotect(ectx, r, w, outPath, opts)

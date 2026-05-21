@@ -4,6 +4,10 @@ import (
 	"crypto/rand"
 	"fmt"
 	"io"
+	"io/fs"
+	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/awnumar/memguard"
 )
@@ -12,6 +16,10 @@ import (
 
 func (e *Engine) Protect(ectx *EngineContext, inputName string, r io.Reader, w io.Writer, opts Options) (EncryptResult, error) {
 	return e.Crypto.Protect(ectx, inputName, r, w, opts)
+}
+
+func (e *Engine) ProtectDirectory(ectx *EngineContext, inputDir, outputDir string, opts Options) (*RecursiveEncryptResult, error) {
+	return e.Crypto.ProtectDirectory(ectx, inputDir, outputDir, opts)
 }
 
 func (e *Engine) Unprotect(ectx *EngineContext, r io.Reader, w io.Writer, outPath string, opts Options) (DecryptResult, error) {
@@ -47,6 +55,118 @@ func (e *Engine) Inspect(ectx *EngineContext, in io.Reader, stealth bool) (*Head
 }
 
 // --- CryptoService Implementation ---
+
+// ProtectDirectory encrypts every file in inputDir individually, writing
+// output alongside each file (path + ".makn") or into outputDir when set.
+// On the passphrase path it auto-derives a session key once so Argon2id runs
+// exactly once regardless of how many files the directory contains.
+func (s *CryptoService) ProtectDirectory(ectx *EngineContext, inputDir, outputDir string, opts Options) (*RecursiveEncryptResult, error) {
+	ectx = s.engine.context(ectx)
+	if err := s.engine.enforce(ectx, CapProtect); err != nil {
+		return nil, err
+	}
+
+	cleanDir := filepath.Clean(inputDir)
+	if err := ectx.Policy.ValidatePath(cleanDir); err != nil {
+		return nil, err
+	}
+	info, err := os.Stat(cleanDir)
+	if err != nil || !info.IsDir() {
+		return nil, &ErrIO{Path: inputDir, Reason: "not a directory"}
+	}
+
+	// Auto-derive a session key when using a passphrase so Argon2id runs once
+	// for the entire directory rather than once per file.
+	fileOpts := opts
+	var sessionKeyDerived bool
+	if len(opts.Recipients) == 0 && len(opts.SessionKey) == 0 && len(opts.Passphrase) > 0 {
+		key, salt, err := DeriveSessionKey(opts.Passphrase)
+		if err != nil {
+			return nil, fmt.Errorf("session key derivation failed: %w", err)
+		}
+		defer SafeClear(key)
+		fileOpts.SessionKey = key
+		fileOpts.SessionSalt = salt
+		fileOpts.Passphrase = nil
+		sessionKeyDerived = true
+	}
+
+	result := &RecursiveEncryptResult{SessionKeyDerived: sessionKeyDerived}
+
+	walkErr := filepath.WalkDir(cleanDir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			return nil
+		}
+		// Skip files that are already encrypted.
+		if strings.HasSuffix(path, ".makn") {
+			result.Skipped = append(result.Skipped, path)
+			return nil
+		}
+
+		rel, err := filepath.Rel(cleanDir, path)
+		if err != nil {
+			result.Errors = append(result.Errors, RecursiveFileError{Path: path, Err: err.Error()})
+			return nil
+		}
+
+		var outPath string
+		if outputDir != "" {
+			outPath = filepath.Join(filepath.Clean(outputDir), rel+".makn")
+		} else {
+			outPath = path + ".makn"
+		}
+
+		if err := os.MkdirAll(filepath.Dir(outPath), 0700); err != nil {
+			result.Errors = append(result.Errors, RecursiveFileError{Path: path, Err: err.Error()})
+			return nil
+		}
+
+		in, err := os.Open(path)
+		if err != nil {
+			result.Errors = append(result.Errors, RecursiveFileError{Path: path, Err: err.Error()})
+			return nil
+		}
+		defer in.Close()
+
+		fi, _ := in.Stat()
+		fileBytes := fi.Size()
+
+		out, err := os.Create(outPath)
+		if err != nil {
+			result.Errors = append(result.Errors, RecursiveFileError{Path: path, Err: err.Error()})
+			return nil
+		}
+		defer out.Close()
+
+		if _, err := s.engine.ProtectStream(ectx, filepath.Base(path), in, out, fileOpts); err != nil {
+			_ = os.Remove(outPath)
+			result.Errors = append(result.Errors, RecursiveFileError{Path: path, Err: err.Error()})
+			return nil
+		}
+
+		result.Encrypted = append(result.Encrypted, RecursiveFileResult{
+			Input:  path,
+			Output: outPath,
+			Bytes:  fileBytes,
+		})
+		result.TotalBytes += fileBytes
+		return nil
+	})
+
+	if walkErr != nil {
+		return nil, walkErr
+	}
+
+	result.TotalFiles = len(result.Encrypted)
+	result.Status = "success"
+	if len(result.Errors) > 0 {
+		result.Status = "partial"
+	}
+	return result, nil
+}
 
 func (s *CryptoService) Protect(ectx *EngineContext, inputName string, r io.Reader, w io.Writer, opts Options) (EncryptResult, error) {
 	ectx = s.engine.context(ectx)

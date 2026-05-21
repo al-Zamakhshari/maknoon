@@ -16,15 +16,17 @@ import (
 
 func registerCryptoTools(s *server.MCPServer, engine crypto.MaknoonEngine) {
 	s.AddTool(mcp.NewTool("encrypt_file",
-		mcp.WithDescription("Encrypt a file or directory using PQC hybrid encryption"),
+		mcp.WithDescription("Encrypt a file or directory using PQC hybrid encryption. Set recursive=true to encrypt each file in a directory individually — the passphrase KDF runs once for the whole run, not once per file."),
 		mcp.WithString("input", mcp.Required(), mcp.Description("Path to file or directory to encrypt")),
-		mcp.WithString("output", mcp.Required(), mcp.Description("Output path for the .makn file")),
+		mcp.WithString("output", mcp.Required(), mcp.Description("Output path for the .makn file, or output directory when recursive=true")),
 		mcp.WithString("public_keys", mcp.Description("Comma-separated list of recipient key paths, petnames, or @nostr handles (multi-recipient)")),
 		mcp.WithNumber("profile", mcp.Description("Cryptographic profile ID: 1=NIST (ML-KEM+ML-DSA), 3=Conservative (FrodoKEM+SLH-DSA)")),
+		mcp.WithBoolean("recursive", mcp.Description("Encrypt each file in a directory individually (one KDF call total). Produces a .makn file per input file.")),
 	), func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		args := getArgs(request)
 		input := getString(args, "input", "")
 		output := getString(args, "output", "")
+		recursive := getBool(args, "recursive", false)
 
 		opts := crypto.Options{}
 		if passRaw := viper.GetString("passphrase"); passRaw != "" {
@@ -55,6 +57,17 @@ func registerCryptoTools(s *server.MCPServer, engine crypto.MaknoonEngine) {
 		if err != nil {
 			return crypto.FormatMCPError(err, "encrypt_file")
 		}
+
+		// Recursive directory encryption — one session key for all files.
+		if recursive && fi.IsDir() {
+			res, err := engine.ProtectDirectory(&crypto.EngineContext{Context: ctx}, input, output, opts)
+			if err != nil {
+				return crypto.FormatMCPError(err, "encrypt_file")
+			}
+			outData, _ := json.Marshal(res)
+			return mcp.NewToolResultText(string(outData)), nil
+		}
+
 		opts.IsArchive = fi.IsDir()
 
 		in, err := os.Open(input)

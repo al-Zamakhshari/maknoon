@@ -414,6 +414,14 @@
         "required": false
       },
       {
+        "name": "recursive",
+        "shorthand": "r",
+        "description": "Encrypt each file in a directory individually (derives session key once — one KDF cost for the whole run)",
+        "type": "bool",
+        "default": "false",
+        "required": false
+      },
+      {
         "name": "session-key",
         "shorthand": "",
         "description": "Pre-derived 64-char hex key (bypasses KDF — use 'maknoon session derive' to generate)",

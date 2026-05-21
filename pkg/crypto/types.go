@@ -69,6 +69,30 @@ type TrustInfo struct {
 	Petname   string `json:"petname,omitempty"`
 }
 
+// RecursiveEncryptResult is the output of ProtectDirectory.
+type RecursiveEncryptResult struct {
+	Status            string                `json:"status"` // "success" or "partial"
+	Encrypted         []RecursiveFileResult `json:"encrypted"`
+	Skipped           []string              `json:"skipped,omitempty"`
+	Errors            []RecursiveFileError  `json:"errors,omitempty"`
+	TotalFiles        int                   `json:"total_files"`
+	TotalBytes        int64                 `json:"total_bytes"`
+	SessionKeyDerived bool                  `json:"session_key_derived"` // true when KDF ran once for all files
+}
+
+// RecursiveFileResult is one successfully encrypted file within a recursive run.
+type RecursiveFileResult struct {
+	Input  string `json:"input"`
+	Output string `json:"output"`
+	Bytes  int64  `json:"bytes"`
+}
+
+// RecursiveFileError records a per-file failure within a recursive run.
+type RecursiveFileError struct {
+	Path string `json:"path"`
+	Err  string `json:"error"`
+}
+
 // SignedByEvidence provides information about the signer of a file.
 type SignedByEvidence struct {
 	GID       string `json:"gid"`
