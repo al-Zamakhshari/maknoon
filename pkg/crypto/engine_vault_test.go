@@ -7,6 +7,122 @@ import (
 	"time"
 )
 
+// --- VaultSession tests ---
+
+func TestVaultSessionUnlockGet(t *testing.T) {
+	e := engineForVault(t)
+	pass := []byte("session-pass")
+	entry := &VaultEntry{Service: "svc", Password: []byte("secret")}
+
+	// Populate the vault.
+	if err := e.VaultSet(nil, "sess.vault", entry, pass, "", false); err != nil {
+		t.Fatalf("VaultSet: %v", err)
+	}
+
+	// Unlock — derives key once.
+	if err := e.VaultUnlock(nil, "sess.vault", pass, 60); err != nil {
+		t.Fatalf("VaultUnlock: %v", err)
+	}
+
+	// Get with nil passphrase — must use session key.
+	got, err := e.VaultGet(nil, "sess.vault", "svc", nil, "")
+	if err != nil {
+		t.Fatalf("VaultGet with session: %v", err)
+	}
+	if string(got.Password) != "secret" {
+		t.Errorf("password = %q, want %q", got.Password, "secret")
+	}
+}
+
+func TestVaultSessionUnlockList(t *testing.T) {
+	e := engineForVault(t)
+	pass := []byte("list-session-pass")
+	for _, svc := range []string{"a", "b", "c"} {
+		e.VaultSet(nil, "listses.vault", &VaultEntry{Service: svc, Password: []byte("x")}, pass, "", false)
+	}
+
+	if err := e.VaultUnlock(nil, "listses.vault", pass, 60); err != nil {
+		t.Fatalf("VaultUnlock: %v", err)
+	}
+
+	entries, err := e.VaultList(nil, "listses.vault", nil)
+	if err != nil {
+		t.Fatalf("VaultList with session: %v", err)
+	}
+	if len(entries) != 3 {
+		t.Errorf("expected 3 entries, got %d", len(entries))
+	}
+}
+
+func TestVaultSessionLock(t *testing.T) {
+	e := engineForVault(t)
+	pass := []byte("lock-pass")
+	e.VaultSet(nil, "lock2.vault", &VaultEntry{Service: "s", Password: []byte("x")}, pass, "", false)
+	e.VaultUnlock(nil, "lock2.vault", pass, 60)
+
+	// Lock immediately.
+	if err := e.VaultLock(nil, "lock2.vault"); err != nil {
+		t.Fatalf("VaultLock: %v", err)
+	}
+
+	// Get with nil passphrase must fail — session is gone, no KDF possible.
+	_, err := e.VaultGet(nil, "lock2.vault", "s", nil, "")
+	if err == nil {
+		t.Error("expected error after VaultLock with nil passphrase")
+	}
+}
+
+func TestVaultSessionExpiry(t *testing.T) {
+	e := engineForVault(t)
+	pass := []byte("expiry-sess-pass")
+	e.VaultSet(nil, "expiry2.vault", &VaultEntry{Service: "s", Password: []byte("x")}, pass, "", false)
+
+	// Unlock with a 1-second TTL.
+	if err := e.VaultUnlock(nil, "expiry2.vault", pass, 1); err != nil {
+		t.Fatalf("VaultUnlock: %v", err)
+	}
+
+	// Should work immediately.
+	if _, err := e.VaultGet(nil, "expiry2.vault", "s", nil, ""); err != nil {
+		t.Fatalf("VaultGet within TTL: %v", err)
+	}
+
+	// Wait for TTL to expire.
+	time.Sleep(1200 * time.Millisecond)
+
+	// Session expired — nil passphrase must fail.
+	_, err := e.VaultGet(nil, "expiry2.vault", "s", nil, "")
+	if err == nil {
+		t.Error("expected error after session TTL expiry with nil passphrase")
+	}
+}
+
+func TestVaultSessionWrongKeyCleared(t *testing.T) {
+	e := engineForVault(t)
+	correctPass := []byte("correct")
+	wrongPass := []byte("wrong")
+
+	e.VaultSet(nil, "wk.vault", &VaultEntry{Service: "s", Password: []byte("v")}, correctPass, "", false)
+
+	// Unlock with wrong passphrase — key is cached but wrong.
+	e.VaultUnlock(nil, "wk.vault", wrongPass, 60)
+
+	// Get should fail and clear the bad session.
+	_, err := e.VaultGet(nil, "wk.vault", "s", wrongPass, "")
+	if err == nil {
+		t.Error("expected error when using wrong session key")
+	}
+
+	// After the bad session is cleared, correct passphrase should work normally.
+	got, err := e.VaultGet(nil, "wk.vault", "s", correctPass, "")
+	if err != nil {
+		t.Fatalf("VaultGet with correct passphrase after bad session: %v", err)
+	}
+	if string(got.Password) != "v" {
+		t.Errorf("password = %q, want %q", got.Password, "v")
+	}
+}
+
 // engineForVault returns a fully initialised engine wired to a temp HOME.
 func engineForVault(t *testing.T) *Engine {
 	t.Helper()

@@ -150,7 +150,7 @@ func NewEngine(policy SecurityPolicy, idMgr *IdentityManager, conf *Config, vaul
 	}
 
 	// Initialize Services
-	e.Vault = &VaultService{engine: e, Store: vaultStore}
+	e.Vault = &VaultService{engine: e, Store: vaultStore, sessions: make(map[string]*vaultSession)}
 	e.Identity = &IdentityService{engine: e, Mgr: idMgr}
 	e.Network = &NetworkService{engine: e}
 	e.Crypto = &CryptoService{engine: e}
@@ -217,6 +217,9 @@ func NewStreamEngine(conf *Config) *Engine {
 }
 
 func (e *Engine) Close() error {
+	if e.Vault != nil {
+		e.Vault.LockAll()
+	}
 	if e.Contacts != nil {
 		return e.Contacts.Close()
 	}

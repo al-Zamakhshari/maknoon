@@ -46,8 +46,36 @@ func registerVaultTools(s *server.MCPServer, engine crypto.MaknoonEngine) {
 		return mcp.NewToolResultText(string(outData)), nil
 	})
 
+	s.AddTool(mcp.NewTool("vault_unlock",
+		mcp.WithDescription("Derive the vault key once and cache it for the session TTL (default 5 min). Subsequent vault_get/vault_set/vault_list calls skip Argon2id entirely — use this before any bulk vault operation."),
+		mcp.WithString("vault", mcp.Description("Vault name (default: default)")),
+		mcp.WithNumber("ttl_seconds", mcp.Description("Session lifetime in seconds (default: 300)")),
+	), func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		args := getArgs(request)
+		vault := getString(args, "vault", "default")
+		ttl := getInt(args, "ttl_seconds", 0)
+		pass := crypto.SecretBytes(viper.GetString("passphrase"))
+		if err := engine.VaultUnlock(&crypto.EngineContext{Context: ctx}, vault, pass, ttl); err != nil {
+			return crypto.FormatMCPError(err, "vault_unlock")
+		}
+		out, _ := json.Marshal(map[string]any{"status": "unlocked", "vault": vault, "ttl_seconds": ttl})
+		return mcp.NewToolResultText(string(out)), nil
+	})
+
+	s.AddTool(mcp.NewTool("vault_lock",
+		mcp.WithDescription("Immediately wipe the cached session key for the named vault."),
+		mcp.WithString("vault", mcp.Description("Vault name (default: default)")),
+	), func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		vault := getString(getArgs(request), "vault", "default")
+		if err := engine.VaultLock(&crypto.EngineContext{Context: ctx}, vault); err != nil {
+			return crypto.FormatMCPError(err, "vault_lock")
+		}
+		out, _ := json.Marshal(map[string]any{"status": "locked", "vault": vault})
+		return mcp.NewToolResultText(string(out)), nil
+	})
+
 	s.AddTool(mcp.NewTool("vault_get",
-		mcp.WithDescription("Retrieve a secret from the vault. Each call runs a full Argon2id KDF (~60 ms). For bulk operations, retrieve the credential once and pass it downstream rather than calling vault_get per operation."),
+		mcp.WithDescription("Retrieve a secret from the vault. Each call runs Argon2id KDF (~60 ms) unless vault_unlock was called first."),
 		mcp.WithString("service", mcp.Required(), mcp.Description("Service or key name to retrieve")),
 		mcp.WithString("vault", mcp.Description("Vault name (default: default)")),
 	), func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {

@@ -113,6 +113,13 @@ type VaultManager interface {
 	VaultCheckShards(ectx *EngineContext, mnemonics []string) (*VaultResult, error)
 	VaultSplit(ectx *EngineContext, vaultPath string, threshold, shares int, passphrase string) ([]string, error)
 	VaultRecover(ectx *EngineContext, mnemonics []string, vaultPath string, output string, passphrase string) (string, error)
+
+	// VaultUnlock derives the vault key once and caches it for ttlSeconds,
+	// eliminating per-operation Argon2id cost on subsequent Get/Set/List calls.
+	// If ttlSeconds is 0 the engine config or default (300 s) is used.
+	VaultUnlock(ectx *EngineContext, name string, passphrase []byte, ttlSeconds int) error
+	// VaultLock immediately wipes the cached session key for the named vault.
+	VaultLock(ectx *EngineContext, name string) error
 }
 
 // Utils provides secure generation helpers.

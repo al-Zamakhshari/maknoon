@@ -535,6 +535,23 @@ func (e *AuditEngine) VaultCheckShards(ectx *EngineContext, mnemonics []string) 
 	return res, err
 }
 
+func (e *AuditEngine) VaultUnlock(ectx *EngineContext, name string, passphrase []byte, ttlSeconds int) error {
+	start := time.Now()
+	err := e.Engine.VaultUnlock(ectx, name, passphrase, ttlSeconds)
+	e.Logger.LogEvent("vault_unlock", map[string]any{
+		"vault":       name,
+		"ttl_seconds": ttlSeconds,
+		"duration_ms": time.Since(start).Milliseconds(),
+	}, err)
+	return err
+}
+
+func (e *AuditEngine) VaultLock(ectx *EngineContext, name string) error {
+	err := e.Engine.VaultLock(ectx, name)
+	e.Logger.LogEvent("vault_lock", map[string]any{"vault": name}, err)
+	return err
+}
+
 func (e *AuditEngine) Close() error {
 	var errs []string
 	if err := e.Engine.Close(); err != nil {

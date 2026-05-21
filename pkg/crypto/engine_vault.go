@@ -57,6 +57,14 @@ func (e *Engine) VaultRotate(ectx *EngineContext, vaultPath string, oldPassphras
 	return e.Vault.Rotate(ectx, vaultPath, oldPassphrase, newPassphrase)
 }
 
+func (e *Engine) VaultUnlock(ectx *EngineContext, name string, passphrase []byte, ttlSeconds int) error {
+	return e.Vault.Unlock(ectx, name, passphrase, ttlSeconds)
+}
+
+func (e *Engine) VaultLock(ectx *EngineContext, name string) error {
+	return e.Vault.Lock(ectx, name)
+}
+
 // --- VaultService Implementation ---
 
 func (s *VaultService) InitInstitutional(ectx *EngineContext, name string, threshold, shares int, peerIDs []string, passphrase []byte) (*VaultResult, error) {
@@ -197,7 +205,12 @@ func (s *VaultService) Set(ectx *EngineContext, vaultPath string, entry *VaultEn
 			}
 		}
 
-		key := DeriveVaultKey(passphrase, salt)
+		var key []byte
+		if sk := s.sessionKey(path); sk != nil {
+			key = sk
+		} else {
+			key = DeriveVaultKey(passphrase, salt)
+		}
 		defer SafeClear(key)
 
 		payload, err := SealEntry(entry, key)
@@ -375,6 +388,8 @@ func (s *VaultService) Get(ectx *EngineContext, vaultPath string, service string
 		defer SafeClear(finalPassphrase)
 	}
 
+	// Use a cached session key if available — avoids a full Argon2id derivation.
+	var usingSession bool
 	var entry *VaultEntry
 	err = store.View(func(tx Transaction) error {
 		salt := tx.Get(metaBucket, saltKey)
@@ -389,7 +404,13 @@ func (s *VaultService) Get(ectx *EngineContext, vaultPath string, service string
 			return &ErrState{Reason: fmt.Sprintf("service '%s' not found", service)}
 		}
 
-		key := DeriveVaultKey(finalPassphrase, salt)
+		var key []byte
+		if sk := s.sessionKey(path); sk != nil {
+			key = sk
+			usingSession = true
+		} else {
+			key = DeriveVaultKey(finalPassphrase, salt)
+		}
 		defer SafeClear(key)
 
 		var err error
@@ -399,6 +420,10 @@ func (s *VaultService) Get(ectx *EngineContext, vaultPath string, service string
 
 	var authErr *ErrAuthentication
 	if isErrAuthentication(err, &authErr) {
+		if usingSession {
+			// Cached key is wrong — wipe the session so the next call re-derives.
+			s.expireSession(path)
+		}
 		s.recordFailedAttempt(path)
 	} else if err == nil {
 		s.clearAttempts(path)
@@ -524,7 +549,12 @@ func (s *VaultService) List(ectx *EngineContext, vaultPath string, passphrase []
 			return &ErrAuthentication{Reason: "vault salt missing"}
 		}
 
-		key := DeriveVaultKey(finalPassphrase, salt)
+		var key []byte
+		if sk := s.sessionKey(path); sk != nil {
+			key = sk
+		} else {
+			key = DeriveVaultKey(finalPassphrase, salt)
+		}
 		defer SafeClear(key)
 
 		return tx.ForEach(vaultBucket, func(_, v []byte) error {

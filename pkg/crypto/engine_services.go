@@ -1,11 +1,16 @@
 package crypto
 
-import "context"
+import (
+	"context"
+	"sync"
+)
 
 // VaultService handles secure credential storage logic.
 type VaultService struct {
-	engine *Engine
-	Store  VaultStore
+	engine   *Engine
+	Store    VaultStore
+	sessMu   sync.RWMutex
+	sessions map[string]*vaultSession // keyed by resolved vault path
 }
 
 // IdentityService handles identity lifecycle and discovery logic.

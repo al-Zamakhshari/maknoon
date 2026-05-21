@@ -19,21 +19,22 @@ const (
 
 // Config represents the global settings for Maknoon.
 type Config struct {
-	DefaultIdentity      string                     `json:"default_identity" mapstructure:"default_identity"`
-	IdentityRegistries   []string                   `json:"identity_registries,omitempty" mapstructure:"identity_registries"`
-	IdentityRecordTTL    int                        `json:"identity_record_ttl_hours,omitempty" mapstructure:"identity_record_ttl_hours"` // hours; 0 = use default (48h)
-	Audit                AuditConfig                `json:"audit,omitempty" mapstructure:"audit"`
-	Security             SecurityConfig             `json:"security" mapstructure:"security"`
-	Performance          PerformanceConfig          `json:"performance" mapstructure:"performance"`
-	AgentLimits          AgentLimitsConfig          `json:"agent_limits" mapstructure:"agent_limits"`
-	BEP44                BEP44Config                `json:"bep44" mapstructure:"bep44"`
-	Tunnel               TunnelConfig               `json:"tunnel" mapstructure:"tunnel"`
-	Paths                PathConfig                 `json:"paths" mapstructure:"paths"`
-	VaultBackend         string                     `json:"vault_backend" mapstructure:"vault_backend"`                     // bbolt or badger
-	VaultMaxFailAttempts int                        `json:"vault_max_fail_attempts" mapstructure:"vault_max_fail_attempts"` // 0 = disabled, default 10
-	VaultLockoutMinutes  int                        `json:"vault_lockout_minutes" mapstructure:"vault_lockout_minutes"`     // default 15
-	Profiles             map[string]*DynamicProfile `json:"profiles,omitempty" mapstructure:"profiles"`
-	Governance           GovernanceConfig           `json:"governance" mapstructure:"governance"`
+	DefaultIdentity        string                     `json:"default_identity" mapstructure:"default_identity"`
+	IdentityRegistries     []string                   `json:"identity_registries,omitempty" mapstructure:"identity_registries"`
+	IdentityRecordTTL      int                        `json:"identity_record_ttl_hours,omitempty" mapstructure:"identity_record_ttl_hours"` // hours; 0 = use default (48h)
+	Audit                  AuditConfig                `json:"audit,omitempty" mapstructure:"audit"`
+	Security               SecurityConfig             `json:"security" mapstructure:"security"`
+	Performance            PerformanceConfig          `json:"performance" mapstructure:"performance"`
+	AgentLimits            AgentLimitsConfig          `json:"agent_limits" mapstructure:"agent_limits"`
+	BEP44                  BEP44Config                `json:"bep44" mapstructure:"bep44"`
+	Tunnel                 TunnelConfig               `json:"tunnel" mapstructure:"tunnel"`
+	Paths                  PathConfig                 `json:"paths" mapstructure:"paths"`
+	VaultBackend           string                     `json:"vault_backend" mapstructure:"vault_backend"`                         // bbolt or badger
+	VaultMaxFailAttempts   int                        `json:"vault_max_fail_attempts" mapstructure:"vault_max_fail_attempts"`     // 0 = disabled, default 10
+	VaultLockoutMinutes    int                        `json:"vault_lockout_minutes" mapstructure:"vault_lockout_minutes"`         // default 15
+	VaultSessionTTLSeconds int                        `json:"vault_session_ttl_seconds" mapstructure:"vault_session_ttl_seconds"` // 0 = default (300 s)
+	Profiles               map[string]*DynamicProfile `json:"profiles,omitempty" mapstructure:"profiles"`
+	Governance             GovernanceConfig           `json:"governance" mapstructure:"governance"`
 }
 
 type GovernanceConfig struct {
