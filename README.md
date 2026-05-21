@@ -1,5 +1,6 @@
-# Maknoon (مكنون)
-> **Post-Quantum Cryptography for the AI Age**
+<p align="center">
+  <img src="banner.png" alt="Maknoon — post-quantum cryptography engine" width="100%">
+</p>
 
 [![Release](https://img.shields.io/github/v/release/al-Zamakhshari/maknoon)](https://github.com/al-Zamakhshari/maknoon/releases)
 [![CI](https://github.com/al-Zamakhshari/maknoon/actions/workflows/ci.yml/badge.svg)](https://github.com/al-Zamakhshari/maknoon/actions/workflows/ci.yml)
