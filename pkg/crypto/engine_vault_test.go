@@ -530,3 +530,146 @@ func TestProtectDirectorySkipsAlreadyEncrypted(t *testing.T) {
 		t.Errorf("expected 1 skipped file, got %d", len(res.Skipped))
 	}
 }
+
+// --- ResolveIdentityInfo ---
+
+func TestResolveIdentityInfoLocalFile(t *testing.T) {
+	e := engineForVault(t)
+	tmp := t.TempDir()
+	// Create a keygen identity.
+	ectx := &EngineContext{Context: nil, Policy: &HumanPolicy{}}
+	res, err := e.CreateIdentity(ectx, filepath.Join(tmp, "alice"), nil, "", false, "nist")
+	if err != nil {
+		t.Fatalf("CreateIdentity: %v", err)
+	}
+
+	// Resolve the KEM public key file path.
+	record, err := e.ResolveIdentityInfo(nil, res.BasePath+".kem.pub", false)
+	if err != nil {
+		t.Fatalf("ResolveIdentityInfo local: %v", err)
+	}
+	if len(record.KEMPubKey) == 0 {
+		t.Error("expected non-empty KEMPubKey for local file resolution")
+	}
+	// Local file resolution does not populate SIGPubKey — that's expected.
+	if len(record.SIGPubKey) != 0 {
+		t.Error("local file resolution should not populate SIGPubKey")
+	}
+}
+
+// --- DecryptDirectory ---
+
+func TestDecryptDirectory(t *testing.T) {
+	e := engineForVault(t)
+	pass := []byte("dir-decrypt-pass")
+
+	src := t.TempDir()
+	enc := t.TempDir()
+	dec := t.TempDir()
+
+	// Write three plaintext files and encrypt them.
+	for i, content := range []string{"aaa", "bbb", "ccc"} {
+		p := filepath.Join(src, fmt.Sprintf("f%d.txt", i))
+		os.WriteFile(p, []byte(content), 0600)
+	}
+
+	encRes, err := e.ProtectDirectory(nil, src, enc, Options{Passphrase: pass})
+	if err != nil {
+		t.Fatalf("ProtectDirectory: %v", err)
+	}
+	if encRes.TotalFiles != 3 {
+		t.Fatalf("expected 3 encrypted files, got %d", encRes.TotalFiles)
+	}
+
+	// Decrypt the directory.
+	decRes, err := e.DecryptDirectory(nil, enc, dec, Options{Passphrase: pass})
+	if err != nil {
+		t.Fatalf("DecryptDirectory: %v", err)
+	}
+	if decRes.TotalFiles != 3 {
+		t.Errorf("expected 3 decrypted files, got %d", decRes.TotalFiles)
+	}
+	if decRes.Status != "success" {
+		t.Errorf("status = %q, want success", decRes.Status)
+	}
+
+	// Verify content of one recovered file.
+	for i, want := range []string{"aaa", "bbb", "ccc"} {
+		got, err := os.ReadFile(filepath.Join(dec, fmt.Sprintf("f%d.txt", i)))
+		if err != nil {
+			t.Errorf("f%d.txt not found: %v", i, err)
+			continue
+		}
+		if strings.TrimSpace(string(got)) != want {
+			t.Errorf("f%d.txt = %q, want %q", i, got, want)
+		}
+	}
+}
+
+func TestDecryptDirectoryPartialFailure(t *testing.T) {
+	e := engineForVault(t)
+	pass := []byte("partial-pass")
+	dir := t.TempDir()
+
+	// Put a non-.makn file — should be skipped, not an error.
+	os.WriteFile(filepath.Join(dir, "not-encrypted.txt"), []byte("plain"), 0600)
+	// Put a corrupt .makn file — should produce an error entry.
+	os.WriteFile(filepath.Join(dir, "corrupt.makn"), []byte("not a real makn file"), 0600)
+
+	res, err := e.DecryptDirectory(nil, dir, "", Options{Passphrase: pass})
+	if err != nil {
+		t.Fatalf("unexpected fatal error: %v", err)
+	}
+	if res.Status != "partial" {
+		t.Errorf("status = %q, want partial", res.Status)
+	}
+	if len(res.Errors) == 0 {
+		t.Error("expected at least one error for corrupt.makn")
+	}
+	if len(res.Skipped) == 0 {
+		t.Error("expected not-encrypted.txt to be skipped")
+	}
+}
+
+// --- ProtectFiles / DecryptFiles ---
+
+func TestProtectFilesAndDecryptFiles(t *testing.T) {
+	e := engineForVault(t)
+	pass := []byte("files-pass")
+	tmp := t.TempDir()
+
+	// Create source files.
+	files := []string{}
+	for i, content := range []string{"x", "y", "z"} {
+		p := filepath.Join(tmp, fmt.Sprintf("src%d.txt", i))
+		os.WriteFile(p, []byte(content), 0600)
+		files = append(files, p)
+	}
+
+	outDir := t.TempDir()
+	res, err := e.ProtectFiles(nil, files, outDir, Options{Passphrase: pass})
+	if err != nil {
+		t.Fatalf("ProtectFiles: %v", err)
+	}
+	if res.TotalFiles != 3 {
+		t.Errorf("expected 3 files, got %d", res.TotalFiles)
+	}
+	if !res.SessionKeyDerived {
+		t.Error("expected session key auto-derived for passphrase path")
+	}
+
+	// Collect .makn paths.
+	makns := []string{}
+	for _, r := range res.Encrypted {
+		makns = append(makns, r.Output)
+	}
+
+	decDir := t.TempDir()
+	decRes, err := e.DecryptFiles(nil, makns, decDir, Options{Passphrase: pass})
+	if err != nil {
+		t.Fatalf("DecryptFiles: %v", err)
+	}
+	if decRes.TotalFiles != 3 {
+		t.Errorf("expected 3 decrypted files, got %d", decRes.TotalFiles)
+	}
+}
