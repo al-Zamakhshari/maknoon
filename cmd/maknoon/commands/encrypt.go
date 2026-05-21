@@ -82,9 +82,9 @@ func EncryptCmd() *cobra.Command {
 					if res.SessionKeyDerived {
 						kdfNote = " (session key auto-derived — KDF ran once)"
 					}
-					fmt.Fprintf(os.Stderr, "✓ %d file(s) encrypted%s\n", res.TotalFiles, kdfNote)
+					fmt.Fprintf(os.Stderr, "%s %d file(s) encrypted%s\n", icon("✓", "ok"), res.TotalFiles, kdfNote)
 					for _, e := range res.Errors {
-						fmt.Fprintf(os.Stderr, "  ✗ %s: %s\n", e.Path, e.Err)
+						fmt.Fprintf(os.Stderr, "  %s %s: %s\n", icon("✗", "FAIL"), e.Path, e.Err)
 					}
 				}
 				p.RenderSuccess(res)

@@ -2,6 +2,7 @@ package commands
 
 import (
 	"bufio"
+	"bytes"
 	"crypto/tls"
 	"encoding/hex"
 	"encoding/json"
@@ -21,6 +22,20 @@ import (
 	"github.com/spf13/viper"
 	"golang.org/x/term"
 )
+
+// noColor returns true when the terminal does not support colour output.
+// Respects the NO_COLOR convention (https://no-color.org/) and TERM=dumb.
+func noColor() bool {
+	return os.Getenv("NO_COLOR") != "" || os.Getenv("TERM") == "dumb"
+}
+
+// icon returns the emoji variant when colour is supported, plain text otherwise.
+func icon(emoji, plain string) string {
+	if noColor() {
+		return plain
+	}
+	return emoji
+}
 
 // GlobalContext stores shared state for CLI commands.
 var GlobalContext struct {
@@ -126,7 +141,7 @@ func (h *UIHandler) SecurePrint(secret string) {
 	if h.Interactive {
 		fmt.Fprintln(h.Stdout, secret)
 	} else {
-		fmt.Fprintln(h.Stderr, "⚠️  Warning: Sensitive output suppressed because stdout is not a terminal.")
+		fmt.Fprintln(h.Stderr, icon("⚠️  Warning:", "WARNING:")+` Sensitive output suppressed because stdout is not a terminal.`)
 		fmt.Fprintln(h.Stderr, "   Use --json for machine-readable output or redirect with care.")
 	}
 }
@@ -140,7 +155,7 @@ func (h *UIHandler) SecurePrintf(format string, args ...any) {
 	if h.Interactive {
 		fmt.Fprintf(h.Stdout, format, args...)
 	} else {
-		fmt.Fprintln(h.Stderr, "⚠️  Warning: Sensitive output suppressed because stdout is not a terminal.")
+		fmt.Fprintln(h.Stderr, icon("⚠️  Warning:", "WARNING:")+` Sensitive output suppressed because stdout is not a terminal.`)
 	}
 }
 
@@ -179,16 +194,40 @@ func SecurePrintf(format string, args ...any) {
 // getPassphrase prompts the user for a passphrase if not provided and not in agent mode.
 var stdinReader = bufio.NewReader(os.Stdin)
 
+// readPassphraseFile reads a passphrase from a file path, trimming trailing
+// newline characters. Use "-" to read from stdin (for pipe / process substitution).
+func readPassphraseFile(path string) ([]byte, error) {
+	var data []byte
+	var err error
+	if path == "-" {
+		data, err = io.ReadAll(os.Stdin)
+	} else {
+		data, err = os.ReadFile(path)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("--passphrase-file: %w", err)
+	}
+	return bytes.TrimRight(data, "\r\n"), nil
+}
+
 func getPassphrase(prompt string) ([]byte, bool, error) {
 	if env := viper.GetString("passphrase"); env != "" {
 		return []byte(env), false, nil
 	}
+	// --passphrase-file / MAKNOON_PASSPHRASE_FILE: read from file or stdin ("-")
+	if pf := viper.GetString("passphrase_file"); pf != "" {
+		p, err := readPassphraseFile(pf)
+		if err != nil {
+			return nil, false, err
+		}
+		return p, false, nil
+	}
 	if GlobalContext.Engine != nil && GlobalContext.Engine.GetPolicy().IsAgent() {
-		return nil, false, fmt.Errorf("passphrase required via MAKNOON_PASSPHRASE (interaction prohibited in agent mode)")
+		return nil, false, fmt.Errorf("passphrase required via MAKNOON_PASSPHRASE or --passphrase-file (interaction prohibited in agent mode)")
 	}
 
 	if GlobalContext.UI.JSON || !GlobalContext.UI.Interactive {
-		fmt.Fprintf(os.Stderr, "⚠️  WARNING: Command requested interactive passphrase in non-interactive mode. This will likely hang or fail.\n")
+		fmt.Fprintf(os.Stderr, "%s Command requested interactive passphrase in non-interactive mode. This will likely hang or fail.\n", icon("⚠️ ", "WARNING:"))
 	}
 
 	fmt.Print(prompt)
@@ -446,10 +485,14 @@ func ResetGlobalContext() {
 
 // InitEngine initializes the GlobalContext's Engine with the appropriate policy and audit logging.
 func InitEngine() error {
-	// Emit heartbeat for observability
-	fmt.Fprintf(os.Stderr, "🚀 Maknoon Engine Starting (Agent=%v, JSON=%v)\n",
-		viper.GetString("agent_mode") == "1",
-		viper.GetBool("json"))
+	// Emit startup line only when stderr is a real terminal and we are not in
+	// JSON / quiet / pipe mode — avoids polluting captured stderr in scripts.
+	if term.IsTerminal(int(os.Stderr.Fd())) && !viper.GetBool("json") {
+		fmt.Fprintf(os.Stderr, "%s Maknoon Engine Starting (Agent=%v, JSON=%v)\n",
+			icon("🚀", ">>"),
+			viper.GetString("agent_mode") == "1",
+			viper.GetBool("json"))
+	}
 
 	// Enable memguard crash protection (wipe on interrupt)
 	memguard.CatchInterrupt()
