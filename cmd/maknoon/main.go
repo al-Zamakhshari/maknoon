@@ -40,6 +40,7 @@ Post-Quantum Cryptography (PQC).`,
 			_ = viper.BindPFlag("tpm_device", cmd.Flags().Lookup("tpm-device"))
 			_ = viper.BindPFlag("tpm_pcrs", cmd.Flags().Lookup("tpm-pcrs"))
 			_ = viper.BindPFlag("passphrase_file", cmd.Root().PersistentFlags().Lookup("passphrase-file"))
+			_ = viper.BindPFlag("passphrase_fd", cmd.Root().PersistentFlags().Lookup("passphrase-fd"))
 
 			if err := commands.InitEngine(); err != nil {
 				return err
@@ -58,6 +59,7 @@ Post-Quantum Cryptography (PQC).`,
 
 	rootCmd.PersistentFlags().BoolVar(&commands.JSONOutput, "json", false, "Output results in JSON format")
 	rootCmd.PersistentFlags().String("passphrase-file", "", "Read passphrase from a file instead of prompting (use - for stdin). Also settable via MAKNOON_PASSPHRASE_FILE")
+	rootCmd.PersistentFlags().Int("passphrase-fd", 0, "Read passphrase from file descriptor N (e.g., --passphrase-fd 3  3<<<$(pass show key)). Also settable via MAKNOON_PASSPHRASE_FD")
 	rootCmd.PersistentFlags().Bool("trace", false, "Enable low-level diagnostic tracing to stderr")
 	rootCmd.PersistentFlags().Bool("fips", false, "Enforce strict FIPS-140 compliant cryptographic standards")
 	rootCmd.PersistentFlags().String("policy", "", "Path to a declarative governance policy file (JSON)")

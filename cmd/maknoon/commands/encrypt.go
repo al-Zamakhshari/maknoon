@@ -35,11 +35,53 @@ func EncryptCmd() *cobra.Command {
 	var argonThrd uint8
 
 	cmd := &cobra.Command{
-		Use:   "encrypt [file/dir]",
-		Short: "Encrypt a file or directory symmetrically or asymmetrically",
-		Args:  cobra.ExactArgs(1),
+		Use:   "encrypt <file|dir> [file2 ...]",
+		Short: "Encrypt one or more files or a directory",
+		Args:  cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			p := GlobalContext.UI.GetPresenter()
+
+			// Multiple explicit files — derive session key once, encrypt each.
+			if len(args) > 1 {
+				opts := crypto.Options{}
+				if cmd.Flags().Changed("compress") {
+					opts.Compress = crypto.BoolPtr(compress)
+				}
+				if cmd.Flags().Changed("stealth") {
+					opts.Stealth = crypto.BoolPtr(stealth)
+				}
+				if err := resolveEncryptionKeysMulti(&opts, pubKeyPaths, passphrase, args[0], tofu); err != nil {
+					p.RenderError(err)
+					return err
+				}
+				defer func() {
+					crypto.SafeClear(opts.Passphrase)
+					crypto.SafeClear(opts.SigningKey)
+				}()
+
+				res, err := GlobalContext.Engine.ProtectFiles(nil, args, output, opts)
+				if err != nil {
+					p.RenderError(err)
+					return err
+				}
+				if !quiet {
+					kdfNote := ""
+					if res.SessionKeyDerived {
+						kdfNote = " (session key auto-derived — KDF ran once)"
+					}
+					fmt.Fprintf(os.Stderr, "%s %d/%d file(s) encrypted%s\n",
+						icon("✓", "ok"), res.TotalFiles, len(args), kdfNote)
+					for _, e := range res.Errors {
+						fmt.Fprintf(os.Stderr, "  %s %s: %s\n", icon("✗", "FAIL"), e.Path, e.Err)
+					}
+				}
+				p.RenderSuccess(res)
+				if len(res.Errors) > 0 {
+					return fmt.Errorf("%d file(s) failed to encrypt", len(res.Errors))
+				}
+				return nil
+			}
+
 			inputPath := args[0]
 			input, _, _, isDir, err := resolveEncryptInput(inputPath)
 			if err != nil {
@@ -88,6 +130,9 @@ func EncryptCmd() *cobra.Command {
 					}
 				}
 				p.RenderSuccess(res)
+				if len(res.Errors) > 0 {
+					return fmt.Errorf("%d file(s) failed to encrypt", len(res.Errors))
+				}
 				return nil
 			}
 

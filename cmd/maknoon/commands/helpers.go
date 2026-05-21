@@ -210,6 +210,20 @@ func readPassphraseFile(path string) ([]byte, error) {
 	return bytes.TrimRight(data, "\r\n"), nil
 }
 
+// readPassphraseFD reads a passphrase from a specific open file descriptor.
+// Usage: maknoon encrypt - --passphrase-fd 3  3<<<$(pass show mykey)
+func readPassphraseFD(fd int) ([]byte, error) {
+	f := os.NewFile(uintptr(fd), fmt.Sprintf("fd/%d", fd))
+	if f == nil {
+		return nil, fmt.Errorf("--passphrase-fd: cannot open file descriptor %d", fd)
+	}
+	data, err := io.ReadAll(f)
+	if err != nil {
+		return nil, fmt.Errorf("--passphrase-fd: %w", err)
+	}
+	return bytes.TrimRight(data, "\r\n"), nil
+}
+
 func getPassphrase(prompt string) ([]byte, bool, error) {
 	if env := viper.GetString("passphrase"); env != "" {
 		return []byte(env), false, nil
@@ -222,8 +236,17 @@ func getPassphrase(prompt string) ([]byte, bool, error) {
 		}
 		return p, false, nil
 	}
+	// --passphrase-fd / MAKNOON_PASSPHRASE_FD: read from a specific fd number
+	// Useful when stdin carries data: encrypt - --passphrase-fd 3  3<<<$(pass show key)
+	if fd := viper.GetInt("passphrase_fd"); fd > 0 {
+		p, err := readPassphraseFD(fd)
+		if err != nil {
+			return nil, false, err
+		}
+		return p, false, nil
+	}
 	if GlobalContext.Engine != nil && GlobalContext.Engine.GetPolicy().IsAgent() {
-		return nil, false, fmt.Errorf("passphrase required via MAKNOON_PASSPHRASE or --passphrase-file (interaction prohibited in agent mode)")
+		return nil, false, fmt.Errorf("passphrase required via MAKNOON_PASSPHRASE, --passphrase-file, or --passphrase-fd (interaction prohibited in agent mode)")
 	}
 
 	if GlobalContext.UI.JSON || !GlobalContext.UI.Interactive {

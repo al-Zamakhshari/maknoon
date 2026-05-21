@@ -22,6 +22,10 @@ func (e *Engine) ProtectDirectory(ectx *EngineContext, inputDir, outputDir strin
 	return e.Crypto.ProtectDirectory(ectx, inputDir, outputDir, opts)
 }
 
+func (e *Engine) ProtectFiles(ectx *EngineContext, files []string, outputDir string, opts Options) (*RecursiveEncryptResult, error) {
+	return e.Crypto.ProtectFiles(ectx, files, outputDir, opts)
+}
+
 func (e *Engine) Unprotect(ectx *EngineContext, r io.Reader, w io.Writer, outPath string, opts Options) (DecryptResult, error) {
 	return e.Crypto.Unprotect(ectx, r, w, outPath, opts)
 }
@@ -158,6 +162,89 @@ func (s *CryptoService) ProtectDirectory(ectx *EngineContext, inputDir, outputDi
 
 	if walkErr != nil {
 		return nil, walkErr
+	}
+
+	result.TotalFiles = len(result.Encrypted)
+	result.Status = "success"
+	if len(result.Errors) > 0 {
+		result.Status = "partial"
+	}
+	return result, nil
+}
+
+// ProtectFiles encrypts a list of explicit file paths individually, auto-deriving
+// a session key on the passphrase path so Argon2id runs once for the whole list.
+// outputDir, when set, is where the .makn files are written; otherwise each file
+// gains a .makn suffix in its original directory.
+func (s *CryptoService) ProtectFiles(ectx *EngineContext, files []string, outputDir string, opts Options) (*RecursiveEncryptResult, error) {
+	ectx = s.engine.context(ectx)
+	if err := s.engine.enforce(ectx, CapProtect); err != nil {
+		return nil, err
+	}
+
+	fileOpts := opts
+	var sessionKeyDerived bool
+	if len(opts.Recipients) == 0 && len(opts.SessionKey) == 0 && len(opts.Passphrase) > 0 {
+		key, salt, err := DeriveSessionKey(opts.Passphrase)
+		if err != nil {
+			return nil, fmt.Errorf("session key derivation failed: %w", err)
+		}
+		defer SafeClear(key)
+		fileOpts.SessionKey = key
+		fileOpts.SessionSalt = salt
+		fileOpts.Passphrase = nil
+		sessionKeyDerived = true
+	}
+
+	result := &RecursiveEncryptResult{SessionKeyDerived: sessionKeyDerived}
+
+	for _, path := range files {
+		cleanPath := filepath.Clean(path)
+		if err := ectx.Policy.ValidatePath(cleanPath); err != nil {
+			result.Errors = append(result.Errors, RecursiveFileError{Path: path, Err: err.Error()})
+			continue
+		}
+		if strings.HasSuffix(cleanPath, ".makn") {
+			result.Skipped = append(result.Skipped, path)
+			continue
+		}
+
+		var outPath string
+		if outputDir != "" {
+			outPath = filepath.Join(filepath.Clean(outputDir), filepath.Base(cleanPath)+".makn")
+		} else {
+			outPath = cleanPath + ".makn"
+		}
+
+		in, err := os.Open(cleanPath)
+		if err != nil {
+			result.Errors = append(result.Errors, RecursiveFileError{Path: path, Err: err.Error()})
+			continue
+		}
+		fi, _ := in.Stat()
+		fileBytes := fi.Size()
+
+		out, err := os.Create(outPath)
+		if err != nil {
+			in.Close()
+			result.Errors = append(result.Errors, RecursiveFileError{Path: path, Err: err.Error()})
+			continue
+		}
+
+		if _, err := s.engine.ProtectStream(ectx, filepath.Base(cleanPath), in, out, fileOpts); err != nil {
+			in.Close()
+			out.Close()
+			_ = os.Remove(outPath)
+			result.Errors = append(result.Errors, RecursiveFileError{Path: path, Err: err.Error()})
+			continue
+		}
+		in.Close()
+		out.Close()
+
+		result.Encrypted = append(result.Encrypted, RecursiveFileResult{
+			Input: path, Output: outPath, Bytes: fileBytes,
+		})
+		result.TotalBytes += fileBytes
 	}
 
 	result.TotalFiles = len(result.Encrypted)

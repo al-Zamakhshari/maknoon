@@ -317,11 +317,19 @@
   {
     "name": "encrypt",
     "path": "maknoon encrypt",
-    "description": "Encrypt a file or directory symmetrically or asymmetrically",
+    "description": "Encrypt one or more files or a directory",
     "arguments": [
       {
-        "name": "file/dir",
-        "required": false
+        "name": "file|dir",
+        "required": true
+      },
+      {
+        "name": "[file2",
+        "required": true
+      },
+      {
+        "name": "...]",
+        "required": true
       }
     ],
     "flags": [

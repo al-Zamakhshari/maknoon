@@ -62,6 +62,10 @@ You will need to start a new shell for this setup to take effect.
 	Output results in JSON format
 
 .PP
+\fB--passphrase-fd\fP=0
+	Read passphrase from file descriptor N (e.g., --passphrase-fd 3  3<<<$(pass show key)). Also settable via MAKNOON_PASSPHRASE_FD
+
+.PP
 \fB--passphrase-file\fP=""
 	Read passphrase from a file instead of prompting (use - for stdin). Also settable via MAKNOON_PASSPHRASE_FILE
 
