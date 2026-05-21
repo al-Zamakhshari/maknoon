@@ -146,19 +146,27 @@ func BenchmarkEncryptionDataSizes(b *testing.B) {
 }
 
 // BenchmarkChunkPipeline measures the overhead of a single 64KB chunk encrypt+decrypt cycle.
+// Uses a pre-derived session key so Argon2id is excluded — this benchmarks AES-256-GCM
+// chunk throughput and pipeline overhead only.
 func BenchmarkChunkPipeline(b *testing.B) {
-	password := []byte("bench-chunk")
 	chunk := make([]byte, ChunkSize)
 	_, _ = rand.Read(chunk)
+
+	// Derive once — not part of the measured loop.
+	key, salt, err := DeriveSessionKey([]byte("bench-chunk"))
+	if err != nil {
+		b.Fatal(err)
+	}
+	defer SafeClear(key)
 
 	b.SetBytes(int64(ChunkSize))
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		var enc bytes.Buffer
-		if err := EncryptStream(bytes.NewReader(chunk), &enc, password, FlagNone, 1, 0); err != nil {
+		if err := EncryptStreamWithKey(bytes.NewReader(chunk), &enc, key, salt, FlagNone, 1, 0); err != nil {
 			b.Fatal(err)
 		}
-		if _, _, err := DecryptStream(bytes.NewReader(enc.Bytes()), io.Discard, password, 1, false); err != nil {
+		if _, _, err := DecryptStreamWithKey(bytes.NewReader(enc.Bytes()), io.Discard, key, 1, false); err != nil {
 			b.Fatal(err)
 		}
 	}

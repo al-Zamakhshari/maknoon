@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/klauspost/reedsolomon"
@@ -95,12 +96,14 @@ type ShardInfo struct {
 
 // FragmentWriter implements io.Writer by splitting data into erasure-coded shards.
 type FragmentWriter struct {
-	opts      FragmentOptions
-	enc       reedsolomon.Encoder
-	writers   []io.WriteCloser
-	buffer    []byte
-	written   int64
-	chunkSize int // effective per-shard chunk size (bytes)
+	opts       FragmentOptions
+	enc        reedsolomon.Encoder
+	writers    []io.WriteCloser
+	buffer     []byte
+	written    int64
+	chunkSize  int       // effective per-shard chunk size (bytes)
+	fullChunk  int       // chunkSize * DataShards — the exact size of a full input chunk
+	shardsPool sync.Pool // pools [][]byte + parity buffers to avoid per-chunk allocations
 }
 
 func NewFragmentWriter(opts FragmentOptions) (*FragmentWriter, error) {
@@ -192,13 +195,35 @@ func NewFragmentWriterWithWriters(opts FragmentOptions, writers []io.WriteCloser
 		}
 	}
 
-	return &FragmentWriter{
+	fullChunk := effectiveChunk * opts.DataShards
+	total := totalShards
+	data := opts.DataShards
+	cs := effectiveChunk
+
+	fw := &FragmentWriter{
 		opts:      opts,
 		enc:       enc,
 		writers:   writers,
-		buffer:    make([]byte, 0, effectiveChunk*opts.DataShards),
+		buffer:    make([]byte, 0, fullChunk),
 		chunkSize: effectiveChunk,
-	}, nil
+		fullChunk: fullChunk,
+	}
+	// Pool the outer [][]byte and the parity byte slices so that full-chunk
+	// encode calls make zero heap allocations. Data shard views are set inline
+	// per call (they point into the input buffer, never into pooled memory).
+	// Pool *[][]byte (pointer-to-slice) rather than [][]byte directly so that
+	// storing the value in sync.Pool's interface{} field does not allocate
+	// a new heap object for the slice header (staticcheck SA6002).
+	fw.shardsPool = sync.Pool{
+		New: func() any {
+			shards := make([][]byte, total)
+			for i := data; i < total; i++ {
+				shards[i] = make([]byte, cs)
+			}
+			return &shards
+		},
+	}
+	return fw, nil
 }
 
 func (fw *FragmentWriter) Write(p []byte) (n int, err error) {
@@ -218,9 +243,28 @@ func (fw *FragmentWriter) Write(p []byte) (n int, err error) {
 }
 
 func (fw *FragmentWriter) flushChunk(chunk []byte) error {
-	shards, err := fw.enc.Split(chunk)
-	if err != nil {
-		return err
+	var shards [][]byte
+
+	if len(chunk) == fw.fullChunk {
+		// Full chunk — use pooled shard slice to avoid all parity allocations.
+		// Data shards are set as views into chunk (no copy); parity buffers are
+		// pre-allocated by the pool and written into in-place by enc.Encode.
+		sp := fw.shardsPool.Get().(*[][]byte)
+		shards = *sp
+		defer fw.shardsPool.Put(sp)
+
+		perShard := fw.chunkSize
+		for i := 0; i < fw.opts.DataShards; i++ {
+			shards[i] = chunk[i*perShard : (i+1)*perShard]
+		}
+	} else {
+		// Partial (last) chunk — use enc.Split for correct zero-padding.
+		// This path executes at most once per file so the allocation is negligible.
+		var err error
+		shards, err = fw.enc.Split(chunk)
+		if err != nil {
+			return err
+		}
 	}
 
 	if err := fw.enc.Encode(shards); err != nil {
