@@ -98,6 +98,10 @@ nfpms:
         dst: /usr/share/man/man1/
         file_info:
           mode: 0644
+      # mkn → maknoon short alias
+      - src: /usr/bin/maknoon
+        dst: /usr/bin/mkn
+        type: symlink
       # systemd unit — deb and rpm only (Alpine uses OpenRC, not systemd)
       - src: ./deploy/systemd/maknoon.service
         dst: /lib/systemd/system/maknoon.service
@@ -128,3 +132,4 @@ brews:
     install: |
       bin.install "maknoon"
       man1.install Dir["man/*.1"]
+      bin.install_symlink bin/"maknoon" => "mkn"
