@@ -49,6 +49,9 @@ func DecryptCmd() *cobra.Command {
 						return fmt.Errorf("--session-key: %w", err)
 					}
 					opts.SessionKey = key
+				} else if passphrase != "" {
+					opts.Passphrase = []byte(passphrase)
+					defer crypto.SafeClear(opts.Passphrase)
 				} else {
 					pass, _, err := getPassphrase("Enter passphrase: ")
 					if err != nil {
@@ -92,6 +95,9 @@ func DecryptCmd() *cobra.Command {
 						return fmt.Errorf("--session-key: %w", err)
 					}
 					opts.SessionKey = key
+				} else if passphrase != "" {
+					opts.Passphrase = []byte(passphrase)
+					defer crypto.SafeClear(opts.Passphrase)
 				} else {
 					pass, _, err := getPassphrase("Enter passphrase: ")
 					if err != nil {

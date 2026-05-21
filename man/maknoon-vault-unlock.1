@@ -2,37 +2,37 @@
 .TH "MAKNOON" "1" "Jan 2024" "Maknoon Post-Quantum Engine" "Maknoon Manual"
 
 .SH NAME
-maknoon-vault - Manage secure password vaults
+maknoon-vault-unlock - Derive the vault key once and cache it for the session TTL (default 5 min)
 
 
 .SH SYNOPSIS
-\fBmaknoon vault [flags]\fP
+\fBmaknoon vault unlock [vault] [flags]\fP
 
 
 .SH DESCRIPTION
-Manage secure password vaults
+Subsequent vault get/set/list calls skip Argon2id entirely until the TTL expires or 'vault lock' is called.
 
 
 .SH OPTIONS
 \fB-h\fP, \fB--help\fP[=false]
-	help for vault
-
-.PP
-\fB--json\fP[=false]
-	Output results in JSON format
+	help for unlock
 
 .PP
 \fB-s\fP, \fB--passphrase\fP=""
-	Master passphrase for the vault
+	Passphrase for the vault
 
 .PP
-\fB-v\fP, \fB--vault\fP="default"
-	Name or full path of the vault to use
+\fB--ttl\fP=0
+	Session lifetime in seconds (default: 300)
 
 
 .SH OPTIONS INHERITED FROM PARENT COMMANDS
 \fB--fips\fP[=false]
 	Enforce strict FIPS-140 compliant cryptographic standards
+
+.PP
+\fB--json\fP[=false]
+	Output results in JSON format
 
 .PP
 \fB--passphrase-fd\fP=0
@@ -62,9 +62,13 @@ Manage secure password vaults
 \fB--trace\fP[=false]
 	Enable low-level diagnostic tracing to stderr
 
+.PP
+\fB-v\fP, \fB--vault\fP="default"
+	Name or full path of the vault to use
+
 
 .SH SEE ALSO
-\fBmaknoon(1)\fP, \fBmaknoon-vault-check-shards(1)\fP, \fBmaknoon-vault-delete(1)\fP, \fBmaknoon-vault-export(1)\fP, \fBmaknoon-vault-get(1)\fP, \fBmaknoon-vault-get-blob(1)\fP, \fBmaknoon-vault-import(1)\fP, \fBmaknoon-vault-init-institutional(1)\fP, \fBmaknoon-vault-list(1)\fP, \fBmaknoon-vault-lock(1)\fP, \fBmaknoon-vault-recover(1)\fP, \fBmaknoon-vault-rename(1)\fP, \fBmaknoon-vault-rotate(1)\fP, \fBmaknoon-vault-set(1)\fP, \fBmaknoon-vault-set-blob(1)\fP, \fBmaknoon-vault-split(1)\fP, \fBmaknoon-vault-unlock(1)\fP
+\fBmaknoon-vault(1)\fP
 
 
 .SH HISTORY

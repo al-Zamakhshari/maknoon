@@ -1691,6 +1691,18 @@
         "flags": null
       },
       {
+        "name": "lock",
+        "path": "maknoon vault lock",
+        "description": "Immediately wipe the cached session key for a vault",
+        "arguments": [
+          {
+            "name": "vault",
+            "required": false
+          }
+        ],
+        "flags": null
+      },
+      {
         "name": "recover",
         "path": "maknoon vault recover",
         "description": "Recover vault contents using shards and optionally save to a new vault",
@@ -1837,6 +1849,35 @@
             "description": "Minimum shares required for reconstruction",
             "type": "int",
             "default": "2",
+            "required": false
+          }
+        ]
+      },
+      {
+        "name": "unlock",
+        "path": "maknoon vault unlock",
+        "description": "Derive the vault key once and cache it for the session TTL (default 5 min)",
+        "arguments": [
+          {
+            "name": "vault",
+            "required": false
+          }
+        ],
+        "flags": [
+          {
+            "name": "passphrase",
+            "shorthand": "s",
+            "description": "Passphrase for the vault",
+            "type": "string",
+            "default": "",
+            "required": false
+          },
+          {
+            "name": "ttl",
+            "shorthand": "",
+            "description": "Session lifetime in seconds (default: 300)",
+            "type": "int",
+            "default": "0",
             "required": false
           }
         ]

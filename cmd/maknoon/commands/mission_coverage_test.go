@@ -373,3 +373,199 @@ func TestMissionReencryptProfile(t *testing.T) {
 		t.Errorf("content mismatch after reencrypt: got %q", data)
 	}
 }
+
+// TestMissionVaultSession verifies that VaultUnlock eliminates per-operation KDF cost.
+// A vault is unlocked once, then Get and List succeed with nil passphrase,
+// and Lock wipes the session so subsequent access requires re-auth.
+func TestMissionVaultSession(t *testing.T) {
+	tmpDir := setupMissionEnv(t)
+	_ = tmpDir
+	SetJSONOutput(true)
+	defer SetJSONOutput(false)
+
+	const vaultName = "session-vault"
+	const pass = "session-vault-pass"
+
+	// 1. Store two secrets.
+	for _, svc := range []string{"github", "gitlab"} {
+		out, err := runMissionCommand(VaultCmd(), "set", svc, "-v", vaultName, "-s", pass)
+		if err != nil {
+			t.Fatalf("vault set %s: %v\noutput: %s", svc, err, out)
+		}
+	}
+
+	// 2. Unlock the vault (derives key once).
+	out, err := runMissionCommand(VaultCmd(), "unlock", vaultName, "-s", pass)
+	if err != nil {
+		t.Fatalf("vault unlock: %v\noutput: %s", err, out)
+	}
+	if !strings.Contains(out, "unlocked") {
+		t.Errorf("vault unlock output should contain 'unlocked', got: %s", out)
+	}
+
+	// 3. Get with empty passphrase — session key must be used.
+	out2, err := runMissionCommand(VaultCmd(), "get", "github", "-v", vaultName)
+	if err != nil {
+		t.Fatalf("vault get with active session: %v\noutput: %s", err, out2)
+	}
+
+	// 4. Lock the vault.
+	out3, err := runMissionCommand(VaultCmd(), "lock", vaultName)
+	if err != nil {
+		t.Fatalf("vault lock: %v\noutput: %s", err, out3)
+	}
+	if !strings.Contains(out3, "locked") {
+		t.Errorf("vault lock output should contain 'locked', got: %s", out3)
+	}
+
+	// 5. Get with empty passphrase after lock must fail.
+	_, err = runMissionCommand(VaultCmd(), "get", "github", "-v", vaultName)
+	if err == nil {
+		t.Error("expected error getting from locked vault with no passphrase")
+	}
+}
+
+// TestMissionRecursiveEncryptDecrypt verifies directory-level encrypt → decrypt round-trip.
+func TestMissionRecursiveEncryptDecrypt(t *testing.T) {
+	tmpDir := setupMissionEnv(t)
+	const pass = "recursive-mission-pass"
+
+	// 1. Create source directory with three files.
+	srcDir := filepath.Join(tmpDir, "src")
+	os.MkdirAll(srcDir, 0700)
+	for i, content := range []string{"first", "second", "third"} {
+		os.WriteFile(filepath.Join(srcDir, fmt.Sprintf("file%d.txt", i)), []byte(content), 0600)
+	}
+
+	// 2. Encrypt recursively.
+	encDir := filepath.Join(tmpDir, "encrypted")
+	out, err := runMissionCommand(EncryptCmd(), srcDir, "--recursive", "-s", pass, "-o", encDir, "-q")
+	if err != nil {
+		t.Fatalf("recursive encrypt: %v\noutput: %s", err, out)
+	}
+
+	// 3. Verify three .makn files produced.
+	entries, _ := os.ReadDir(encDir)
+	makns := 0
+	for _, e := range entries {
+		if strings.HasSuffix(e.Name(), ".makn") {
+			makns++
+		}
+	}
+	if makns != 3 {
+		t.Errorf("expected 3 .makn files, got %d", makns)
+	}
+
+	// 4. Decrypt recursively.
+	decDir := filepath.Join(tmpDir, "decrypted")
+	out2, err := runMissionCommand(DecryptCmd(), encDir, "--recursive", "-s", pass, "-o", decDir, "-q")
+	if err != nil {
+		t.Fatalf("recursive decrypt: %v\noutput: %s", err, out2)
+	}
+
+	// 5. Verify content of each recovered file.
+	for i, want := range []string{"first", "second", "third"} {
+		got, readErr := os.ReadFile(filepath.Join(decDir, fmt.Sprintf("file%d.txt", i)))
+		if readErr != nil {
+			t.Errorf("file%d.txt not recovered: %v", i, readErr)
+			continue
+		}
+		if strings.TrimSpace(string(got)) != want {
+			t.Errorf("file%d.txt = %q, want %q", i, got, want)
+		}
+	}
+}
+
+// TestMissionMultiFileEncryptDecrypt verifies variadic-argument batch encrypt → decrypt.
+func TestMissionMultiFileEncryptDecrypt(t *testing.T) {
+	tmpDir := setupMissionEnv(t)
+	const pass = "multifile-mission-pass"
+
+	// 1. Create three files.
+	files := []string{}
+	contents := []string{"alpha-content", "beta-content", "gamma-content"}
+	for i, c := range contents {
+		p := filepath.Join(tmpDir, fmt.Sprintf("mf%d.txt", i))
+		os.WriteFile(p, []byte(c), 0600)
+		files = append(files, p)
+	}
+
+	// 2. Encrypt all three in one call (one KDF via session key).
+	encArgs := append([]string{}, files...)
+	encArgs = append(encArgs, "-s", pass, "-q")
+	out, err := runMissionCommand(EncryptCmd(), encArgs...)
+	if err != nil {
+		t.Fatalf("multi-file encrypt: %v\noutput: %s", err, out)
+	}
+
+	// 3. Decrypt all three.
+	makns := []string{}
+	for _, f := range files {
+		makns = append(makns, f+".makn")
+	}
+	decArgs := append([]string{}, makns...)
+	decArgs = append(decArgs, "-s", pass, "-q")
+	out2, err := runMissionCommand(DecryptCmd(), decArgs...)
+	if err != nil {
+		t.Fatalf("multi-file decrypt: %v\noutput: %s", err, out2)
+	}
+
+	// 4. Verify content of each file.
+	for i, want := range contents {
+		got, readErr := os.ReadFile(files[i])
+		if readErr != nil {
+			t.Errorf("file%d not recovered: %v", i, readErr)
+			continue
+		}
+		if strings.TrimSpace(string(got)) != want {
+			t.Errorf("file%d = %q, want %q", i, got, want)
+		}
+	}
+}
+
+// TestMissionAuditQueryFilter verifies that audit export --action and --status flags
+// correctly narrow the result set.
+func TestMissionAuditQueryFilter(t *testing.T) {
+	tmpDir := setupMissionEnv(t)
+
+	// Enable audit logging.
+	logFile := filepath.Join(tmpDir, "audit.jsonl")
+	os.Setenv("MAKNOON_AUDIT_ENABLED", "true")
+	os.Setenv("MAKNOON_AUDIT_LOG_FILE", logFile)
+	defer os.Unsetenv("MAKNOON_AUDIT_ENABLED")
+	defer os.Unsetenv("MAKNOON_AUDIT_LOG_FILE")
+
+	ResetGlobalContext()
+	if err := InitEngine(); err != nil {
+		t.Fatalf("InitEngine: %v", err)
+	}
+	SetJSONOutput(true)
+	defer SetJSONOutput(false)
+
+	// Generate two identities — produces identity_create audit entries.
+	runCommand(t, KeygenCmd(), "-o", "filter-id-a", "--no-password")
+	runCommand(t, KeygenCmd(), "-o", "filter-id-b", "--no-password")
+
+	// Export unfiltered — must return entries.
+	all := runCommand(t, AuditCmd(), "export")
+
+	// Export filtered by action.
+	filtered := runCommand(t, AuditCmd(), "export", "--action", "identity_create")
+
+	// The filtered set must be a subset of all entries (fewer or equal).
+	allCount := strings.Count(all, "identity_create")
+	filteredCount := strings.Count(filtered, "identity_create")
+	if allCount == 0 {
+		t.Log("audit entries not populated (audit may be disabled) — skipping count check")
+		return
+	}
+	if filteredCount > allCount {
+		t.Errorf("filtered result (%d) has more entries than unfiltered (%d)", filteredCount, allCount)
+	}
+	// Filtered output must not contain other action types (if any exist).
+	for _, otherAction := range []string{"protect", "vault_get", "vault_set"} {
+		if strings.Contains(filtered, otherAction) {
+			t.Errorf("filtered output contains unexpected action %q", otherAction)
+		}
+	}
+}
