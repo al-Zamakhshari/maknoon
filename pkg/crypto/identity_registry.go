@@ -25,6 +25,9 @@ type IdentityPublishOptions struct {
 	DesecToken string // deSEC API token
 	WKD        bool   // Publish to HTTPS static file (Web Key Directory)
 	BEP44      bool   // Deprecated: BEP-44 removed; retained for JSON compat
+	// TTLHours overrides the config default (IdentityRecordTTL) for this publish.
+	// 0 = use config default (typically 48h). -1 = no expiry.
+	TTLHours int
 }
 
 // IdentityPublish broadcasts an identity to configured decentralized registries.
@@ -46,12 +49,21 @@ func (m *IdentityManager) IdentityPublish(ctx context.Context, handle string, op
 	defer id.Wipe()
 
 	// 2. Create and sign the record.
+	var expiresAt time.Time
+	switch {
+	case opts.TTLHours < 0:
+		// No expiry — zero value means never expires (legacy compat).
+	case opts.TTLHours > 0:
+		expiresAt = time.Now().Add(time.Duration(opts.TTLHours) * time.Hour)
+	default:
+		expiresAt = time.Now().Add(m.Config.IdentityTTL())
+	}
 	record := &IdentityRecord{
 		Handle:    handle,
 		KEMPubKey: id.KEMPub,
 		SIGPubKey: id.SIGPub,
 		Timestamp: time.Now(),
-		ExpiresAt: time.Now().Add(m.Config.IdentityTTL()),
+		ExpiresAt: expiresAt,
 	}
 	if err := record.Sign(id.SIGPriv); err != nil {
 		return fmt.Errorf("failed to sign identity record: %w", err)

@@ -372,6 +372,13 @@
     "flags": null
   },
   {
+    "name": "doctor",
+    "path": "maknoon doctor",
+    "description": "Comprehensive system health check",
+    "arguments": null,
+    "flags": null
+  },
+  {
     "name": "encrypt",
     "path": "maknoon encrypt",
     "description": "Encrypt one or more files or a directory",
@@ -931,6 +938,14 @@
             "required": false
           },
           {
+            "name": "ttl-hours",
+            "shorthand": "",
+            "description": "Record expiry in hours (0 = config default ~48h, -1 = no expiry, e.g. 168 = 7 days)",
+            "type": "int",
+            "default": "0",
+            "required": false
+          },
+          {
             "name": "wkd",
             "shorthand": "",
             "description": "Web Key Directory: publish as a signed HTTPS JSON file (requires alice@domain.com handle)",
@@ -1043,6 +1058,22 @@
         "name": "stealth",
         "shorthand": "",
         "description": "Enable fingerprint resistance (headerless)",
+        "type": "bool",
+        "default": "false",
+        "required": false
+      }
+    ]
+  },
+  {
+    "name": "init",
+    "path": "maknoon init",
+    "description": "Guided first-run setup — create identity, vault, and verify your environment",
+    "arguments": null,
+    "flags": [
+      {
+        "name": "non-interactive",
+        "shorthand": "",
+        "description": "Skip all prompts and apply defaults (suitable for Docker/CI)",
         "type": "bool",
         "default": "false",
         "required": false
@@ -1460,6 +1491,30 @@
         "name": "tls-key",
         "shorthand": "",
         "description": "Path to TLS private key (REQUIRED)",
+        "type": "string",
+        "default": "",
+        "required": false
+      }
+    ]
+  },
+  {
+    "name": "serve-identity",
+    "path": "maknoon serve-identity",
+    "description": "Serve identity records via WKD (Web Key Directory) over HTTP",
+    "arguments": null,
+    "flags": [
+      {
+        "name": "address",
+        "shorthand": "",
+        "description": "Listen address",
+        "type": "string",
+        "default": ":8080",
+        "required": false
+      },
+      {
+        "name": "keys-dir",
+        "shorthand": "",
+        "description": "Keys directory (default: configured KeysDir)",
         "type": "string",
         "default": "",
         "required": false

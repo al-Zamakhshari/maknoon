@@ -98,6 +98,8 @@ Post-Quantum Cryptography (PQC).`,
 	addCommand(commands.AuditCmd(), "security")
 	addCommand(commands.PolicyCmd(), "security")
 
+	addCommand(commands.InitCmd(), "utils")
+	addCommand(commands.DoctorCmd(), "utils")
 	addCommand(commands.SessionCmd(), "utils")
 	addCommand(commands.VaultCmd(), "utils")
 	addCommand(commands.GenCmd(), "utils")
@@ -105,6 +107,7 @@ Post-Quantum Cryptography (PQC).`,
 	addCommand(commands.ProfilesCmd(), "utils")
 	addCommand(commands.MCPServerCmd(), "utils")
 	addCommand(commands.ServeCmd(), "utils")
+	addCommand(commands.ServeIdentityCmd(), "utils")
 	addCommand(commands.CallCmd(), "utils")
 	addCommand(commands.DiagCmd(), "utils")
 

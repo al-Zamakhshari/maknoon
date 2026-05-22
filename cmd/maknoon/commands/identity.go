@@ -124,6 +124,7 @@ func identityPublishCmd() *cobra.Command {
 	var useLocal bool
 	var useWKD bool
 	var desecToken string
+	var ttlHours int
 
 	cmd := &cobra.Command{
 		Use:   "publish [handle]",
@@ -154,6 +155,7 @@ Registries:
 				Desec:      useDesec,
 				DesecToken: desecToken,
 				WKD:        useWKD,
+				TTLHours:   ttlHours,
 			}
 
 			err := GlobalContext.Engine.IdentityPublish(nil, handle, opts)
@@ -193,6 +195,8 @@ Registries:
 	cmd.Flags().BoolVar(&useDesec, "desec", false, "Auto-publish DNS record via deSEC.io (requires --desec-token or DESEC_TOKEN)")
 	cmd.Flags().BoolVar(&useLocal, "local", false, "Pin identity to local contacts only (no network)")
 	cmd.Flags().StringVar(&desecToken, "desec-token", "", "deSEC.io API token")
+	cmd.Flags().IntVar(&ttlHours, "ttl-hours", 0,
+		"Record expiry in hours (0 = config default ~48h, -1 = no expiry, e.g. 168 = 7 days)")
 
 	return cmd
 }
