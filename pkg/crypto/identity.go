@@ -105,7 +105,7 @@ func (m *IdentityManager) SaveIdentity(basePath, baseName string, kemPub, kemPri
 		finalData := data
 		if isPrivate && len(passphrase) > 0 {
 			var b bytes.Buffer
-			if err := EncryptStream(bytes.NewReader(data), &b, passphrase, FlagNone, 1, profileID); err != nil {
+			if err := EncryptStreamV2(bytes.NewReader(data), &b, passphrase, 0, nil, 1, profileID, nil); err != nil {
 				return err
 			}
 			finalData = b.Bytes()
@@ -254,9 +254,8 @@ func (m *IdentityManager) LoadPrivateKey(path string, passphrase []byte, pin str
 		return nil, &ErrIO{Path: path, Reason: err.Error()}
 	}
 
-	// Peek at the first 4 bytes for the magic header
-	if len(data) >= 4 && string(data[:4]) == MagicHeader {
-		// Protected key
+	// Detect an encrypted key by its magic bytes — V1 (MAKN) or V2 (MAK2).
+	if len(data) >= 4 && (string(data[:4]) == MagicHeader || string(data[:4]) == MagicHeaderV2Sym) {
 		var decrypted bytes.Buffer
 		_, _, err = DecryptStream(bytes.NewReader(data), &decrypted, passphrase, 1, false)
 		if err != nil {

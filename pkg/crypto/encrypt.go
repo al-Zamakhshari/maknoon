@@ -96,17 +96,21 @@ func EncryptStreamV2(r io.Reader, w io.Writer, password []byte, flags uint16, tl
 	return writeChunkTerminator(w)
 }
 
-// EncryptStream symmetrically encrypts data from r to w using a passphrase and specified profile.
+// EncryptStream symmetrically encrypts r→w.
+// Non-stealth calls produce V2 (MAK2) format. Stealth calls produce V1
+// (no magic bytes) because V2 stealth framing is reserved for a future release.
+// For new code, call EncryptStreamV2 directly.
 func EncryptStream(r io.Reader, w io.Writer, password []byte, flags byte, concurrency int, profileID byte) error {
-	ectx := &EngineContext{
-		Context: context.Background(),
-		Policy:  &HumanPolicy{},
+	ectx := &EngineContext{Context: context.Background(), Policy: &HumanPolicy{}}
+	if flags&FlagStealth != 0 {
+		return encryptStreamSymV1(r, w, password, flags, concurrency, profileID, ectx)
 	}
-	return EncryptStreamWithEvents(r, w, password, flags, concurrency, profileID, ectx)
+	return EncryptStreamV2(r, w, password, uint16(flags), nil, concurrency, profileID, ectx)
 }
 
-// EncryptStreamWithEvents is the extended version of EncryptStream that supports telemetry.
-func EncryptStreamWithEvents(r io.Reader, w io.Writer, password []byte, flags byte, concurrency int, profileID byte, ectx *EngineContext) error {
+// encryptStreamSymV1 is the internal V1 symmetric encrypt path, used only for
+// stealth mode (no magic bytes). All non-stealth paths now produce V2 format.
+func encryptStreamSymV1(r io.Reader, w io.Writer, password []byte, flags byte, concurrency int, profileID byte, ectx *EngineContext) error {
 	if ectx == nil {
 		ectx = &EngineContext{Context: context.Background(), Policy: &HumanPolicy{}}
 	}
@@ -200,16 +204,19 @@ func EncryptStreamNoHeader(r io.Reader, w io.Writer, password []byte, flags byte
 }
 
 // EncryptStreamWithPublicKeys encrypts data from r to w for one or more recipients.
+// Non-stealth calls produce V2 (MAK3) format. Stealth calls produce V1 (MAKA).
+// For new code, call EncryptStreamAsymV2 directly.
 func EncryptStreamWithPublicKeys(r io.Reader, w io.Writer, pubKeys [][]byte, flags byte, concurrency int, profileID byte) error {
-	ectx := &EngineContext{
-		Context: context.Background(),
-		Policy:  &HumanPolicy{},
+	ectx := &EngineContext{Context: context.Background(), Policy: &HumanPolicy{}}
+	if flags&FlagStealth != 0 {
+		return encryptStreamAsymV1(r, w, pubKeys, nil, flags, concurrency, profileID, ectx)
 	}
-	return EncryptStreamWithPublicKeysAndEvents(r, w, pubKeys, nil, flags, concurrency, profileID, ectx)
+	return EncryptStreamAsymV2(r, w, pubKeys, nil, uint16(flags), nil, concurrency, profileID, ectx)
 }
 
-// EncryptStreamWithPublicKeysAndEvents is the extended version of EncryptStreamWithPublicKeys that supports telemetry.
-func EncryptStreamWithPublicKeysAndEvents(r io.Reader, w io.Writer, pubKeys [][]byte, signingKey []byte, flags byte, concurrency int, profileID byte, ectx *EngineContext) error {
+// encryptStreamAsymV1 is the internal V1 asymmetric encrypt path, used only for
+// stealth mode. All non-stealth paths now produce V2 (MAK3) format.
+func encryptStreamAsymV1(r io.Reader, w io.Writer, pubKeys [][]byte, signingKey []byte, flags byte, concurrency int, profileID byte, ectx *EngineContext) error {
 	if ectx == nil {
 		ectx = &EngineContext{Context: context.Background(), Policy: &HumanPolicy{}}
 	}
@@ -337,13 +344,15 @@ func EncryptStreamWithPublicKeysAndEvents(r io.Reader, w io.Writer, pubKeys [][]
 	return streamEncrypt(r, w, aead, baseNonce, concurrency, ectx)
 }
 
-// EncryptStreamWithPublicKeysAndSigner is the internal implementation supporting optional integrated signing.
+// EncryptStreamWithPublicKeysAndSigner encrypts with optional integrated signing.
+// Routes to V2 (MAK3) for non-stealth; V1 for stealth (unchanged legacy behaviour).
+// For new code, call EncryptStreamAsymV2 with a signingKey directly.
 func EncryptStreamWithPublicKeysAndSigner(r io.Reader, w io.Writer, pubKeys [][]byte, signingKey []byte, flags byte, concurrency int, profileID byte) error {
-	ectx := &EngineContext{
-		Context: context.Background(),
-		Policy:  &HumanPolicy{},
+	ectx := &EngineContext{Context: context.Background(), Policy: &HumanPolicy{}}
+	if flags&FlagStealth != 0 {
+		return encryptStreamAsymV1(r, w, pubKeys, signingKey, flags, concurrency, profileID, ectx)
 	}
-	return EncryptStreamWithPublicKeysAndEvents(r, w, pubKeys, signingKey, flags, concurrency, profileID, ectx)
+	return EncryptStreamAsymV2(r, w, pubKeys, signingKey, uint16(flags), nil, concurrency, profileID, ectx)
 }
 
 // Deprecated: Use EncryptStreamWithPublicKeys

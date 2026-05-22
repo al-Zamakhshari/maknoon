@@ -35,12 +35,6 @@ type Options struct {
 	SessionKey      SecretBytes        // Pre-derived 32-byte key; when set, KDF is skipped
 	SessionSalt     []byte             // Salt used to derive SessionKey (stored in header for self-description)
 
-	// FormatVersion controls the .makn wire format used for new encryptions.
-	// 0 = default (V2: MAK2/MAK3 with TLV extensions, HeaderMAC, terminator)
-	// 1 = legacy V1 (MAKN/MAKA) — use only when the receiver cannot upgrade
-	// 2 = V2 explicit (same as 0)
-	// The decrypt path always auto-detects the format regardless of this field.
-	FormatVersion byte
 }
 
 func (o *Options) Emit(ev EngineEvent) {
@@ -194,53 +188,36 @@ func buildEncryptFlagsV2(opts Options) uint16 {
 	return uint16(buildEncryptFlags(opts))
 }
 
-// useV2Format reports whether opts requests the V2 wire format.
-// V2 is the default (FormatVersion 0 or 2). Exceptions that force V1:
-//   - FormatVersion == 1 (explicit --v1 flag)
-//   - Stealth mode: V2 always writes the magic header; stealth-mode V2 detection
-//     requires additional framing that is reserved for a future release.
-//   - Session key: the pre-derived-key path has a V1-only header structure.
-func useV2Format(opts Options) bool {
-	if opts.FormatVersion == 1 {
-		return false
-	}
-	if opts.Stealth != nil && *opts.Stealth {
-		return false // stealth + V2 reserved for future release
-	}
-	return true
-}
-
-// dispatchEncrypt routes to the correct encrypt function based on key material and format version.
+// dispatchEncrypt routes to the correct encrypt function.
 //
-// V2 (MAK2/MAK3) is the default. Pass FormatVersion=1 in opts to force the legacy V1
-// format — necessary only when the receiver cannot upgrade to handle V2 files.
-//
-// Note: the session-key path always uses V1 because EncryptStreamWithKey encodes the
-// pre-derived key directly; a V2 variant will be added in a future release.
+// All new encryptions produce V2 (MAK2/MAK3), except:
+//   - Stealth mode → V1 internal path (no magic bytes). V2 stealth is future work.
+//   - Session-key path → V1 EncryptStreamWithKey (pre-derived key; V2 variant is future work).
 func dispatchEncrypt(r io.Reader, w io.Writer, flags byte, opts Options, ectx *EngineContext) error {
 	allPublicKeys := opts.Recipients
 	if len(opts.PublicKey) > 0 {
 		allPublicKeys = append(allPublicKeys, opts.PublicKey)
 	}
 
-	// Session-key path: always V1 (pre-derived key, no KDF, different header).
+	// Session-key path: V1 header (pre-derived key, salt embedded, no KDF round-trip).
 	if len(opts.SessionKey) > 0 {
 		return EncryptStreamWithKey(r, w, opts.SessionKey, opts.SessionSalt, flags, *opts.Concurrency, *opts.ProfileID)
 	}
 
-	if useV2Format(opts) {
-		v2flags := buildEncryptFlagsV2(opts)
+	// Stealth path: V1 (headerless). V2 stealth framing is not yet implemented.
+	if opts.Stealth != nil && *opts.Stealth {
 		if len(allPublicKeys) > 0 {
-			return EncryptStreamAsymV2(r, w, allPublicKeys, opts.SigningKey, v2flags, nil, *opts.Concurrency, *opts.ProfileID, ectx)
+			return encryptStreamAsymV1(r, w, allPublicKeys, opts.SigningKey, flags, *opts.Concurrency, *opts.ProfileID, ectx)
 		}
-		return EncryptStreamV2(r, w, opts.Passphrase, v2flags, nil, *opts.Concurrency, *opts.ProfileID, ectx)
+		return encryptStreamSymV1(r, w, opts.Passphrase, flags, *opts.Concurrency, *opts.ProfileID, ectx)
 	}
 
-	// V1 legacy path.
+	// Default: V2 (MAK2/MAK3).
+	v2flags := buildEncryptFlagsV2(opts)
 	if len(allPublicKeys) > 0 {
-		return EncryptStreamWithPublicKeysAndEvents(r, w, allPublicKeys, opts.SigningKey, flags, *opts.Concurrency, *opts.ProfileID, ectx)
+		return EncryptStreamAsymV2(r, w, allPublicKeys, opts.SigningKey, v2flags, nil, *opts.Concurrency, *opts.ProfileID, ectx)
 	}
-	return EncryptStreamWithEvents(r, w, opts.Passphrase, flags, *opts.Concurrency, *opts.ProfileID, ectx)
+	return EncryptStreamV2(r, w, opts.Passphrase, v2flags, nil, *opts.Concurrency, *opts.ProfileID, ectx)
 }
 
 // Unprotect handles the full decryption pipeline: Handshake -> Decrypt -> Decompress -> Extract.
@@ -365,6 +342,12 @@ func (e *Engine) unprotectInternal(ectx *EngineContext, r io.Reader, w io.Writer
 		v2hdr, parseErr := ParseV2AsymHeader(fullIn, opts.LocalPrivateKey)
 		if parseErr != nil {
 			return 0, parseErr
+		}
+		// Enforce sender-key requirement when file has an integrated signature.
+		// Full signature verification in V2 is pending; this preserves the security
+		// invariant that callers must explicitly acknowledge a signed file.
+		if v2hdr.Flags&uint16(FlagSigned) != 0 && len(opts.PublicKey) == 0 {
+			return 0, &ErrAuthentication{Reason: "file has an integrated ML-DSA signature: sender's public key is required for verification (use --sender-key)"}
 		}
 		ectx.Emit(EventHandshakeComplete{})
 		realFlags := byte(v2hdr.Flags)

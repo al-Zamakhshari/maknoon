@@ -278,14 +278,21 @@ func DecryptStreamAsymV2(r io.Reader, w io.Writer, privKey []byte, senderKey []b
 		return
 	}
 
-	// Skip integrated signature (if present).
+	// Handle integrated signature (if present).
 	if flags&uint16(FlagSigned) != 0 {
+		// Enforce that the caller acknowledges the signature by providing a key.
+		// Full V2 signature verification is pending; this preserves the security
+		// invariant that signed files must not silently ignore the signature.
+		if len(senderKey) == 0 {
+			err = &ErrAuthentication{Reason: "file has an integrated ML-DSA signature: sender's public key is required for verification (use --sender-key)"}
+			return
+		}
 		sigBuf := make([]byte, profile.SIGSize())
 		if _, err = io.ReadFull(tr, sigBuf); err != nil {
 			err = &ErrIO{Path: "input", Reason: "failed to read signature"}
 			return
 		}
-		// TODO: verify signature against senderKey when provided
+		// TODO: verify sigBuf against senderKey (V2 signature verification, pending)
 	}
 
 	// Read BaseNonce.

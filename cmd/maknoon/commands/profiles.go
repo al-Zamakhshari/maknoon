@@ -211,7 +211,7 @@ func verifyProfile(p *crypto.DynamicProfile) error {
 
 	// 1. Encrypt
 	var encrypted bytes.Buffer
-	if err := crypto.EncryptStream(bytes.NewReader(canary), &encrypted, passphrase, crypto.FlagNone, 1, p.ID()); err != nil {
+	if err := crypto.EncryptStreamV2(bytes.NewReader(canary), &encrypted, passphrase, 0, nil, 1, p.ID(), nil); err != nil {
 		return fmt.Errorf("encryption failed: %w", err)
 	}
 

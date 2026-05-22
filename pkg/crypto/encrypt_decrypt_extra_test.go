@@ -45,7 +45,7 @@ func TestEncryptStreamWithEventsRoundTrip(t *testing.T) {
 	ectx := &EngineContext{Context: context.Background(), Policy: &HumanPolicy{}}
 
 	var ct bytes.Buffer
-	if err := EncryptStreamWithEvents(bytes.NewReader(plaintext), &ct, pass, FlagNone, 1, 0, ectx); err != nil {
+	if err := encryptStreamSymV1(bytes.NewReader(plaintext), &ct, pass, FlagNone, 1, 0, ectx); err != nil {
 		t.Fatalf("EncryptStreamWithEvents: %v", err)
 	}
 
@@ -62,7 +62,7 @@ func TestEncryptStreamWithEventsNilContext(t *testing.T) {
 	// nil ectx should use default context.
 	plaintext := []byte("nil context test")
 	var ct bytes.Buffer
-	if err := EncryptStreamWithEvents(bytes.NewReader(plaintext), &ct, []byte("pass"), FlagNone, 1, 0, nil); err != nil {
+	if err := encryptStreamSymV1(bytes.NewReader(plaintext), &ct, []byte("pass"), FlagNone, 1, 0, nil); err != nil {
 		t.Fatalf("EncryptStreamWithEvents nil ctx: %v", err)
 	}
 	var out bytes.Buffer
@@ -135,7 +135,7 @@ func TestEncryptStreamWithPublicKeysAndEventsMultiRecipient(t *testing.T) {
 	ectx := &EngineContext{Context: context.Background(), Policy: &HumanPolicy{}}
 
 	var ct bytes.Buffer
-	if err := EncryptStreamWithPublicKeysAndEvents(bytes.NewReader(plaintext), &ct, pubKeys, nil, FlagNone, 1, 1, ectx); err != nil {
+	if err := encryptStreamAsymV1(bytes.NewReader(plaintext), &ct, pubKeys, nil, FlagNone, 1, 1, ectx); err != nil {
 		t.Fatalf("EncryptStreamWithPublicKeysAndEvents: %v", err)
 	}
 
@@ -160,7 +160,7 @@ func TestEncryptDecryptParallelConcurrency(t *testing.T) {
 	pass := []byte("parallel-pass")
 
 	var ct bytes.Buffer
-	if err := EncryptStreamWithEvents(bytes.NewReader(plaintext), &ct, pass, FlagNone, 4, 0, nil); err != nil {
+	if err := encryptStreamSymV1(bytes.NewReader(plaintext), &ct, pass, FlagNone, 4, 0, nil); err != nil {
 		t.Fatalf("encrypt concurrent: %v", err)
 	}
 

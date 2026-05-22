@@ -76,9 +76,9 @@ func (t *AEADTransformer) Transform(r io.Reader, w io.Writer) error {
 	// Encrypt
 	if len(t.RecipientPK) > 0 {
 		// Asymmetric currently doesn't have a NoHeader variant, but we can bypass magic in opts
-		return EncryptStreamWithPublicKeysAndEvents(r, w, t.RecipientPK, nil, t.Flags|FlagStealth, t.Concurrency, t.Profile.ID(), t.Context)
+		return encryptStreamAsymV1(r, w, t.RecipientPK, nil, t.Flags|FlagStealth, t.Concurrency, t.Profile.ID(), t.Context)
 	}
-	return EncryptStreamNoHeader(r, w, t.Passphrase, t.Flags, t.Concurrency, t.Profile.ID(), t.Context)
+	return encryptStreamSymV1(r, w, t.Passphrase, t.Flags|FlagStealth, t.Concurrency, t.Profile.ID(), t.Context)
 }
 
 // ZstdTransformer handles transparent compression.

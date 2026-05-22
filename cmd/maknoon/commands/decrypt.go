@@ -284,24 +284,28 @@ func DecryptCmd() *cobra.Command {
 
 			isV2 := magic == crypto.MagicHeaderV2Sym || magic == crypto.MagicHeaderV2Asym
 
-			// 3. Resolve optional sender public key for integrated verification.
-			// For V2 files, signature verification is handled inside the engine;
-			// the CLI-level FlagSigned check only applies to V1 files.
+			// 3. Resolve optional sender public key for integrated signature verification.
+			// V1: check FlagSigned bit from the peeked header byte (reliable for V1).
+			// V2: load sender key whenever --sender-key is provided (the V2 FlagSigned
+			//     bit cannot be read from the 6-byte header peek since byte[5] is ProfileID,
+			//     not flags). The engine enforces the requirement from inside.
 			var senderKey []byte
-			if !isV2 && flags&crypto.FlagSigned != 0 {
+			if senderKeyPath != "" || os.Getenv("MAKNOON_PUBLIC_KEY") != "" {
 				resolvedSenderPath := GlobalContext.Engine.ResolveKeyPath(nil, senderKeyPath, "MAKNOON_PUBLIC_KEY")
-				if resolvedSenderPath == "" {
-					err := fmt.Errorf("file has integrated signature but sender public key not provided (use --sender-key)")
-					p.RenderError(err)
-					return err
+				if resolvedSenderPath != "" {
+					sk, err := os.ReadFile(resolvedSenderPath)
+					if err != nil {
+						err = fmt.Errorf("failed to read sender public key: %w", err)
+						p.RenderError(err)
+						return err
+					}
+					senderKey = sk
 				}
-				sk, err := os.ReadFile(resolvedSenderPath)
-				if err != nil {
-					err = fmt.Errorf("failed to read sender public key: %w", err)
-					p.RenderError(err)
-					return err
-				}
-				senderKey = sk
+			} else if !isV2 && flags&crypto.FlagSigned != 0 {
+				// V1 files with FlagSigned require the sender key.
+				err := fmt.Errorf("file has integrated signature but sender public key not provided (use --sender-key)")
+				p.RenderError(err)
+				return err
 			}
 
 			// Clean RAM on exit

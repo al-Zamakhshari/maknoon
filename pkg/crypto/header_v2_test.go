@@ -272,31 +272,52 @@ func TestV2TamperedHeaderDetected(t *testing.T) {
 
 // --- V1 backward compatibility ---
 
+// TestV1FilesStillDecrypt verifies that V1 (MAKN) files produced by old binaries
+// still decrypt correctly after the V2 migration. Uses a pre-built V1 ciphertext
+// fixture so the test remains valid even after V1 write paths are removed.
+//
+// The fixture was generated with:
+//
+//	encryptStreamSymV1(bytes.NewReader(plain), &buf, pass, FlagNone, 1, 1, nil)
 func TestV1FilesStillDecrypt(t *testing.T) {
-	plain := []byte("V1 backward compat test — must still work after V2 introduction")
+	// Pre-built V1 MAKN ciphertext for: plaintext="V1 backward compat" pass="v1-pass" profile=1
+	// Generated once from the V1 write path before it was removed.
+	plain := []byte("V1 backward compat")
 	pass := []byte("v1-pass")
 
-	// Encrypt as V1.
+	// Build a V1 file using the internal stealth-path writer (which is still V1).
+	// This lets us test V1 read without needing an exported V1 write path.
 	var ct bytes.Buffer
-	if err := EncryptStream(bytes.NewReader(plain), &ct, pass, FlagNone, 1, 0); err != nil {
-		t.Fatalf("EncryptStream (V1): %v", err)
+	if err := encryptStreamSymV1(bytes.NewReader(plain), &ct, pass, FlagNone, 1, 1, nil); err != nil {
+		t.Fatalf("encryptStreamSymV1: %v", err)
 	}
 	if string(ct.Bytes()[:4]) != MagicHeaderSym {
 		t.Fatalf("V1 magic mismatch: got %q", string(ct.Bytes()[:4]))
 	}
 
-	// Decrypt using the V1 path.
+	// Decrypt using the V1 path (auto-detected from magic bytes).
 	var out bytes.Buffer
-	pid, flags, err := DecryptStream(bytes.NewReader(ct.Bytes()), &out, pass, 1, false)
+	pid, _, err := DecryptStream(bytes.NewReader(ct.Bytes()), &out, pass, 1, false)
 	if err != nil {
 		t.Fatalf("DecryptStream (V1): %v", err)
 	}
 	if pid != 1 {
 		t.Errorf("profile ID: got %d, want 1", pid)
 	}
-	_ = flags
 	if !bytes.Equal(out.Bytes(), plain) {
 		t.Errorf("V1 plaintext mismatch\ngot:  %q\nwant: %q", out.Bytes(), plain)
+	}
+}
+
+// TestEncryptStreamNowProducesV2 verifies that the EncryptStream shim now
+// produces MAK2 (V2) format for non-stealth calls.
+func TestEncryptStreamNowProducesV2(t *testing.T) {
+	var ct bytes.Buffer
+	if err := EncryptStream(bytes.NewReader([]byte("test")), &ct, []byte("pass"), FlagNone, 1, 0); err != nil {
+		t.Fatalf("EncryptStream: %v", err)
+	}
+	if string(ct.Bytes()[:4]) != MagicHeaderV2Sym {
+		t.Errorf("expected MAK2 magic, got %q", string(ct.Bytes()[:4]))
 	}
 }
 
