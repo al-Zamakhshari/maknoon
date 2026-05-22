@@ -213,6 +213,7 @@ func DecryptStream(r io.Reader, w io.Writer, password []byte, concurrency int, s
 }
 
 // DecryptStreamWithEvents is the extended version of DecryptStream that supports telemetry.
+// It automatically detects V1 (MAKN) and V2 (MAK2) symmetric formats.
 func DecryptStreamWithEvents(r io.Reader, w io.Writer, password []byte, concurrency int, stealth bool, ectx *EngineContext) (byte, byte, error) {
 	if ectx == nil {
 		ectx = &EngineContext{Context: context.Background(), Policy: &HumanPolicy{}}
@@ -220,10 +221,18 @@ func DecryptStreamWithEvents(r io.Reader, w io.Writer, password []byte, concurre
 	if w == nil {
 		w = io.Discard
 	}
-	// 1. Read Header
+	// 1. Read Header (detects V1 MAKN or V2 MAK2 magic)
 	magic, profileID, flags, _, err := ReadHeader(r, stealth)
 	if err != nil {
 		return 0, 0, err
+	}
+
+	// V2 symmetric dispatch: ReadHeader consumed the 4-byte MAK2 magic.
+	// Prepend it back so DecryptStreamV2 can read a complete file.
+	if magic == MagicHeaderV2Sym {
+		fullReader := io.MultiReader(bytes.NewReader([]byte(magic)), r)
+		pid, v2flags, _, v2err := DecryptStreamV2(fullReader, w, password, concurrency, ectx)
+		return pid, byte(v2flags), v2err
 	}
 
 	// In stealth mode, we expect caller to know it's symmetric
@@ -277,6 +286,7 @@ func DecryptStreamWithPrivateKeyAndVerifier(r io.Reader, w io.Writer, privKey []
 }
 
 // DecryptStreamWithPrivateKeyAndEvents is the extended version of DecryptStreamWithPrivateKey that supports telemetry.
+// It automatically detects V1 (MAKA) and V2 (MAK3) asymmetric formats.
 func DecryptStreamWithPrivateKeyAndEvents(r io.Reader, w io.Writer, privKey []byte, senderKey []byte, concurrency int, stealth bool, ectx *EngineContext) (byte, byte, error) {
 	if ectx == nil {
 		ectx = &EngineContext{Context: context.Background(), Policy: &HumanPolicy{}}
@@ -284,10 +294,18 @@ func DecryptStreamWithPrivateKeyAndEvents(r io.Reader, w io.Writer, privKey []by
 	if w == nil {
 		w = io.Discard
 	}
-	// 1. Read Header
+	// 1. Read Header (detects V1 MAKA or V2 MAK3 magic)
 	magic, profileID, flags, recipientCount, err := ReadHeader(r, stealth)
 	if err != nil {
 		return 0, 0, err
+	}
+
+	// V2 asymmetric dispatch: ReadHeader consumed the 4-byte MAK3 magic.
+	// Prepend it back so DecryptStreamAsymV2 can read a complete file.
+	if magic == MagicHeaderV2Asym {
+		fullReader := io.MultiReader(bytes.NewReader([]byte(magic)), r)
+		pid, v2flags, _, v2err := DecryptStreamAsymV2(fullReader, w, privKey, senderKey, concurrency, ectx)
+		return pid, byte(v2flags), v2err
 	}
 
 	if stealth {

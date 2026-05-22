@@ -350,6 +350,163 @@ func TestV2EmptyPlaintext(t *testing.T) {
 	}
 }
 
+// --- V2 asymmetric (MAK3) round-trip ---
+
+func TestV2AsymmetricRoundtrip(t *testing.T) {
+	kemPub, kemPriv, _, _, err := GeneratePQKeyPair(1)
+	if err != nil {
+		t.Fatalf("GeneratePQKeyPair: %v", err)
+	}
+	defer SafeClear(kemPriv)
+
+	plain := []byte("V2 asymmetric MAK3 round-trip 🔐")
+
+	var ct bytes.Buffer
+	err = EncryptStreamAsymV2(bytes.NewReader(plain), &ct, [][]byte{kemPub}, nil, 0, 0, nil, 1, 0, nil)
+	if err != nil {
+		t.Fatalf("EncryptStreamAsymV2: %v", err)
+	}
+
+	// Verify magic.
+	if string(ct.Bytes()[:4]) != MagicHeaderV2Asym {
+		t.Errorf("magic = %q, want %q", string(ct.Bytes()[:4]), MagicHeaderV2Asym)
+	}
+
+	var out bytes.Buffer
+	_, _, _, err = DecryptStreamAsymV2(bytes.NewReader(ct.Bytes()), &out, kemPriv, nil, 1, nil)
+	if err != nil {
+		t.Fatalf("DecryptStreamAsymV2: %v", err)
+	}
+	if !bytes.Equal(out.Bytes(), plain) {
+		t.Errorf("plaintext mismatch\ngot:  %q\nwant: %q", out.Bytes(), plain)
+	}
+}
+
+func TestV2AsymmetricWrongKeyFails(t *testing.T) {
+	kemPub, _, _, _, err := GeneratePQKeyPair(1)
+	if err != nil {
+		t.Fatalf("GeneratePQKeyPair: %v", err)
+	}
+	_, wrongPriv, _, _, err := GeneratePQKeyPair(1)
+	if err != nil {
+		t.Fatalf("GeneratePQKeyPair (wrong): %v", err)
+	}
+	defer SafeClear(wrongPriv)
+
+	var ct bytes.Buffer
+	if err = EncryptStreamAsymV2(bytes.NewReader([]byte("secret")), &ct, [][]byte{kemPub}, nil, 0, 0, nil, 1, 0, nil); err != nil {
+		t.Fatalf("EncryptStreamAsymV2: %v", err)
+	}
+
+	var out bytes.Buffer
+	_, _, _, err = DecryptStreamAsymV2(bytes.NewReader(ct.Bytes()), &out, wrongPriv, nil, 1, nil)
+	if err == nil {
+		t.Error("expected error with wrong private key, got nil")
+	}
+}
+
+func TestV2AsymmetricMultiRecipient(t *testing.T) {
+	kemPub0, kemPriv0, _, _, err := GeneratePQKeyPair(1)
+	if err != nil {
+		t.Fatalf("keypair 0: %v", err)
+	}
+	kemPub1, kemPriv1, _, _, err := GeneratePQKeyPair(1)
+	if err != nil {
+		t.Fatalf("keypair 1: %v", err)
+	}
+	defer SafeClear(kemPriv0)
+	defer SafeClear(kemPriv1)
+
+	plain := []byte("two recipients — either can decrypt")
+
+	var ct bytes.Buffer
+	if err = EncryptStreamAsymV2(bytes.NewReader(plain), &ct, [][]byte{kemPub0, kemPub1}, nil, 0, 0, nil, 1, 0, nil); err != nil {
+		t.Fatalf("EncryptStreamAsymV2: %v", err)
+	}
+
+	// Recipient 0 can decrypt.
+	var out0 bytes.Buffer
+	if _, _, _, err = DecryptStreamAsymV2(bytes.NewReader(ct.Bytes()), &out0, kemPriv0, nil, 1, nil); err != nil {
+		t.Fatalf("decrypt with key 0: %v", err)
+	}
+	if !bytes.Equal(out0.Bytes(), plain) {
+		t.Error("key 0 plaintext mismatch")
+	}
+
+	// Recipient 1 can decrypt.
+	var out1 bytes.Buffer
+	if _, _, _, err = DecryptStreamAsymV2(bytes.NewReader(ct.Bytes()), &out1, kemPriv1, nil, 1, nil); err != nil {
+		t.Fatalf("decrypt with key 1: %v", err)
+	}
+	if !bytes.Equal(out1.Bytes(), plain) {
+		t.Error("key 1 plaintext mismatch")
+	}
+}
+
+// TestV2AutoDispatch verifies that the existing DecryptStream / DecryptStreamWithPrivateKey
+// functions automatically detect and handle V2 files via the MAK2/MAK3 dispatch path.
+func TestV2AutoDispatch(t *testing.T) {
+	// Symmetric auto-dispatch.
+	plain := []byte("auto-dispatch symmetric")
+	pass := []byte("p")
+	var ct bytes.Buffer
+	if err := EncryptStreamV2(bytes.NewReader(plain), &ct, pass, 0, nil, 1, 0, nil); err != nil {
+		t.Fatalf("EncryptStreamV2: %v", err)
+	}
+	var out bytes.Buffer
+	if _, _, err := DecryptStream(bytes.NewReader(ct.Bytes()), &out, pass, 1, false); err != nil {
+		t.Fatalf("DecryptStream auto-dispatch V2: %v", err)
+	}
+	if !bytes.Equal(out.Bytes(), plain) {
+		t.Error("symmetric auto-dispatch plaintext mismatch")
+	}
+
+	// Asymmetric auto-dispatch.
+	kemPub, kemPriv, _, _, err := GeneratePQKeyPair(1)
+	if err != nil {
+		t.Fatalf("GeneratePQKeyPair: %v", err)
+	}
+	defer SafeClear(kemPriv)
+
+	plainAsym := []byte("auto-dispatch asymmetric")
+	var ctAsym bytes.Buffer
+	if err = EncryptStreamAsymV2(bytes.NewReader(plainAsym), &ctAsym, [][]byte{kemPub}, nil, 0, 0, nil, 1, 0, nil); err != nil {
+		t.Fatalf("EncryptStreamAsymV2: %v", err)
+	}
+	var outAsym bytes.Buffer
+	if _, _, err = DecryptStreamWithPrivateKey(bytes.NewReader(ctAsym.Bytes()), &outAsym, kemPriv, nil, 1, false); err != nil {
+		t.Fatalf("DecryptStreamWithPrivateKey auto-dispatch V2: %v", err)
+	}
+	if !bytes.Equal(outAsym.Bytes(), plainAsym) {
+		t.Error("asymmetric auto-dispatch plaintext mismatch")
+	}
+}
+
+// TestV2AsymmetricTamperHeaderFails verifies that tampering with the MAK3 header
+// is detected via the HeaderMAC.
+func TestV2AsymmetricTamperHeaderFails(t *testing.T) {
+	kemPub, kemPriv, _, _, err := GeneratePQKeyPair(1)
+	if err != nil {
+		t.Fatalf("GeneratePQKeyPair: %v", err)
+	}
+	defer SafeClear(kemPriv)
+
+	var ct bytes.Buffer
+	if err = EncryptStreamAsymV2(bytes.NewReader([]byte("tamper asym")), &ct, [][]byte{kemPub}, nil, 0, 0, nil, 1, 0, nil); err != nil {
+		t.Fatalf("EncryptStreamAsymV2: %v", err)
+	}
+
+	// Flip a byte in the format version field (offset 4).
+	tampered := ct.Bytes()
+	tampered[4] ^= 0x01
+
+	var out bytes.Buffer
+	_, _, _, err = DecryptStreamAsymV2(bytes.NewReader(tampered), &out, kemPriv, nil, 1, nil)
+	if err == nil {
+		t.Error("expected error on tampered MAK3 header, got nil")
+	}
+}
+
 // --- V2 large file (multi-chunk) ---
 
 func TestV2LargeFileBoundary(t *testing.T) {
