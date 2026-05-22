@@ -362,7 +362,7 @@ func TestV2AsymmetricRoundtrip(t *testing.T) {
 	plain := []byte("V2 asymmetric MAK3 round-trip 🔐")
 
 	var ct bytes.Buffer
-	err = EncryptStreamAsymV2(bytes.NewReader(plain), &ct, [][]byte{kemPub}, nil, 0, 0, nil, 1, 0, nil)
+	err = EncryptStreamAsymV2(bytes.NewReader(plain), &ct, [][]byte{kemPub}, nil, 0, nil, 1, 0, nil)
 	if err != nil {
 		t.Fatalf("EncryptStreamAsymV2: %v", err)
 	}
@@ -394,7 +394,7 @@ func TestV2AsymmetricWrongKeyFails(t *testing.T) {
 	defer SafeClear(wrongPriv)
 
 	var ct bytes.Buffer
-	if err = EncryptStreamAsymV2(bytes.NewReader([]byte("secret")), &ct, [][]byte{kemPub}, nil, 0, 0, nil, 1, 0, nil); err != nil {
+	if err = EncryptStreamAsymV2(bytes.NewReader([]byte("secret")), &ct, [][]byte{kemPub}, nil, 0, nil, 1, 0, nil); err != nil {
 		t.Fatalf("EncryptStreamAsymV2: %v", err)
 	}
 
@@ -420,7 +420,7 @@ func TestV2AsymmetricMultiRecipient(t *testing.T) {
 	plain := []byte("two recipients — either can decrypt")
 
 	var ct bytes.Buffer
-	if err = EncryptStreamAsymV2(bytes.NewReader(plain), &ct, [][]byte{kemPub0, kemPub1}, nil, 0, 0, nil, 1, 0, nil); err != nil {
+	if err = EncryptStreamAsymV2(bytes.NewReader(plain), &ct, [][]byte{kemPub0, kemPub1}, nil, 0, nil, 1, 0, nil); err != nil {
 		t.Fatalf("EncryptStreamAsymV2: %v", err)
 	}
 
@@ -470,7 +470,7 @@ func TestV2AutoDispatch(t *testing.T) {
 
 	plainAsym := []byte("auto-dispatch asymmetric")
 	var ctAsym bytes.Buffer
-	if err = EncryptStreamAsymV2(bytes.NewReader(plainAsym), &ctAsym, [][]byte{kemPub}, nil, 0, 0, nil, 1, 0, nil); err != nil {
+	if err = EncryptStreamAsymV2(bytes.NewReader(plainAsym), &ctAsym, [][]byte{kemPub}, nil, 0, nil, 1, 0, nil); err != nil {
 		t.Fatalf("EncryptStreamAsymV2: %v", err)
 	}
 	var outAsym bytes.Buffer
@@ -492,7 +492,7 @@ func TestV2AsymmetricTamperHeaderFails(t *testing.T) {
 	defer SafeClear(kemPriv)
 
 	var ct bytes.Buffer
-	if err = EncryptStreamAsymV2(bytes.NewReader([]byte("tamper asym")), &ct, [][]byte{kemPub}, nil, 0, 0, nil, 1, 0, nil); err != nil {
+	if err = EncryptStreamAsymV2(bytes.NewReader([]byte("tamper asym")), &ct, [][]byte{kemPub}, nil, 0, nil, 1, 0, nil); err != nil {
 		t.Fatalf("EncryptStreamAsymV2: %v", err)
 	}
 
@@ -504,6 +504,86 @@ func TestV2AsymmetricTamperHeaderFails(t *testing.T) {
 	_, _, _, err = DecryptStreamAsymV2(bytes.NewReader(tampered), &out, kemPriv, nil, 1, nil)
 	if err == nil {
 		t.Error("expected error on tampered MAK3 header, got nil")
+	}
+}
+
+// --- V2 threshold (EncryptStreamThresholdV2) ---
+
+func TestV2ThresholdEncryptDecrypt2of3(t *testing.T) {
+	// Generate 3 recipient keypairs.
+	pubs := make([][]byte, 3)
+	privs := make([][]byte, 3)
+	for i := range pubs {
+		pub, priv, _, _, err := GeneratePQKeyPair(1)
+		if err != nil {
+			t.Fatalf("keypair %d: %v", i, err)
+		}
+		pubs[i] = pub
+		privs[i] = priv
+		defer SafeClear(privs[i])
+	}
+
+	plain := []byte("V2 threshold 2-of-3 round-trip")
+
+	// Encrypt with threshold=2.
+	var ct bytes.Buffer
+	err := EncryptStreamThresholdV2(bytes.NewReader(plain), &ct, pubs, 2, 0, 1, 0, nil)
+	if err != nil {
+		t.Fatalf("EncryptStreamThresholdV2: %v", err)
+	}
+
+	// Verify MAK3 magic.
+	if string(ct.Bytes()[:4]) != MagicHeaderV2Asym {
+		t.Errorf("magic = %q, want MAK3", string(ct.Bytes()[:4]))
+	}
+
+	// Collect share from recipient 0.
+	share0, err := DecryptThresholdCollectShareV2(bytes.NewReader(ct.Bytes()), privs[0], 0)
+	if err != nil {
+		t.Fatalf("CollectShareV2[0]: %v", err)
+	}
+	if share0.Threshold != 2 {
+		t.Errorf("share0.Threshold = %d, want 2", share0.Threshold)
+	}
+
+	// Collect share from recipient 2 (skip 1 — proves non-sequential works).
+	share2, err := DecryptThresholdCollectShareV2(bytes.NewReader(ct.Bytes()), privs[2], 0)
+	if err != nil {
+		t.Fatalf("CollectShareV2[2]: %v", err)
+	}
+
+	// Combine 2 shares → decrypt.
+	var out bytes.Buffer
+	err = DecryptThresholdCombineV2(bytes.NewReader(ct.Bytes()), &out, "", []*ThresholdShare{share0, share2}, nil)
+	if err != nil {
+		t.Fatalf("DecryptThresholdCombineV2: %v", err)
+	}
+	if !bytes.Equal(out.Bytes(), plain) {
+		t.Errorf("plaintext mismatch\ngot:  %q\nwant: %q", out.Bytes(), plain)
+	}
+}
+
+func TestV2ThresholdInsufficientSharesFails(t *testing.T) {
+	pubs := make([][]byte, 3)
+	privs := make([][]byte, 3)
+	for i := range pubs {
+		pub, priv, _, _, err := GeneratePQKeyPair(1)
+		if err != nil {
+			t.Fatalf("keypair %d: %v", i, err)
+		}
+		pubs[i] = pub
+		privs[i] = priv
+		defer SafeClear(privs[i])
+	}
+	var ct bytes.Buffer
+	if err := EncryptStreamThresholdV2(bytes.NewReader([]byte("secret")), &ct, pubs, 2, 0, 1, 0, nil); err != nil {
+		t.Fatalf("EncryptStreamThresholdV2: %v", err)
+	}
+	share0, _ := DecryptThresholdCollectShareV2(bytes.NewReader(ct.Bytes()), privs[0], 0)
+	var out bytes.Buffer
+	err := DecryptThresholdCombineV2(bytes.NewReader(ct.Bytes()), &out, "", []*ThresholdShare{share0}, nil)
+	if err == nil {
+		t.Error("expected error with only 1 share (below threshold=2), got nil")
 	}
 }
 

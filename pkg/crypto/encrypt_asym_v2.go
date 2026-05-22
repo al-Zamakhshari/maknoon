@@ -19,10 +19,11 @@ import (
 //     header-swap attacks where a ciphertext decrypts under two different keys
 //   - Stream terminator: 0x00000000 after last chunk for truncation detection
 //
-// The THRESHOLD TLV (TLVTagThreshold) is set automatically when thresholdK >= 2.
-// Set thresholdK=0 to disable threshold (standard multi-recipient mode).
+// For K-of-N threshold encryption (any K of N recipients must cooperate to
+// decrypt), use EncryptStreamThresholdV2 instead. That function splits the FEK
+// into Shamir shares and wraps each share — not the full FEK — per recipient.
 func EncryptStreamAsymV2(r io.Reader, w io.Writer, pubKeys [][]byte, signingKey []byte,
-	thresholdK int, flags uint16, tlvs []TLVEntry, concurrency int, profileID byte, ectx *EngineContext) error {
+	flags uint16, tlvs []TLVEntry, concurrency int, profileID byte, ectx *EngineContext) error {
 
 	if ectx == nil {
 		ectx = &EngineContext{Context: context.Background(), Policy: &HumanPolicy{}}
@@ -107,15 +108,7 @@ func EncryptStreamAsymV2(r io.Reader, w io.Writer, pubKeys [][]byte, signingKey 
 		signature = sig
 	}
 
-	// 5. Inject THRESHOLD TLV when threshold mode is active.
-	if thresholdK >= 2 {
-		tlvs = append(tlvs, TLVEntry{
-			Tag:   TLVTagThreshold,
-			Value: []byte{byte(thresholdK), byte(len(pubKeys))},
-		})
-	}
-
-	// 6. Build header bytes for HeaderMAC (everything before the MAC itself).
+	// 5. Build header bytes for HeaderMAC (everything before the MAC itself).
 	extBytes := EncodeTLVs(tlvs)
 	var hdrBuf bytes.Buffer
 	hdrBuf.WriteString(MagicHeaderV2Asym)
@@ -134,11 +127,11 @@ func EncryptStreamAsymV2(r io.Reader, w io.Writer, pubKeys [][]byte, signingKey 
 	}
 	hdrBuf.Write(baseNonce)
 
-	// 7. Compute HeaderMAC = HMAC-SHA256(fek, header_bytes).
+	// 6. Compute HeaderMAC = HMAC-SHA256(fek, header_bytes).
 	mac := ComputeHeaderMAC(fekBuf.Bytes(), hdrBuf.Bytes())
 	fekBuf.Destroy()
 
-	// 8. Write header + MAC to w.
+	// 7. Write header + MAC to w.
 	if _, err := w.Write(hdrBuf.Bytes()); err != nil {
 		return &ErrIO{Path: "output", Reason: err.Error()}
 	}
@@ -148,8 +141,7 @@ func EncryptStreamAsymV2(r io.Reader, w io.Writer, pubKeys [][]byte, signingKey 
 
 	ectx.Emit(EventHandshakeComplete{})
 
-	// 9. Encrypt chunks.
-	// Re-open FEK enclave to build the AEAD for stream encryption.
+	// 8. Encrypt chunks — re-open FEK enclave for stream encryption.
 	fekBuf2, err := fekEnclave.Open()
 	if err != nil {
 		return &ErrCrypto{Reason: "failed to re-open FEK enclave for stream encryption"}
@@ -164,7 +156,7 @@ func EncryptStreamAsymV2(r io.Reader, w io.Writer, pubKeys [][]byte, signingKey 
 		return err
 	}
 
-	// 10. Write stream terminator.
+	// 9. Write stream terminator.
 	return writeChunkTerminator(w)
 }
 
