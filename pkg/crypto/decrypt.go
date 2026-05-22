@@ -11,6 +11,101 @@ import (
 	"sync"
 )
 
+// V2ParsedHeader holds the decoded state of a V2 header and the AEAD/nonce
+// needed to continue streaming decryption. After parsing, r is positioned
+// immediately after the HeaderMAC field (ready for chunk reads).
+type V2ParsedHeader struct {
+	ProfileID byte
+	Flags     uint16
+	TLVs      []TLVEntry
+	AEAD      cipher.AEAD
+	BaseNonce []byte
+}
+
+// ParseV2SymHeader reads and validates a V2 symmetric (MAK2) header from r,
+// returning a V2ParsedHeader and leaving r positioned at the first chunk.
+// This is the parse-only path used by unprotectInternal to obtain the real
+// flags before FinalizeRestoration begins (decompression depends on flags).
+func ParseV2SymHeader(r io.Reader, password []byte) (*V2ParsedHeader, error) {
+	var hdrBuf bytes.Buffer
+	tr := io.TeeReader(r, &hdrBuf)
+
+	magicBuf := make([]byte, 4)
+	if _, err := io.ReadFull(tr, magicBuf); err != nil {
+		return nil, &ErrIO{Path: "input", Reason: "failed to read magic"}
+	}
+	if string(magicBuf) != MagicHeaderV2Sym {
+		return nil, &ErrFormat{Reason: fmt.Sprintf("expected MAK2 magic, got %q", string(magicBuf))}
+	}
+	versionBuf := make([]byte, 1)
+	if _, err := io.ReadFull(tr, versionBuf); err != nil {
+		return nil, &ErrIO{Path: "input", Reason: "failed to read format version"}
+	}
+	if versionBuf[0] != FormatVersionV2Sym {
+		return nil, &ErrFormat{Reason: fmt.Sprintf("unsupported MAK2 format version %d", versionBuf[0])}
+	}
+	pidBuf := make([]byte, 1)
+	if _, err := io.ReadFull(tr, pidBuf); err != nil {
+		return nil, &ErrIO{Path: "input", Reason: "failed to read profile ID"}
+	}
+	profileID := pidBuf[0]
+	flagsBuf := make([]byte, 2)
+	if _, err := io.ReadFull(tr, flagsBuf); err != nil {
+		return nil, &ErrIO{Path: "input", Reason: "failed to read flags"}
+	}
+	flags := binary.LittleEndian.Uint16(flagsBuf)
+	extLenBuf := make([]byte, 2)
+	if _, err := io.ReadFull(tr, extLenBuf); err != nil {
+		return nil, &ErrIO{Path: "input", Reason: "failed to read ExtLen"}
+	}
+	extLen := binary.LittleEndian.Uint16(extLenBuf)
+	var extBytes []byte
+	if extLen > 0 {
+		extBytes = make([]byte, extLen)
+		if _, err := io.ReadFull(tr, extBytes); err != nil {
+			return nil, &ErrIO{Path: "input", Reason: "failed to read TLV block"}
+		}
+	}
+	tlvs := DecodeTLVs(extBytes)
+	saltLenBuf := make([]byte, 1)
+	if _, err := io.ReadFull(tr, saltLenBuf); err != nil {
+		return nil, &ErrIO{Path: "input", Reason: "failed to read SaltLen"}
+	}
+	salt := make([]byte, saltLenBuf[0])
+	if _, err := io.ReadFull(tr, salt); err != nil {
+		return nil, &ErrIO{Path: "input", Reason: "failed to read salt"}
+	}
+	profile, profileErr := GetProfile(profileID, nil)
+	if profileErr != nil {
+		return nil, &ErrFormat{Reason: fmt.Sprintf("unknown profile %d", profileID)}
+	}
+	fek := profile.DeriveKey(password, salt)
+	defer SafeClear(fek)
+	aead, aeadErr := profile.NewAEAD(fek)
+	if aeadErr != nil {
+		return nil, &ErrCrypto{Reason: fmt.Sprintf("NewAEAD: %v", aeadErr)}
+	}
+	baseNonce := make([]byte, aead.NonceSize())
+	if _, err := io.ReadFull(tr, baseNonce); err != nil {
+		return nil, &ErrIO{Path: "input", Reason: "failed to read base nonce"}
+	}
+	headerBytes := hdrBuf.Bytes()
+	mac := make([]byte, HeaderMACSize)
+	if _, err := io.ReadFull(r, mac); err != nil { // read from r, not tr
+		return nil, &ErrIO{Path: "input", Reason: "failed to read header MAC"}
+	}
+	if !VerifyHeaderMAC(fek, headerBytes, mac) {
+		return nil, &ErrAuthentication{Reason: "header MAC verification failed: wrong passphrase or tampered header"}
+	}
+	return &V2ParsedHeader{
+		ProfileID: profileID,
+		Flags:     flags,
+		TLVs:      tlvs,
+		AEAD:      aead,
+		BaseNonce: baseNonce,
+	}, nil
+}
+
 // DecryptStreamV2 symmetrically decrypts a V2-format (.makn MAK2) file from r.
 // r must point to the very beginning of the file (including the MAK2 magic bytes).
 //

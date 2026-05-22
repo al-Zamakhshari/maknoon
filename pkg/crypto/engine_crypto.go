@@ -2,6 +2,7 @@ package crypto
 
 import (
 	"crypto/rand"
+	"encoding/binary"
 	"fmt"
 	"io"
 	"io/fs"
@@ -529,6 +530,18 @@ func (s *CryptoService) Inspect(_ *EngineContext, in io.Reader, stealth bool) (*
 		return nil, err
 	}
 
+	// V2 files: ReadHeader returns placeholder profileID=0 and flags=0.
+	// Read the real V2 header fields to populate the info struct accurately.
+	var v2flags uint16
+	var v2tlvs []TLVEntry
+	if magic == MagicHeaderV2Sym || magic == MagicHeaderV2Asym {
+		if err := inspectV2Fields(in, magic, &profileID, &v2flags, &recipients, &v2tlvs); err != nil {
+			// Non-fatal: return partial info rather than failing entirely.
+			_ = err
+		}
+		flags = byte(v2flags) // low byte covers Archive, Compress, Signed, Stealth
+	}
+
 	info := &HeaderInfo{
 		Magic:          magic,
 		ProfileID:      profileID,
@@ -540,12 +553,16 @@ func (s *CryptoService) Inspect(_ *EngineContext, in io.Reader, stealth bool) (*
 		IsStealth:      stealth || flags&FlagStealth != 0,
 	}
 
-	if magic == MagicHeader {
+	switch magic {
+	case MagicHeader:
 		info.Type = "symmetric"
-	} else if magic == MagicHeaderAsym {
+	case MagicHeaderAsym:
+		info.Type = "asymmetric"
+	case MagicHeaderV2Sym:
+		info.Type = "symmetric"
+	case MagicHeaderV2Asym:
 		info.Type = "asymmetric"
 	}
-
 	if info.IsStealth {
 		info.Type = "stealth"
 	}
@@ -560,5 +577,53 @@ func (s *CryptoService) Inspect(_ *EngineContext, in io.Reader, stealth bool) (*
 		}
 	}
 
+	// Surface selected V2 TLV metadata in KDFDetails / SIGAlgorithm for display.
+	if len(v2tlvs) > 0 {
+		if fname := FindTLV(v2tlvs, TLVTagFilename); len(fname) > 0 {
+			info.SIGAlgorithm = fmt.Sprintf("%s (filename: %s)", info.SIGAlgorithm, string(fname))
+		}
+	}
+
 	return info, nil
+}
+
+// inspectV2Fields reads the V2 header fields that come after the magic bytes.
+// in is positioned immediately after the 4-byte magic. Fields are filled into
+// the pointer arguments so the caller can populate HeaderInfo without re-reading.
+func inspectV2Fields(in io.Reader, magic string, profileID *byte, flags *uint16, recipientCount *byte, tlvs *[]TLVEntry) error {
+	// FormatVersion (1) + ProfileID (1) + Flags (2) + RecipientCount (1, asym only) + ExtLen (2) + TLVs
+	verBuf := make([]byte, 1)
+	if _, err := io.ReadFull(in, verBuf); err != nil {
+		return err
+	}
+	pidBuf := make([]byte, 1)
+	if _, err := io.ReadFull(in, pidBuf); err != nil {
+		return err
+	}
+	*profileID = pidBuf[0]
+	flagsBuf := make([]byte, 2)
+	if _, err := io.ReadFull(in, flagsBuf); err != nil {
+		return err
+	}
+	*flags = binary.LittleEndian.Uint16(flagsBuf)
+	if magic == MagicHeaderV2Asym {
+		rcBuf := make([]byte, 1)
+		if _, err := io.ReadFull(in, rcBuf); err != nil {
+			return err
+		}
+		*recipientCount = rcBuf[0]
+	}
+	extLenBuf := make([]byte, 2)
+	if _, err := io.ReadFull(in, extLenBuf); err != nil {
+		return err
+	}
+	extLen := binary.LittleEndian.Uint16(extLenBuf)
+	if extLen > 0 {
+		extBytes := make([]byte, extLen)
+		if _, err := io.ReadFull(in, extBytes); err != nil {
+			return err
+		}
+		*tlvs = DecodeTLVs(extBytes)
+	}
+	return nil
 }

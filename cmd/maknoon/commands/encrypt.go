@@ -33,6 +33,7 @@ func EncryptCmd() *cobra.Command {
 	var recursive bool
 	var dryRun bool
 	var threshold int
+	var formatV1 bool // --v1: force legacy V1 wire format (MAKN/MAKA)
 
 	// KDF overrides
 	var argonTime uint32
@@ -49,6 +50,9 @@ func EncryptCmd() *cobra.Command {
 			// Multiple explicit files — derive session key once, encrypt each.
 			if len(args) > 1 {
 				opts := crypto.Options{}
+				if formatV1 {
+					opts.FormatVersion = 1
+				}
 				if cmd.Flags().Changed("compress") {
 					opts.Compress = crypto.BoolPtr(compress)
 				}
@@ -125,6 +129,9 @@ func EncryptCmd() *cobra.Command {
 					return dryRunEncryptDir(inputPath, output)
 				}
 				opts := crypto.Options{}
+				if formatV1 {
+					opts.FormatVersion = 1
+				}
 				if cmd.Flags().Changed("compress") {
 					opts.Compress = crypto.BoolPtr(compress)
 				}
@@ -194,6 +201,9 @@ func EncryptCmd() *cobra.Command {
 			opts := crypto.Options{
 				IsArchive: isDir,
 				TotalSize: -1, // Resolved below
+			}
+			if formatV1 {
+				opts.FormatVersion = 1 // legacy MAKN/MAKA — use only for old receivers
 			}
 
 			if cmd.Flags().Changed("compress") {
@@ -324,6 +334,7 @@ func EncryptCmd() *cobra.Command {
 	cmd.Flags().IntVar(&threshold, "threshold", 0, "K-of-N threshold decryption: require K out of N recipients to decrypt (must be ≥ 2)")
 	cmd.Flags().StringVar(&profileStr, "profile", "", "Cryptographic profile (nist, conservative)")
 	cmd.Flags().StringVar(&profileFile, "profile-file", "", "Path to a custom profile JSON file")
+	cmd.Flags().BoolVar(&formatV1, "v1", false, "Write legacy V1 format (MAKN/MAKA) — use only when the receiver cannot handle V2 files")
 
 	_ = cmd.RegisterFlagCompletionFunc("public-key", completeIdentities)
 	_ = cmd.RegisterFlagCompletionFunc("sign-key", completeIdentities)

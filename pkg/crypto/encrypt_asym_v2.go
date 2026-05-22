@@ -342,6 +342,144 @@ func DecryptStreamAsymV2(r io.Reader, w io.Writer, privKey []byte, senderKey []b
 	return
 }
 
+// ParseV2AsymHeader reads and validates a V2 asymmetric (MAK3) header from r,
+// returning a V2ParsedHeader and leaving r positioned at the first chunk.
+// privKey is the recipient's private key used to unwrap the FEK.
+// The returned V2ParsedHeader holds the AEAD and BaseNonce ready for streaming.
+func ParseV2AsymHeader(r io.Reader, privKey []byte) (*V2ParsedHeader, error) {
+	var hdrBuf bytes.Buffer
+	tr := io.TeeReader(r, &hdrBuf)
+
+	magicBuf := make([]byte, 4)
+	if _, err := io.ReadFull(tr, magicBuf); err != nil {
+		return nil, &ErrIO{Path: "input", Reason: "failed to read magic"}
+	}
+	if string(magicBuf) != MagicHeaderV2Asym {
+		return nil, &ErrFormat{Reason: fmt.Sprintf("expected MAK3 magic, got %q", string(magicBuf))}
+	}
+	versionBuf := make([]byte, 1)
+	if _, err := io.ReadFull(tr, versionBuf); err != nil {
+		return nil, &ErrIO{Path: "input", Reason: "failed to read format version"}
+	}
+	if versionBuf[0] != FormatVersionV2Asym {
+		return nil, &ErrFormat{Reason: fmt.Sprintf("unsupported MAK3 format version %d", versionBuf[0])}
+	}
+	pidBuf := make([]byte, 1)
+	if _, err := io.ReadFull(tr, pidBuf); err != nil {
+		return nil, &ErrIO{Path: "input", Reason: "failed to read profile ID"}
+	}
+	profileID := pidBuf[0]
+
+	flagsBuf := make([]byte, 2)
+	if _, err := io.ReadFull(tr, flagsBuf); err != nil {
+		return nil, &ErrIO{Path: "input", Reason: "failed to read flags"}
+	}
+	flags := binary.LittleEndian.Uint16(flagsBuf)
+
+	rcBuf := make([]byte, 1)
+	if _, err := io.ReadFull(tr, rcBuf); err != nil {
+		return nil, &ErrIO{Path: "input", Reason: "failed to read recipient count"}
+	}
+	recipientCount := int(rcBuf[0])
+
+	extLenBuf := make([]byte, 2)
+	if _, err := io.ReadFull(tr, extLenBuf); err != nil {
+		return nil, &ErrIO{Path: "input", Reason: "failed to read ExtLen"}
+	}
+	extLen := binary.LittleEndian.Uint16(extLenBuf)
+	var extBytes []byte
+	if extLen > 0 {
+		extBytes = make([]byte, extLen)
+		if _, err := io.ReadFull(tr, extBytes); err != nil {
+			return nil, &ErrIO{Path: "input", Reason: "failed to read TLV block"}
+		}
+	}
+	tlvs := DecodeTLVs(extBytes)
+
+	profile, profileErr := GetProfile(profileID, nil)
+	if profileErr != nil {
+		return nil, &ErrFormat{Reason: fmt.Sprintf("unknown profile %d", profileID)}
+	}
+
+	myHash := Sha256Sum(DerivePublicKey(privKey, profileID))[:4]
+	blockSize := profile.RecipientBlockSize()
+
+	var fekEnclave *memguard.Enclave
+	for i := 0; i < recipientCount; i++ {
+		hashBuf := make([]byte, 4)
+		if _, err := io.ReadFull(tr, hashBuf); err != nil {
+			return nil, &ErrIO{Path: "input", Reason: "failed to read recipient hash"}
+		}
+		material := make([]byte, blockSize)
+		if _, err := io.ReadFull(tr, material); err != nil {
+			return nil, &ErrIO{Path: "input", Reason: "failed to read recipient block"}
+		}
+		if fekEnclave == nil && bytesEqual(hashBuf, myHash) {
+			enc, unwrapErr := profile.UnwrapFEK(privKey, byte(flags), material)
+			if unwrapErr == nil {
+				fekEnclave = enc
+			}
+		}
+	}
+	if fekEnclave == nil {
+		return nil, &ErrAuthentication{Reason: "no recipient block matches the provided private key"}
+	}
+
+	// Skip signature if present.
+	if flags&uint16(FlagSigned) != 0 {
+		sigBuf := make([]byte, profile.SIGSize())
+		if _, err := io.ReadFull(tr, sigBuf); err != nil {
+			return nil, &ErrIO{Path: "input", Reason: "failed to read signature"}
+		}
+	}
+
+	fekBuf, openErr := fekEnclave.Open()
+	if openErr != nil {
+		return nil, &ErrCrypto{Reason: "failed to open FEK enclave"}
+	}
+	aead, aeadErr := profile.NewAEAD(fekBuf.Bytes())
+	if aeadErr != nil {
+		fekBuf.Destroy()
+		return nil, &ErrCrypto{Reason: fmt.Sprintf("NewAEAD: %v", aeadErr)}
+	}
+	baseNonce := make([]byte, aead.NonceSize())
+	if _, err := io.ReadFull(tr, baseNonce); err != nil {
+		fekBuf.Destroy()
+		return nil, &ErrIO{Path: "input", Reason: "failed to read base nonce"}
+	}
+
+	headerBytes := hdrBuf.Bytes()
+	mac := make([]byte, HeaderMACSize)
+	if _, err := io.ReadFull(r, mac); err != nil {
+		fekBuf.Destroy()
+		return nil, &ErrIO{Path: "input", Reason: "failed to read header MAC"}
+	}
+	if !VerifyHeaderMAC(fekBuf.Bytes(), headerBytes, mac) {
+		fekBuf.Destroy()
+		return nil, &ErrAuthentication{Reason: "V2 asymmetric header MAC verification failed — header may be tampered"}
+	}
+	fekBuf.Destroy()
+
+	// Build AEAD for streaming from a second open of the enclave.
+	fekBuf2, openErr := fekEnclave.Open()
+	if openErr != nil {
+		return nil, &ErrCrypto{Reason: "failed to re-open FEK enclave"}
+	}
+	aead2, aeadErr := profile.NewAEAD(fekBuf2.Bytes())
+	fekBuf2.Destroy()
+	if aeadErr != nil {
+		return nil, &ErrCrypto{Reason: fmt.Sprintf("NewAEAD (stream): %v", aeadErr)}
+	}
+
+	return &V2ParsedHeader{
+		ProfileID: profileID,
+		Flags:     flags,
+		TLVs:      tlvs,
+		AEAD:      aead2,
+		BaseNonce: baseNonce,
+	}, nil
+}
+
 // bytesEqual compares two byte slices in constant time.
 // Used for recipient hash matching to avoid timing side-channels.
 func bytesEqual(a, b []byte) bool {

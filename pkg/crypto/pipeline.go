@@ -34,6 +34,13 @@ type Options struct {
 	TraceID         string             // Correlation ID for distributed observability
 	SessionKey      SecretBytes        // Pre-derived 32-byte key; when set, KDF is skipped
 	SessionSalt     []byte             // Salt used to derive SessionKey (stored in header for self-description)
+
+	// FormatVersion controls the .makn wire format used for new encryptions.
+	// 0 = default (V2: MAK2/MAK3 with TLV extensions, HeaderMAC, terminator)
+	// 1 = legacy V1 (MAKN/MAKA) — use only when the receiver cannot upgrade
+	// 2 = V2 explicit (same as 0)
+	// The decrypt path always auto-detects the format regardless of this field.
+	FormatVersion byte
 }
 
 func (o *Options) Emit(ev EngineEvent) {
@@ -166,7 +173,7 @@ func openSourceReader(inputName string, r io.Reader, opts Options) (io.Reader, f
 	return f, func() { _ = f.Close() }, nil
 }
 
-// buildEncryptFlags assembles the flags byte from resolved options.
+// buildEncryptFlags assembles the V1 flags byte from resolved options.
 func buildEncryptFlags(opts Options) byte {
 	var flags byte
 	if opts.IsArchive {
@@ -181,18 +188,57 @@ func buildEncryptFlags(opts Options) byte {
 	return flags
 }
 
-// dispatchEncrypt routes to the correct encrypt function based on key material in opts.
+// buildEncryptFlagsV2 assembles the V2 uint16 flags from resolved options.
+// V1 flag bit values are preserved in the low byte.
+func buildEncryptFlagsV2(opts Options) uint16 {
+	return uint16(buildEncryptFlags(opts))
+}
+
+// useV2Format reports whether opts requests the V2 wire format.
+// V2 is the default (FormatVersion 0 or 2). Exceptions that force V1:
+//   - FormatVersion == 1 (explicit --v1 flag)
+//   - Stealth mode: V2 always writes the magic header; stealth-mode V2 detection
+//     requires additional framing that is reserved for a future release.
+//   - Session key: the pre-derived-key path has a V1-only header structure.
+func useV2Format(opts Options) bool {
+	if opts.FormatVersion == 1 {
+		return false
+	}
+	if opts.Stealth != nil && *opts.Stealth {
+		return false // stealth + V2 reserved for future release
+	}
+	return true
+}
+
+// dispatchEncrypt routes to the correct encrypt function based on key material and format version.
+//
+// V2 (MAK2/MAK3) is the default. Pass FormatVersion=1 in opts to force the legacy V1
+// format — necessary only when the receiver cannot upgrade to handle V2 files.
+//
+// Note: the session-key path always uses V1 because EncryptStreamWithKey encodes the
+// pre-derived key directly; a V2 variant will be added in a future release.
 func dispatchEncrypt(r io.Reader, w io.Writer, flags byte, opts Options, ectx *EngineContext) error {
 	allPublicKeys := opts.Recipients
 	if len(opts.PublicKey) > 0 {
 		allPublicKeys = append(allPublicKeys, opts.PublicKey)
 	}
 
-	if len(allPublicKeys) > 0 {
-		return EncryptStreamWithPublicKeysAndEvents(r, w, allPublicKeys, opts.SigningKey, flags, *opts.Concurrency, *opts.ProfileID, ectx)
-	}
+	// Session-key path: always V1 (pre-derived key, no KDF, different header).
 	if len(opts.SessionKey) > 0 {
 		return EncryptStreamWithKey(r, w, opts.SessionKey, opts.SessionSalt, flags, *opts.Concurrency, *opts.ProfileID)
+	}
+
+	if useV2Format(opts) {
+		v2flags := buildEncryptFlagsV2(opts)
+		if len(allPublicKeys) > 0 {
+			return EncryptStreamAsymV2(r, w, allPublicKeys, opts.SigningKey, v2flags, nil, *opts.Concurrency, *opts.ProfileID, ectx)
+		}
+		return EncryptStreamV2(r, w, opts.Passphrase, v2flags, nil, *opts.Concurrency, *opts.ProfileID, ectx)
+	}
+
+	// V1 legacy path.
+	if len(allPublicKeys) > 0 {
+		return EncryptStreamWithPublicKeysAndEvents(r, w, allPublicKeys, opts.SigningKey, flags, *opts.Concurrency, *opts.ProfileID, ectx)
 	}
 	return EncryptStreamWithEvents(r, w, opts.Passphrase, flags, *opts.Concurrency, *opts.ProfileID, ectx)
 }
@@ -249,31 +295,89 @@ func (e *Engine) unprotectInternal(ectx *EngineContext, r io.Reader, w io.Writer
 		return 0, err
 	}
 
-	// Governance: Validate discovered profile
-	if err := ectx.Policy.ValidateProfile(profileID); err != nil {
-		log.Error("profile validation failed during restoration", "err", err, "profile_id", profileID)
-		return 0, err
+	// Governance: Validate discovered profile.
+	// For V2 (MAK2/MAK3), ReadHeader returns profileID=0 (placeholder) because
+	// the real ProfileID is inside the V2 header after the magic bytes.
+	// Skip validation here; the V2 decoder will validate the actual profileID.
+	isV2 := magic == MagicHeaderV2Sym || magic == MagicHeaderV2Asym
+	if !isV2 {
+		if err := ectx.Policy.ValidateProfile(profileID); err != nil {
+			log.Error("profile validation failed during restoration", "err", err, "profile_id", profileID)
+			return 0, err
+		}
 	}
 
-	if magic == MagicHeaderSym {
-		log.Debug("handshake complete", "mode", "symmetric")
-	} else if magic == MagicHeaderAsym {
-		log.Debug("handshake complete", "mode", "asymmetric", "recipients", recipientCount)
+	switch magic {
+	case MagicHeaderSym:
+		log.Debug("handshake complete", "mode", "symmetric_v1")
+	case MagicHeaderAsym:
+		log.Debug("handshake complete", "mode", "asymmetric_v1", "recipients", recipientCount)
+	case MagicHeaderV2Sym:
+		log.Debug("handshake complete", "mode", "symmetric_v2")
+	case MagicHeaderV2Asym:
+		log.Debug("handshake complete", "mode", "asymmetric_v2")
 	}
 
-	// Reconstruct input for the actual decryption
+	// Reconstruct the reader by prepending bytes consumed by ReadHeader.
+	// V1: ReadHeader consumed magic(4) + profileID(1) + flags(1) [+ recipientCount(1) for asym].
+	// V2: ReadHeader consumed only magic(4) and returned early — profileID/flags are 0 placeholders.
 	var headerBytes []byte
-	if !*opts.Stealth {
+	switch {
+	case magic == MagicHeaderV2Sym || magic == MagicHeaderV2Asym:
+		// Only the 4-byte magic was consumed; the rest (FormatVersion, ProfileID,
+		// Flags, TLVs, …) are intact in r and will be parsed by the V2 decoder.
+		headerBytes = []byte(magic)
+	case !*opts.Stealth:
 		headerBytes = append([]byte(magic), profileID, flags)
 		if magic == MagicHeaderAsym {
 			headerBytes = append(headerBytes, recipientCount)
 		}
-	} else {
+	default:
 		headerBytes = []byte{profileID, flags}
 	}
 	fullIn := io.MultiReader(bytes.NewReader(headerBytes), r)
 
-	// 2. Core Decryption (returns decrypted payload via a pipe)
+	// 2. Core Decryption + Post-Processing.
+	//
+	// V2 symmetric (MAK2): parse the header synchronously to extract the real
+	// flags (compress, archive) before FinalizeRestoration starts. The flags
+	// field returned by ReadHeader is 0 for V2 (early-exit placeholder) so we
+	// must get them from ParseV2SymHeader.
+	if magic == MagicHeaderV2Sym {
+		v2hdr, parseErr := ParseV2SymHeader(fullIn, opts.Passphrase)
+		if parseErr != nil {
+			return 0, parseErr
+		}
+		ectx.Emit(EventHandshakeComplete{}) // header parsed and MAC verified
+		realFlags := byte(v2hdr.Flags)
+		pr, pw := io.Pipe()
+		go func() {
+			pw.CloseWithError(streamDecryptV2(fullIn, pw, v2hdr.AEAD, v2hdr.BaseNonce, ectx))
+		}()
+		if err = e.FinalizeRestoration(ectx, pr, w, realFlags, outPath, log); err != nil {
+			return realFlags, err
+		}
+		return realFlags, nil
+	}
+
+	// V2 asymmetric (MAK3): parse header synchronously to get real flags.
+	if magic == MagicHeaderV2Asym {
+		v2hdr, parseErr := ParseV2AsymHeader(fullIn, opts.LocalPrivateKey)
+		if parseErr != nil {
+			return 0, parseErr
+		}
+		ectx.Emit(EventHandshakeComplete{})
+		realFlags := byte(v2hdr.Flags)
+		pr, pw := io.Pipe()
+		go func() {
+			pw.CloseWithError(streamDecryptV2(fullIn, pw, v2hdr.AEAD, v2hdr.BaseNonce, ectx))
+		}()
+		if err = e.FinalizeRestoration(ectx, pr, w, realFlags, outPath, log); err != nil {
+			return realFlags, err
+		}
+		return realFlags, nil
+	}
+
 	pr, pw := io.Pipe()
 	concurrency := *opts.Concurrency
 	stealth := *opts.Stealth

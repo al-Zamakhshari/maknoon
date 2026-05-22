@@ -265,7 +265,14 @@ func DecryptCmd() *cobra.Command {
 				fullIn = io.MultiReader(bytes.NewReader(header), in)
 
 				magic = string(header[:4])
-				flags = header[5]
+				// V1: header layout is MAGIC(4) | ProfileID(1) | Flags(1)
+				// V2: header layout is MAGIC(4) | FormatVersion(1) | ProfileID(1) | Flags(2 LE) ...
+				// For V2, header[5] is ProfileID, not flags — real flags require reading 2 more bytes.
+				// We skip the FlagSigned check for V2; the engine handles signature verification.
+				isV2Magic := magic == crypto.MagicHeaderV2Sym || magic == crypto.MagicHeaderV2Asym
+				if !isV2Magic {
+					flags = header[5]
+				}
 			}
 
 			// 2. Handle Passphrase/Identity logic
@@ -275,9 +282,13 @@ func DecryptCmd() *cobra.Command {
 				return err
 			}
 
-			// 3. Resolve optional sender public key for integrated verification
+			isV2 := magic == crypto.MagicHeaderV2Sym || magic == crypto.MagicHeaderV2Asym
+
+			// 3. Resolve optional sender public key for integrated verification.
+			// For V2 files, signature verification is handled inside the engine;
+			// the CLI-level FlagSigned check only applies to V1 files.
 			var senderKey []byte
-			if flags&crypto.FlagSigned != 0 {
+			if !isV2 && flags&crypto.FlagSigned != 0 {
 				resolvedSenderPath := GlobalContext.Engine.ResolveKeyPath(nil, senderKeyPath, "MAKNOON_PUBLIC_KEY")
 				if resolvedSenderPath == "" {
 					err := fmt.Errorf("file has integrated signature but sender public key not provided (use --sender-key)")
@@ -536,7 +547,8 @@ func resolveDecryptionKey(magic, manualPass, keyPath string, isStdin bool) ([]by
 		return password, password, nil, nil
 	}
 
-	if magic == crypto.MagicHeaderAsym {
+	// V2 asymmetric (MAK3) — same key resolution as V1 asymmetric (MAKA).
+	if magic == crypto.MagicHeaderAsym || magic == crypto.MagicHeaderV2Asym {
 		resolvedPath := GlobalContext.Engine.ResolveKeyPath(nil, keyPath, "MAKNOON_PRIVATE_KEY")
 		if resolvedPath == "" {
 			return nil, nil, nil, fmt.Errorf("private key required via -k or MAKNOON_PRIVATE_KEY")
@@ -547,6 +559,18 @@ func resolveDecryptionKey(magic, manualPass, keyPath string, isStdin bool) ([]by
 			return nil, nil, nil, err
 		}
 		return password, nil, priv, nil
+	}
+
+	// V2 symmetric (MAK2) — same passphrase resolution as V1 symmetric (MAKN).
+	if magic == crypto.MagicHeaderV2Sym {
+		if len(password) == 0 {
+			var err error
+			password, _, err = getPassphrase("Enter passphrase: ")
+			if err != nil {
+				return nil, nil, nil, err
+			}
+		}
+		return password, password, nil, nil
 	}
 
 	return nil, nil, nil, fmt.Errorf("unsupported or invalid maknoon file header: %s", magic)
