@@ -566,6 +566,14 @@
         "required": false
       },
       {
+        "name": "v1",
+        "shorthand": "",
+        "description": "Write legacy V1 format (MAKN/MAKA) — use only when the receiver cannot handle V2 files",
+        "type": "bool",
+        "default": "false",
+        "required": false
+      },
+      {
         "name": "verbose",
         "shorthand": "",
         "description": "Enable internal pipeline tracing (slog)",
