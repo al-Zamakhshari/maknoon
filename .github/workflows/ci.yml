@@ -11,6 +11,11 @@ on:
     - cron: '0 2 * * *'   # 02:00 UTC nightly
   workflow_dispatch:
 
+# Minimum default: read everything. Jobs that need write access declare it
+# explicitly in their own permissions block (contents: write for release).
+permissions:
+  contents: read
+
 jobs:
   quality:
     name: Quality
@@ -250,6 +255,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           WITH_V: true
           DEFAULT_BUMP: patch
+          GIT_API_TAGGING: false
 
       - name: Fetch tags for GoReleaser
         if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
