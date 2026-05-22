@@ -265,6 +265,15 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GORELEASER_TOKEN }}
 
+      - name: Sign checksums with ML-DSA-87 (post-quantum)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && secrets.MAKNOON_SIGNING_KEY != ''
+        uses: al-Zamakhshari/maknoon-action@v1
+        with:
+          command: sign
+          files: dist/checksums.txt
+          private-key: ${{ secrets.MAKNOON_SIGNING_KEY }}
+          version: latest
+
   compatibility:
     name: Wire Format Compatibility
     runs-on: ubuntu-latest
