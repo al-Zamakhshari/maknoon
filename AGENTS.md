@@ -10,7 +10,7 @@ statically-linked binary (~12 MB stripped) hosts the CLI and the native MCP serv
 | Layer | Description |
 |---|---|
 | **CLI** | Cobra commands in `cmd/maknoon/commands/` |
-| **MCP server** | 45 tools over stdio or SSE; registered in `mcp_*.go` |
+| **MCP server** | 49 tools over stdio or SSE; registered in `mcp_*.go` |
 | **Engine** | `pkg/crypto/Engine` — all business logic; CLI/MCP are thin controllers |
 | **Vault** | bbolt-backed encrypted KV store; Argon2id key derivation |
 | **Identity registry** | WKD (HTTPS static file, primary) → DNS TXT records |
@@ -72,6 +72,7 @@ maknoon identity publish @alice@example.com --desec  # automated DNS
 | `engine_crypto.go` | Encrypt/decrypt/sign engine wrappers |
 | `engine_vault.go` | Vault CRUD, lockout, quorum unlock |
 | `engine_identity.go` | Keygen, identity lifecycle |
+| `engine_threshold.go` | `EncryptThreshold`, `CollectThresholdShare`, `CombineAndDecrypt` engine wrappers |
 | `engine_contacts.go` | Contact book (petname → public key) |
 | `engine_dispersal.go` | `FragmentFile`, `ReassembleFragments`, `ReassembleToPath` |
 | `engine_observability.go` | `Diagnostic`, `AuditExport` |
@@ -92,6 +93,8 @@ maknoon identity publish @alice@example.com --desec  # automated DNS
 | `storage.go` | `FileSystemKeyStore`, `BboltStore`, `FileSystemVaultStore` |
 | `storage_tpm.go` | TPM 2.0 hardware KeyStore (Linux) |
 | `policy.go` | `HumanPolicy`, `AgentPolicy`, `CompositePolicy` (strictest-wins), `FIPSPolicy`; capability/path/quorum rules |
+| `threshold_enc.go` | `EncryptStreamThreshold`, `DecryptThresholdCollectShare`, `DecryptThresholdCombine`; K-of-N FEK splitting via Shamir SSS |
+| `vault_session.go` | Vault session caching — derives key once, caches in memguard-protected memory with TTL; `Unlock/Lock/LockAll` |
 | `shares.go` | Shamir Secret Sharing; `ToMnemonic`/`FromMnemonic` use `ShareWordList` |
 | `words.go` | `GeneratePassword`, `GeneratePassphrase`, `PasswordEntropy`, `PassphraseEntropy`, `PasswordCharsetSize`; `ShareWordList` (256 fixed words for mnemonic encoding) |
 | `passphrase_wordlist.go` | `PassphraseWordList` — 1885-word inline slice used by `GeneratePassphrase` (≈10.9 bits/word) |
@@ -108,7 +111,7 @@ maknoon identity publish @alice@example.com --desec  # automated DNS
 | `keygen.go` | `maknoon keygen [--rotate]` |
 | `identity.go` | `maknoon identity info/active/delete/rename/publish [--wkd\|--dns\|--desec\|--local]` |
 | `contacts.go` | `maknoon contact add/list/remove` |
-| `vault.go` / `vault_crud.go` / `vault_shard.go` | `maknoon vault *` (incl. `export` / `import`) |
+| `vault.go` / `vault_crud.go` / `vault_shard.go` | `maknoon vault *` (incl. `unlock/lock` for session caching, `export/import`) |
 | `sign.go` / `sign_aggregate.go` / `verify.go` | `maknoon sign/verify` |
 | `fragment.go` | `maknoon fragment [--output-manifest] [--chunk-size]` / `maknoon reassemble [--verify]` |
 | `reencrypt.go` | `maknoon reencrypt` — change profile on existing `.makn` file |
@@ -117,29 +120,43 @@ maknoon identity publish @alice@example.com --desec  # automated DNS
 | `config.go` | `maknoon config get/set/validate/export/import/list` |
 | `profiles.go` | `maknoon profiles list/gen/rm` |
 | `gen.go` | `maknoon gen password` / `maknoon gen passphrase` — entropy display on stderr; `--store/--vault/--username/--overwrite/--passphrase` for direct vault write; `--min-entropy` guard |
+| `setup.go` | `maknoon init [--non-interactive]` — guided first-run setup wizard |
+| `diag.go` | `maknoon doctor [--json]` — 9-check health report; `maknoon diag` — raw engine state |
+| `serve_identity.go` | `maknoon serve-identity [--address :8080]` — WKD HTTP server |
 | `mcp.go` | `maknoon mcp [--transport stdio\|sse]` |
 | `serve.go` | `maknoon serve` — MCP SSE + health probes (`/v1/live`, `/v1/ready`, `/v1/health`) |
 | `helpers.go` | `InitEngine()`, `LoadPrivateKey()`, presenter utilities |
 
+**Key flags added:**
+- `encrypt`: `--threshold K` (K-of-N), `--recursive` / `-r`, `--dry-run`; accepts multiple positional files
+- `decrypt`: `--collect-share -o <share.json>`, `--combine <a.json,b.json>`, `--recursive`, `--dry-run`; accepts multiple positional files
+- `identity publish`: `--ttl-hours N` (0=config default ~48 h, -1=no expiry)
+- Both `encrypt` / `decrypt`: `--passphrase-file`, `--passphrase-fd N` (non-TTY passphrase injection)
+- `vault`: `unlock <vault> [--ttl 300]` and `lock <vault>` subcommands now available in CLI
+
+**New commands:** `maknoon init`, `maknoon doctor`, `maknoon serve-identity`
+
 **Removed commands:** `maknoon registry health` (was Nostr relay ping, removed with Nostr).
 
-### MCP Tools (`cmd/maknoon/commands/mcp_*.go`) — 45 total
+### MCP Tools (`cmd/maknoon/commands/mcp_*.go`) — 49 total
 
 All tools have typed argument schemas (`mcp.WithString` / `mcp.WithNumber` / `mcp.WithBoolean`).
 
 | Category | Tools |
 |---|---|
-| **crypto** | `encrypt_file`†, `decrypt_file`, `sign_file`, `verify_file`, `inspect_file`, `gen_passphrase`‖, `gen_password`‖, `reencrypt_file`, `shred_file` |
-| **vault** | `vault_get`, `vault_set`, `vault_list`, `vault_delete`, `vault_rename`, `vault_set_blob`, `vault_get_blob`, `vault_split`, `vault_recover`, `vault_init_institutional`, `vault_status`, `vault_check_shards` |
+| **crypto** | `encrypt_file`†, `decrypt_file`, `sign_file`, `verify_file`, `inspect_file`, `gen_passphrase`‖, `gen_password`‖, `reencrypt_file`, `session_derive`, `shred_file`, `threshold_collect_share`★, `threshold_combine_decrypt`★ |
+| **vault** | `vault_get`, `vault_set`, `vault_list`, `vault_delete`, `vault_rename`, `vault_set_blob`, `vault_get_blob`, `vault_split`, `vault_recover`, `vault_init_institutional`, `vault_status`, `vault_check_shards`, `vault_unlock`▲, `vault_lock`▲ |
 | **identity** | `identity_list`, `identity_keygen`, `identity_info`, `identity_rename`, `identity_delete`, `identity_split`, `identity_combine`, `identity_publish`‡, `contact_list`, `contact_add`, `contact_delete`, `resolve_identity`, `aggregate_signatures` |
 | **config** | `config_list`, `config_update`, `config_init`, `diagnostic`, `audit_export`, `audit_verify` |
 | **profiles** | `profiles_list`, `profiles_gen`, `profiles_rm` |
 | **dispersal** | `fragment_file`§, `reassemble_file`§ |
 
-† `encrypt_file` supports multi-recipient (`public_keys` comma-separated) and directories.  
+† `encrypt_file` supports multi-recipient (`public_keys` comma-separated), `recursive=true` for directories, and `threshold≥2` for K-of-N encryption.  
 ‡ `identity_publish` registry: `wkd` (default), `dns`, `desec`, `local`.  
 § `fragment_file` has `output_manifest` param; `reassemble_file` has `verify` param.  
-‖ `gen_passphrase` / `gen_password` both return `entropy_bits` and `entropy_bits_pq` fields; accept `store_service` / `store_vault` to write directly into a vault.
+‖ `gen_passphrase` / `gen_password` both return `entropy_bits` and `entropy_bits_pq` fields; accept `store_service` / `store_vault` to write directly into a vault.  
+★ `threshold_collect_share` extracts one recipient's Shamir share; `threshold_combine_decrypt` combines K shares and decrypts (K-of-N threshold encryption workflow).  
+▲ `vault_unlock` derives the vault key once and caches for `ttl_seconds`; `vault_lock` immediately wipes the cached key (eliminates per-operation Argon2id cost).
 
 **MCP error responses** include `"type"` and `"hint"` fields alongside `"error"`:
 `authentication_failure` / `security_policy_violation` / `format_error` / `crypto_failure` / `io_error` / `network_error`
@@ -172,7 +189,7 @@ Agent-mode path restrictions are enforced in `policy.go`. `AgentPolicy` blocks
 Run with `go test -short ./... -timeout 300s`. Smoke scripts: `scripts/smoke-*.sh`.
 Mission tests (Docker): `make missions`.
 
-Coverage: **555 tests (481 in `pkg/crypto`)**. CI gate enforces ≥ 75% coverage on `pkg/crypto` — PRs that drop below fail.  
+Coverage: **~560+ tests (481 in `pkg/crypto`, 13 mission tests)**. CI gate enforces ≥ 75% coverage on `pkg/crypto` — PRs that drop below fail.  
 TDD applies to `pkg/crypto` (pure engine logic). CLI cobra handlers are tested via smoke scripts, not unit tests.  
 Slow tests (FrodoKEM-640 key generation) guard with `if testing.Short() { t.Skip(...) }`.
 
@@ -241,7 +258,10 @@ maknoon reassemble /tmp/recover/ --output secret.makn --verify
 
 ## Wire Formats
 
-**`.makn` file header:** `MAKN(4) | Ver(1) | ProfileID(1) | Flags(1) | ...`
+**`.makn` V1 file header (current default):** `MAKN(4) | ProfileID(1) | Flags(1) | Salt(32) | Nonce(12) | [Chunk]*`  
+**`.maka` V1 asymmetric:** `MAKA(4) | ProfileID(1) | Flags(1) | RecipientCount(1) | [Hash(4)+Block(1168)]*N | [Sig(4544)]? | Nonce(12) | [Chunk]*`  
+Flag bits: `0x01`=Archive `0x02`=Compress `0x04`=Signed `0x08`=Stealth `0x10`=Threshold  
+**V2 format** (`MAK2`/`MAK3`) is in development — see `docs/architecture/evaluation.md`.
 
 **Fragment shard header (versioned):**
 | Version | Size | Layout |

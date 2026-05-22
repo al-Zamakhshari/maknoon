@@ -16,17 +16,19 @@ import (
 
 func registerCryptoTools(s *server.MCPServer, engine crypto.MaknoonEngine) {
 	s.AddTool(mcp.NewTool("encrypt_file",
-		mcp.WithDescription("Encrypt a file or directory using PQC hybrid encryption. Set recursive=true to encrypt each file in a directory individually — the passphrase KDF runs once for the whole run, not once per file."),
+		mcp.WithDescription("Encrypt a file or directory using PQC hybrid encryption. Set recursive=true to encrypt each file in a directory individually — the passphrase KDF runs once for the whole run, not once per file. Set threshold≥2 with public_keys for K-of-N threshold encryption requiring threshold recipients to cooperate to decrypt."),
 		mcp.WithString("input", mcp.Required(), mcp.Description("Path to file or directory to encrypt")),
 		mcp.WithString("output", mcp.Required(), mcp.Description("Output path for the .makn file, or output directory when recursive=true")),
-		mcp.WithString("public_keys", mcp.Description("Comma-separated list of recipient key paths, petnames, or @nostr handles (multi-recipient)")),
+		mcp.WithString("public_keys", mcp.Description("Comma-separated list of recipient key paths, petnames, or @handles (multi-recipient)")),
 		mcp.WithNumber("profile", mcp.Description("Cryptographic profile ID: 1=NIST (ML-KEM+ML-DSA), 3=Conservative (FrodoKEM+SLH-DSA)")),
 		mcp.WithBoolean("recursive", mcp.Description("Encrypt each file in a directory individually (one KDF call total). Produces a .makn file per input file.")),
+		mcp.WithNumber("threshold", mcp.Description("K for K-of-N threshold encryption (≥2). Requires public_keys to be set with N recipient keys. Any K key holders can decrypt; fewer cannot.")),
 	), func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		args := getArgs(request)
 		input := getString(args, "input", "")
 		output := getString(args, "output", "")
 		recursive := getBool(args, "recursive", false)
+		thresholdK := getInt(args, "threshold", 0)
 
 		opts := crypto.Options{}
 		if passRaw := viper.GetString("passphrase"); passRaw != "" {
@@ -51,6 +53,31 @@ func registerCryptoTools(s *server.MCPServer, engine crypto.MaknoonEngine) {
 		if pid := getInt(args, "profile", 0); pid != 0 {
 			b := byte(pid)
 			opts.ProfileID = &b
+		}
+
+		// Threshold encryption: K-of-N, requires public_keys and threshold≥2.
+		if thresholdK >= 2 && len(opts.Recipients) >= thresholdK {
+			in, err := os.Open(input)
+			if err != nil {
+				return crypto.FormatMCPError(err, "encrypt_file")
+			}
+			defer in.Close()
+			out, err := os.Create(output)
+			if err != nil {
+				return crypto.FormatMCPError(err, "encrypt_file")
+			}
+			defer out.Close()
+			if err := engine.EncryptThreshold(&crypto.EngineContext{Context: ctx}, in, out, opts.Recipients, thresholdK, opts); err != nil {
+				return crypto.FormatMCPError(err, "encrypt_file")
+			}
+			res := map[string]any{
+				"status":    "success",
+				"output":    output,
+				"threshold": thresholdK,
+				"total":     len(opts.Recipients),
+			}
+			outData, _ := json.Marshal(res)
+			return mcp.NewToolResultText(string(outData)), nil
 		}
 
 		fi, err := os.Stat(input)
@@ -406,6 +433,110 @@ func registerCryptoTools(s *server.MCPServer, engine crypto.MaknoonEngine) {
 			return crypto.FormatMCPError(err, "shred_file")
 		}
 		res := map[string]any{"status": "success", "shredded": path}
+		outData, _ := json.Marshal(res)
+		return mcp.NewToolResultText(string(outData)), nil
+	})
+
+	s.AddTool(mcp.NewTool("threshold_collect_share",
+		mcp.WithDescription("Collect this recipient's Shamir share from a threshold-encrypted .makn file. Run once per key holder. Gather K shares across recipients, then call threshold_combine_decrypt to decrypt."),
+		mcp.WithString("input", mcp.Required(), mcp.Description("Path to the threshold-encrypted .makn file")),
+		mcp.WithString("private_key", mcp.Required(), mcp.Description("Path to this recipient's private key file")),
+		mcp.WithString("output", mcp.Description("Path to write the share JSON (default: <input>.share.json)")),
+	), func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		args := getArgs(request)
+		inputPath := getString(args, "input", "")
+		keyPath := getString(args, "private_key", "")
+		outputPath := getString(args, "output", inputPath+".share.json")
+
+		passRaw := viper.GetString("passphrase")
+		resolved := engine.ResolveKeyPath(&crypto.EngineContext{Context: ctx}, keyPath, "")
+		priv, err := engine.LoadPrivateKey(&crypto.EngineContext{Context: ctx}, resolved, []byte(passRaw), "", true)
+		if err != nil {
+			return crypto.FormatMCPError(err, "threshold_collect_share")
+		}
+		defer crypto.SafeClear(priv)
+
+		f, err := os.Open(inputPath)
+		if err != nil {
+			return crypto.FormatMCPError(err, "threshold_collect_share")
+		}
+		defer f.Close()
+
+		share, err := engine.CollectThresholdShare(&crypto.EngineContext{Context: ctx}, f, priv, 0)
+		if err != nil {
+			return crypto.FormatMCPError(err, "threshold_collect_share")
+		}
+
+		shareJSON, err := crypto.ThresholdShareToJSON(share)
+		if err != nil {
+			return crypto.FormatMCPError(err, "threshold_collect_share")
+		}
+		if err := os.WriteFile(outputPath, shareJSON, 0600); err != nil {
+			return crypto.FormatMCPError(err, "threshold_collect_share")
+		}
+
+		res := map[string]any{
+			"share_file": outputPath,
+			"index":      share.Index,
+			"threshold":  share.Threshold,
+			"total":      share.Total,
+		}
+		outData, _ := json.Marshal(res)
+		return mcp.NewToolResultText(string(outData)), nil
+	})
+
+	s.AddTool(mcp.NewTool("threshold_combine_decrypt",
+		mcp.WithDescription("Combine K Shamir shares (collected via threshold_collect_share) and decrypt a threshold-encrypted .makn file. Provide at least K share files; the threshold K is read from the shares themselves."),
+		mcp.WithString("input", mcp.Required(), mcp.Description("Path to the threshold-encrypted .makn file")),
+		mcp.WithString("shares", mcp.Required(), mcp.Description("Comma-separated paths to the share JSON files (need at least K files)")),
+		mcp.WithString("output", mcp.Required(), mcp.Description("Output path for the decrypted plaintext")),
+	), func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		args := getArgs(request)
+		inputPath := getString(args, "input", "")
+		shareList := getString(args, "shares", "")
+		outputPath := getString(args, "output", "")
+
+		var shares []*crypto.ThresholdShare
+		for _, sp := range strings.Split(shareList, ",") {
+			sp = strings.TrimSpace(sp)
+			if sp == "" {
+				continue
+			}
+			data, err := os.ReadFile(sp)
+			if err != nil {
+				return crypto.FormatMCPError(fmt.Errorf("reading share file %q: %w", sp, err), "threshold_combine_decrypt")
+			}
+			share, err := crypto.ThresholdShareFromJSON(data)
+			if err != nil {
+				return crypto.FormatMCPError(fmt.Errorf("parsing share file %q: %w", sp, err), "threshold_combine_decrypt")
+			}
+			shares = append(shares, share)
+		}
+		if len(shares) == 0 {
+			return mcp.NewToolResultError("no share files provided"), nil
+		}
+
+		src, err := os.Open(inputPath)
+		if err != nil {
+			return crypto.FormatMCPError(err, "threshold_combine_decrypt")
+		}
+		defer src.Close()
+
+		if err := engine.CombineAndDecrypt(&crypto.EngineContext{Context: ctx}, src, nil, outputPath, shares); err != nil {
+			return crypto.FormatMCPError(err, "threshold_combine_decrypt")
+		}
+
+		fi, _ := os.Stat(outputPath)
+		var size int64
+		if fi != nil {
+			size = fi.Size()
+		}
+		res := map[string]any{
+			"status":        "success",
+			"output":        outputPath,
+			"bytes_written": size,
+			"shares_used":   len(shares),
+		}
 		outData, _ := json.Marshal(res)
 		return mcp.NewToolResultText(string(outData)), nil
 	})

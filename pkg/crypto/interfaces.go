@@ -175,6 +175,27 @@ type DispersalService interface {
 	ReassembleToPath(ctx *EngineContext, srcDir, outputPath string, authorizedPubKey []byte) error
 }
 
+// ThresholdEncryptor handles K-of-N threshold encryption and decryption.
+// Any K of the N recipient key holders can cooperate to decrypt; fewer than K
+// cannot. The FEK is split with Shamir SSS and each share is wrapped to one
+// recipient's public key via HPKE.
+type ThresholdEncryptor interface {
+	// EncryptThreshold writes a K-of-N threshold-encrypted file to w.
+	// pubKeys must contain exactly N recipient public keys; threshold is K (2 ≤ K ≤ N).
+	EncryptThreshold(ectx *EngineContext, r io.Reader, w io.Writer,
+		pubKeys [][]byte, threshold int, opts Options) error
+
+	// CollectThresholdShare reads the threshold-encrypted file and extracts
+	// this recipient's Shamir share using their private key.
+	CollectThresholdShare(ectx *EngineContext, r io.Reader,
+		privKey []byte, profileID byte) (*ThresholdShare, error)
+
+	// CombineAndDecrypt combines at least K ThresholdShares to recover the FEK
+	// and decrypts src, writing plaintext to w or to outPath if w is nil.
+	CombineAndDecrypt(ectx *EngineContext, src io.Reader, w io.Writer,
+		outPath string, shares []*ThresholdShare) error
+}
+
 // MaknoonEngine is the primary high-level facade for all Maknoon services.
 type MaknoonEngine interface {
 	Protector
@@ -186,6 +207,7 @@ type MaknoonEngine interface {
 	Signer
 	KMSService
 	DispersalService
+	ThresholdEncryptor
 
 	Close() error
 }

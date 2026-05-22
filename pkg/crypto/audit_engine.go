@@ -592,6 +592,50 @@ func (e *AuditEngine) VaultRotate(ectx *EngineContext, vaultPath string, oldPass
 	return err
 }
 
+func (e *AuditEngine) EncryptThreshold(ectx *EngineContext, r io.Reader, w io.Writer,
+	pubKeys [][]byte, threshold int, opts Options) error {
+	start := time.Now()
+	err := e.Engine.EncryptThreshold(ectx, r, w, pubKeys, threshold, opts)
+	duration := time.Since(start)
+	e.Logger.LogEvent("threshold_encrypt", map[string]any{
+		"recipients":  len(pubKeys),
+		"threshold":   threshold,
+		"duration_ms": duration.Milliseconds(),
+	}, err)
+	return err
+}
+
+func (e *AuditEngine) CollectThresholdShare(ectx *EngineContext, r io.Reader,
+	privKey []byte, profileID byte) (*ThresholdShare, error) {
+	start := time.Now()
+	share, err := e.Engine.CollectThresholdShare(ectx, r, privKey, profileID)
+	duration := time.Since(start)
+	e.Logger.LogEvent("threshold_collect_share", map[string]any{
+		"profile_id":  profileID,
+		"duration_ms": duration.Milliseconds(),
+	}, err)
+	return share, err
+}
+
+func (e *AuditEngine) CombineAndDecrypt(ectx *EngineContext, src io.Reader, w io.Writer,
+	outPath string, shares []*ThresholdShare) error {
+	start := time.Now()
+	err := e.Engine.CombineAndDecrypt(ectx, src, w, outPath, shares)
+	duration := time.Since(start)
+	var threshold, provided int
+	if len(shares) > 0 {
+		threshold = shares[0].Threshold
+		provided = len(shares)
+	}
+	e.Logger.LogEvent("threshold_combine_decrypt", map[string]any{
+		"shares_provided": provided,
+		"threshold":       threshold,
+		"output":          e.sanitizePath(outPath),
+		"duration_ms":     duration.Milliseconds(),
+	}, err)
+	return err
+}
+
 func (e *AuditEngine) VaultCheckShards(ectx *EngineContext, mnemonics []string) (*VaultResult, error) {
 	start := time.Now()
 	res, err := e.Engine.VaultCheckShards(ectx, mnemonics)

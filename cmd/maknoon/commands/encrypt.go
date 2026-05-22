@@ -256,15 +256,23 @@ func EncryptCmd() *cobra.Command {
 			// Threshold encryption: K-of-N, requires --threshold K with -p for N recipients.
 			if threshold >= 2 && len(opts.Recipients) >= threshold {
 				close(events)
+				// Open the input file — resolveEncryptInput closed it after stat.
+				inFile, err := os.Open(inputPath)
+				if err != nil {
+					p.RenderError(err)
+					return err
+				}
+				defer inFile.Close()
+
 				flags := byte(0)
 				if opts.Compress != nil && *opts.Compress {
 					flags |= crypto.FlagCompress
 				}
+				var profileID byte
 				if opts.ProfileID != nil {
-					err = crypto.EncryptStreamThreshold(nil, out, opts.Recipients, threshold, flags, 0, *opts.ProfileID, nil)
-				} else {
-					err = crypto.EncryptStreamThreshold(nil, out, opts.Recipients, threshold, flags, 0, 0, nil)
+					profileID = *opts.ProfileID
 				}
+				err = crypto.EncryptStreamThreshold(inFile, out, opts.Recipients, threshold, flags, 0, profileID, nil)
 				if err != nil {
 					p.RenderError(err)
 					return err

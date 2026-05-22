@@ -523,6 +523,107 @@ func TestMissionMultiFileEncryptDecrypt(t *testing.T) {
 	}
 }
 
+// TestMissionThresholdEncryptDecrypt exercises K-of-N threshold encryption and
+// decryption end-to-end at the CLI layer.
+//
+// Three keypairs are generated; the file is encrypted requiring any 2 of 3 to
+// decrypt (threshold=2). Keys 0 and 2 (non-sequential) collect their shares;
+// those two shares are combined to decrypt. A one-share attempt must fail.
+func TestMissionThresholdEncryptDecrypt(t *testing.T) {
+	tmpDir := setupMissionEnv(t)
+	SetJSONOutput(true)
+	defer SetJSONOutput(false)
+
+	// 1. Generate 3 keypairs.
+	for _, name := range []string{"recipient-a", "recipient-b", "recipient-c"} {
+		runCommand(t, KeygenCmd(), "-o", name, "--no-password")
+	}
+
+	// 2. Write plaintext.
+	plain := []byte("threshold encryption mission payload — 2-of-3")
+	plainFile := filepath.Join(tmpDir, "plain.txt")
+	if err := os.WriteFile(plainFile, plain, 0600); err != nil {
+		t.Fatalf("write plain: %v", err)
+	}
+
+	// 3. Encrypt with --threshold 2 to all 3 recipients.
+	keysDir := filepath.Join(tmpDir, ".maknoon", "keys")
+	aPub := filepath.Join(keysDir, "recipient-a.kem.pub")
+	bPub := filepath.Join(keysDir, "recipient-b.kem.pub")
+	cPub := filepath.Join(keysDir, "recipient-c.kem.pub")
+	ciphFile := filepath.Join(tmpDir, "plain.txt.makn")
+	out, err := runMissionCommand(EncryptCmd(),
+		plainFile,
+		"-o", ciphFile,
+		"-p", aPub, "-p", bPub, "-p", cPub,
+		"--threshold", "2",
+	)
+	if err != nil {
+		t.Fatalf("encrypt --threshold: %v\noutput: %s", err, out)
+	}
+	if _, stat := os.Stat(ciphFile); stat != nil {
+		t.Fatalf("ciphertext file not created: %v", stat)
+	}
+
+	// 4. Collect share from recipient-a (index 0).
+	aKey := filepath.Join(keysDir, "recipient-a.kem.key")
+	aShare := filepath.Join(tmpDir, "a.share.json")
+	out, err = runMissionCommand(DecryptCmd(),
+		ciphFile,
+		"-k", aKey,
+		"--collect-share",
+		"-o", aShare,
+	)
+	if err != nil {
+		t.Fatalf("collect-share a: %v\noutput: %s", err, out)
+	}
+	if _, stat := os.Stat(aShare); stat != nil {
+		t.Fatalf("share file for a not created")
+	}
+
+	// 5. Collect share from recipient-c (index 2) — skipping b proves non-sequential works.
+	cKey := filepath.Join(keysDir, "recipient-c.kem.key")
+	cShare := filepath.Join(tmpDir, "c.share.json")
+	out, err = runMissionCommand(DecryptCmd(),
+		ciphFile,
+		"-k", cKey,
+		"--collect-share",
+		"-o", cShare,
+	)
+	if err != nil {
+		t.Fatalf("collect-share c: %v\noutput: %s", err, out)
+	}
+
+	// 6. Combining only 1 share must fail (threshold=2).
+	recovered1 := filepath.Join(tmpDir, "bad-recover.txt")
+	_, err = runMissionCommand(DecryptCmd(),
+		ciphFile,
+		"--combine", aShare,
+		"-o", recovered1,
+	)
+	if err == nil {
+		t.Error("expected error with only 1 share (below threshold), got nil")
+	}
+
+	// 7. Combine 2 shares (a + c) → decrypt succeeds.
+	recoveredFile := filepath.Join(tmpDir, "recovered.txt")
+	out, err = runMissionCommand(DecryptCmd(),
+		ciphFile,
+		"--combine", aShare+","+cShare,
+		"-o", recoveredFile,
+	)
+	if err != nil {
+		t.Fatalf("combine+decrypt: %v\noutput: %s", err, out)
+	}
+	got, readErr := os.ReadFile(recoveredFile)
+	if readErr != nil {
+		t.Fatalf("recovered file not found: %v", readErr)
+	}
+	if string(got) != string(plain) {
+		t.Errorf("plaintext mismatch\ngot:  %q\nwant: %q", got, plain)
+	}
+}
+
 // TestMissionAuditQueryFilter verifies that audit export --action and --status flags
 // correctly narrow the result set.
 func TestMissionAuditQueryFilter(t *testing.T) {

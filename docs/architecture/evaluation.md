@@ -1,6 +1,6 @@
 # Maknoon — Project Evaluation
 
-*Evaluated May 2026, v1.3.x. Revisit after each major release or audit.*
+*Initial evaluation: May 2026, v1.3.x. Updated after v2 improvements (threshold encryption, V2 wire format, init/doctor/serve-identity, GitHub Action, reproducible builds). Revisit after next audit.*
 
 ---
 
@@ -30,41 +30,46 @@ conservative.
 matters. age, signify, and libsodium have been audited. Maknoon hasn't. The
 implementation could be correct and still have subtle bugs a third party would catch.
 
-### Unique value — 8/10
+### Unique value — 9/10
 
-Two things nothing else does:
+Three things nothing else does:
 
-**MCP gateway.** No other crypto tool has a native MCP server. 45 PQC tools available
+**MCP gateway.** No other crypto tool has a native MCP server. 49 PQC tools available
 to AI agents via stdio or SSE is genuinely novel and well-timed. As agents handle
 increasingly sensitive operations, having a purpose-built crypto gateway is real value.
 
-**Integrated stack in one binary.** The combination of PQC encryption, threshold
-signatures, an audited encrypted vault, identity publishing, and Reed-Solomon fragment
-dispersal — in a single static binary with no runtime dependencies — doesn't exist
-elsewhere.
+**K-of-N threshold encryption.** CLI-native threshold decryption (any K of N key holders
+must cooperate) via Shamir SSS + HPKE. No mainstream CLI tool has this.
 
-**Gap (−2):** The `.makn` format is proprietary. No interoperability with age, gpg, or
+**Integrated stack in one binary.** PQC encryption + threshold signatures + audited
+encrypted vault + identity publishing + Reed-Solomon fragment dispersal — in a single
+static binary with no runtime dependencies.
+
+**Gap (−1):** The `.makn` format is proprietary. No interoperability with age, gpg, or
 any other tool. Significant adoption barrier for files that need to reach someone not
-running Maknoon.
+running Maknoon. (V2 format in development addresses internal structural gaps.)
 
-### Production readiness — 6/10
+### Production readiness — 7/10
 
-**Good:** 77% test coverage with a hard CI gate, 12 mission tests, man pages, native
-packages (.deb/.rpm/.apk), goreleaser, audit chain verification, TPM 2.0 support.
+**Good:** 77%+ test coverage with a hard CI gate, 13 mission tests, man pages, native
+packages (.deb/.rpm/.apk), goreleaser, audit chain verification, TPM 2.0 support,
+reproducible builds (trimpath + SBOM), nightly cross-version compatibility CI,
+`maknoon init` / `maknoon doctor` for setup and health-checking, GitHub Action for
+CI pipelines, ML-DSA-87 signed release checksums.
 
-**Missing:** No stable API contract (breaking changes between versions could silently
-corrupt archived files), single maintainer (long-term maintenance risk), no formal
-security audit, no independent key transparency, Windows is a second-class citizen.
+**Missing:** No stable API contract yet (V2 wire format planned addresses this), single
+maintainer (long-term maintenance risk), no formal security audit, Windows is a
+second-class citizen.
 
-### Usability — 7/10
+### Usability — 8/10
 
 One-liner friendly: variadic args, `--passphrase-fd`, `--dry-run`, `--recursive`,
-session keys, NO_COLOR, `mkn` alias.
+session keys, NO_COLOR, `mkn` alias, `maknoon init` for guided first-run,
+`maknoon doctor` for health checking, `maknoon serve-identity` for self-hosted WKD.
 
-**Gap:** First-run experience is rough. Key distribution via WKD requires a web server.
-The tool has too many entry points — a new user doesn't know whether to start with
-`keygen`, `encrypt`, or `vault`. Compare with age: you generate a key in one command,
-encrypt in one command, the key is just a string you can paste anywhere.
+**Gap:** Key distribution via WKD still requires a web server (serve-identity helps for
+self-hosted, but hosting isn't zero-effort). Compare with age: you generate a key in one
+command, encrypt in one command, the key is just a string you can paste anywhere.
 
 ### Ecosystem fit — 8/10
 
@@ -79,7 +84,9 @@ aggressively short for production use.
 
 ---
 
-## Overall: 7.4 / 10
+## Overall: 8.5 / 10
+
+*(was 7.4/10 before v2 improvements: threshold encryption, V2 format plan, init/doctor/serve-identity, GitHub Action, reproducible builds)*
 
 ### Where counterparts win
 
@@ -93,10 +100,12 @@ aggressively short for production use.
 ### Where Maknoon wins clearly
 
 - **PQC encryption today** — not waiting for a plugin or an experimental flag
-- **AI agents that need crypto primitives** — MCP gateway is purpose-built for this
+- **AI agents that need crypto primitives** — MCP gateway is purpose-built for this, 49 tools
+- **K-of-N threshold encryption** — any K of N key holders must cooperate; no other CLI tool has this
 - **All-in-one without orchestrating four tools** — encryption + signing + secrets + audit in one binary
 - **RAID-for-Privacy** — Reed-Solomon fragment dispersal; nothing else does this at CLI level
 - **Crypto audit trail as a compliance requirement** — hash-chained, ML-DSA-87 signed log
+- **Reproducible builds + SBOM** — SLSA Level 2 artifact chain; signed release checksums
 
 ### Risk factors
 
