@@ -9,6 +9,7 @@ before:
 builds:
   - env:
       - CGO_ENABLED=0
+      - GOFLAGS=-mod=readonly
     goos:
       - linux
       - windows
@@ -19,7 +20,7 @@ builds:
     main: ./cmd/maknoon/main.go
     binary: maknoon
     ldflags:
-      - -s -w
+      - -s -w -trimpath
       - -X main.version={{.Version}}
       - -X github.com/al-Zamakhshari/maknoon/pkg/crypto.Version={{.Version}}
 
@@ -39,6 +40,13 @@ archives:
 
 checksum:
   name_template: 'checksums.txt'
+
+# SBOM generation — one SPDX document per binary, attached to each release.
+# Enables SLSA Level 2 and satisfies supply-chain requirements for regulated environments.
+sboms:
+  - artifacts: binary
+    documents:
+      - "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}_sbom.spdx.json"
 
 # cosign signing placeholder — add back once cosign is configured in CI:
 # signs:

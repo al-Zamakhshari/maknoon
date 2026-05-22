@@ -105,6 +105,20 @@ aggressively short for production use.
 3. **Proprietary format** — limits interoperability and therefore addressable market
 4. **Key distribution UX** — WKD is correct but complex; needs a simpler path for non-technical users
 
+---
+
+## Wire Format Stability
+
+**Guarantee**: Any `.makn` file produced by any version will decrypt correctly with any
+future version. Fragment shards (V1/V2/V3) are backward-compatible by design — the
+version byte at offset 4 is read dynamically on reassembly.
+
+**Enforcement**: The `compatibility` CI job (`.github/workflows/ci.yml`) runs nightly
+and on `workflow_dispatch`. It downloads three pinned past releases and verifies
+bidirectional encrypt/decrypt round-trips. A failure blocks the nightly run.
+
+---
+
 ### When to re-evaluate
 
 - After a third-party security audit is completed
