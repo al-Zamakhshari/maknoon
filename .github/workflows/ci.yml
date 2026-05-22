@@ -266,6 +266,10 @@ jobs:
         if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
         run: git fetch --tags --force
 
+      - name: Install syft (SBOM generation)
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+        uses: anchore/sbom-action/download-syft@v0
+
       - name: Run GoReleaser
         if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
         uses: goreleaser/goreleaser-action@v7
