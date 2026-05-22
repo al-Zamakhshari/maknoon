@@ -32,6 +32,7 @@ func EncryptCmd() *cobra.Command {
 	var shred bool
 	var recursive bool
 	var dryRun bool
+	var threshold int
 
 	// KDF overrides
 	var argonTime uint32
@@ -252,6 +253,30 @@ func EncryptCmd() *cobra.Command {
 				close(done)
 			}()
 
+			// Threshold encryption: K-of-N, requires --threshold K with -p for N recipients.
+			if threshold >= 2 && len(opts.Recipients) >= threshold {
+				close(events)
+				flags := byte(0)
+				if opts.Compress != nil && *opts.Compress {
+					flags |= crypto.FlagCompress
+				}
+				if opts.ProfileID != nil {
+					err = crypto.EncryptStreamThreshold(nil, out, opts.Recipients, threshold, flags, 0, *opts.ProfileID, nil)
+				} else {
+					err = crypto.EncryptStreamThreshold(nil, out, opts.Recipients, threshold, flags, 0, 0, nil)
+				}
+				if err != nil {
+					p.RenderError(err)
+					return err
+				}
+				if !quiet {
+					fmt.Fprintf(os.Stderr, "%s Threshold encryption: %d-of-%d recipients required to decrypt\n",
+						icon("✓", "ok"), threshold, len(opts.Recipients))
+				}
+				p.RenderSuccess(map[string]any{"status": "success", "threshold": threshold, "recipients": len(opts.Recipients)})
+				return nil
+			}
+
 			res, err := GlobalContext.Engine.Protect(nil, inputPath, nil, out, opts)
 			close(events)
 			<-done
@@ -288,6 +313,7 @@ func EncryptCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&shred, "shred", false, "Securely delete original file after successful encryption")
 	cmd.Flags().BoolVarP(&recursive, "recursive", "r", false, "Encrypt each file in a directory individually (derives session key once — one KDF cost for the whole run)")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Preview what would be encrypted without writing any files")
+	cmd.Flags().IntVar(&threshold, "threshold", 0, "K-of-N threshold decryption: require K out of N recipients to decrypt (must be ≥ 2)")
 	cmd.Flags().StringVar(&profileStr, "profile", "", "Cryptographic profile (nist, conservative)")
 	cmd.Flags().StringVar(&profileFile, "profile-file", "", "Path to a custom profile JSON file")
 

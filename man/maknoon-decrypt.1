@@ -14,6 +14,14 @@ Decrypt one or more .makn files
 
 
 .SH OPTIONS
+\fB--collect-share\fP[=false]
+	Threshold decrypt: unwrap your Shamir share and save it (use with -k and -o)
+
+.PP
+\fB--combine\fP=""
+	Threshold decrypt: combine K share files and decrypt (comma-separated paths)
+
+.PP
 \fB-j\fP, \fB--concurrency\fP=0
 	Number of parallel workers (0 for auto)
 

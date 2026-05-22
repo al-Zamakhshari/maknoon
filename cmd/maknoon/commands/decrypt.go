@@ -31,6 +31,8 @@ func DecryptCmd() *cobra.Command {
 	var tofu bool
 	var recursive bool
 	var dryRun bool
+	var collectShare bool
+	var combineShares string
 
 	cmd := &cobra.Command{
 		Use:   "decrypt <file.makn> [file2.makn ...]",
@@ -38,6 +40,80 @@ func DecryptCmd() *cobra.Command {
 		Args:  cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			p := GlobalContext.UI.GetPresenter()
+
+			// --collect-share: unwrap this recipient's Shamir share from a threshold file.
+			if collectShare && len(args) == 1 {
+				in, _, _, err := resolveDecryptInput(args[0])
+				if err != nil {
+					p.RenderError(err)
+					return err
+				}
+				privBytes, err := LoadPrivateKey(keyPath, "MAKNOON_PRIVATE_KEY", []byte(passphrase))
+				if err != nil {
+					p.RenderError(err)
+					return err
+				}
+				defer crypto.SafeClear(privBytes)
+
+				share, err := crypto.DecryptThresholdCollectShare(in, privBytes, 0)
+				if err != nil {
+					p.RenderError(err)
+					return err
+				}
+				shareJSON, _ := crypto.ThresholdShareToJSON(share)
+
+				outDest := output
+				if outDest == "" {
+					outDest = args[0] + ".share"
+				}
+				if outDest == "-" {
+					fmt.Println(string(shareJSON))
+				} else {
+					if err := os.WriteFile(outDest, shareJSON, 0600); err != nil {
+						p.RenderError(err)
+						return err
+					}
+					if !quiet {
+						fmt.Fprintf(os.Stderr, "%s Share %d/%d saved to %s\n",
+							icon("✓", "ok"), share.Index, share.Total, outDest)
+					}
+				}
+				p.RenderSuccess(map[string]any{"status": "success", "share_index": share.Index, "threshold": share.Threshold})
+				return nil
+			}
+
+			// --combine: load K share files and decrypt.
+			if combineShares != "" && len(args) == 1 {
+				sharePaths := strings.Split(combineShares, ",")
+				var shares []*crypto.ThresholdShare
+				for _, sp := range sharePaths {
+					data, err := os.ReadFile(strings.TrimSpace(sp))
+					if err != nil {
+						return fmt.Errorf("reading share %s: %w", sp, err)
+					}
+					s, err := crypto.ThresholdShareFromJSON(data)
+					if err != nil {
+						return err
+					}
+					shares = append(shares, s)
+				}
+
+				in, _, _, err := resolveDecryptInput(args[0])
+				if err != nil {
+					p.RenderError(err)
+					return err
+				}
+
+				if err := crypto.DecryptThresholdCombine(in, nil, output, shares, nil); err != nil {
+					p.RenderError(err)
+					return err
+				}
+				if !quiet {
+					fmt.Fprintf(os.Stderr, "%s Threshold decryption successful (%d shares combined)\n",
+						icon("✓", "ok"), len(shares))
+				}
+				return nil
+			}
 
 			// Multiple files — decrypt each individually.
 			// Pass --session-key for O(1) cost; passphrase path pays KDF per file.
@@ -366,6 +442,8 @@ func DecryptCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&overwrite, "overwrite", false, "Overwrite existing files")
 	cmd.Flags().BoolVarP(&recursive, "recursive", "r", false, "Decrypt all .makn files in a directory (use --session-key for O(1) KDF cost)")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Preview what would be decrypted without writing any files")
+	cmd.Flags().BoolVar(&collectShare, "collect-share", false, "Threshold decrypt: unwrap your Shamir share and save it (use with -k and -o)")
+	cmd.Flags().StringVar(&combineShares, "combine", "", "Threshold decrypt: combine K share files and decrypt (comma-separated paths)")
 	return cmd
 }
 

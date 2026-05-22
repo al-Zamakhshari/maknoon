@@ -25,6 +25,9 @@ const (
 	FlagSigned = 1 << 2 // 0x04
 	// FlagStealth indicates the magic bytes are omitted for fingerprint resistance.
 	FlagStealth = 1 << 3 // 0x08
+	// FlagThreshold indicates K-of-N threshold decryption is required.
+	// When set, a threshold byte follows recipientCount in the header.
+	FlagThreshold = 1 << 4 // 0x10
 )
 
 // ReadHeader parses the file header to extract magic, profile, and flags.

@@ -251,6 +251,22 @@
     ],
     "flags": [
       {
+        "name": "collect-share",
+        "shorthand": "",
+        "description": "Threshold decrypt: unwrap your Shamir share and save it (use with -k and -o)",
+        "type": "bool",
+        "default": "false",
+        "required": false
+      },
+      {
+        "name": "combine",
+        "shorthand": "",
+        "description": "Threshold decrypt: combine K share files and decrypt (comma-separated paths)",
+        "type": "string",
+        "default": "",
+        "required": false
+      },
+      {
         "name": "concurrency",
         "shorthand": "j",
         "description": "Number of parallel workers (0 for auto)",
@@ -531,6 +547,14 @@
         "description": "Enable fingerprint resistance (headerless)",
         "type": "bool",
         "default": "false",
+        "required": false
+      },
+      {
+        "name": "threshold",
+        "shorthand": "",
+        "description": "K-of-N threshold decryption: require K out of N recipients to decrypt (must be ≥ 2)",
+        "type": "int",
+        "default": "0",
         "required": false
       },
       {
