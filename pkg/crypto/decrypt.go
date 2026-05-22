@@ -11,6 +11,198 @@ import (
 	"sync"
 )
 
+// DecryptStreamV2 symmetrically decrypts a V2-format (.makn MAK2) file from r.
+// r must point to the very beginning of the file (including the MAK2 magic bytes).
+//
+// Returns the profileID, flags (uint16), parsed TLV extensions, and any error.
+// Authentication of both the header (via HeaderMAC) and each chunk (AES-GCM)
+// is performed before any plaintext is written to w.
+func DecryptStreamV2(r io.Reader, w io.Writer, password []byte, concurrency int, ectx *EngineContext) (profileID byte, flags uint16, tlvs []TLVEntry, err error) {
+	if ectx == nil {
+		ectx = &EngineContext{Context: context.Background(), Policy: &HumanPolicy{}}
+	}
+	if w == nil {
+		w = io.Discard
+	}
+
+	// Use a TeeReader so every byte read from r is also captured in hdrBuf.
+	// This lets us compute the HeaderMAC over exactly the bytes we consumed.
+	var hdrBuf bytes.Buffer
+	tr := io.TeeReader(r, &hdrBuf)
+
+	// Read magic (4 bytes).
+	magicBuf := make([]byte, 4)
+	if _, err = io.ReadFull(tr, magicBuf); err != nil {
+		err = &ErrIO{Path: "input", Reason: "failed to read magic"}
+		return
+	}
+	if string(magicBuf) != MagicHeaderV2Sym {
+		err = &ErrFormat{Reason: fmt.Sprintf("expected MAK2 magic, got %q", string(magicBuf))}
+		return
+	}
+
+	// FormatVersion (1 byte).
+	versionBuf := make([]byte, 1)
+	if _, err = io.ReadFull(tr, versionBuf); err != nil {
+		err = &ErrIO{Path: "input", Reason: "failed to read format version"}
+		return
+	}
+	if versionBuf[0] != FormatVersionV2Sym {
+		err = &ErrFormat{Reason: fmt.Sprintf("unsupported MAK2 format version %d (expected %d)", versionBuf[0], FormatVersionV2Sym)}
+		return
+	}
+
+	// ProfileID (1 byte).
+	pidBuf := make([]byte, 1)
+	if _, err = io.ReadFull(tr, pidBuf); err != nil {
+		err = &ErrIO{Path: "input", Reason: "failed to read profile ID"}
+		return
+	}
+	profileID = pidBuf[0]
+
+	// Flags (2 bytes LE uint16).
+	flagsBuf := make([]byte, 2)
+	if _, err = io.ReadFull(tr, flagsBuf); err != nil {
+		err = &ErrIO{Path: "input", Reason: "failed to read flags"}
+		return
+	}
+	flags = binary.LittleEndian.Uint16(flagsBuf)
+
+	// ExtLen + TLV block.
+	extLenBuf := make([]byte, 2)
+	if _, err = io.ReadFull(tr, extLenBuf); err != nil {
+		err = &ErrIO{Path: "input", Reason: "failed to read ExtLen"}
+		return
+	}
+	extLen := binary.LittleEndian.Uint16(extLenBuf)
+	var extBytes []byte
+	if extLen > 0 {
+		extBytes = make([]byte, extLen)
+		if _, err = io.ReadFull(tr, extBytes); err != nil {
+			err = &ErrIO{Path: "input", Reason: "failed to read TLV block"}
+			return
+		}
+	}
+	tlvs = DecodeTLVs(extBytes)
+
+	// SaltLen + Salt.
+	saltLenBuf := make([]byte, 1)
+	if _, err = io.ReadFull(tr, saltLenBuf); err != nil {
+		err = &ErrIO{Path: "input", Reason: "failed to read SaltLen"}
+		return
+	}
+	salt := make([]byte, saltLenBuf[0])
+	if _, err = io.ReadFull(tr, salt); err != nil {
+		err = &ErrIO{Path: "input", Reason: "failed to read salt"}
+		return
+	}
+
+	// Get profile and derive FEK.
+	profile, profileErr := GetProfile(profileID, nil)
+	if profileErr != nil {
+		err = &ErrFormat{Reason: fmt.Sprintf("unknown profile %d", profileID)}
+		return
+	}
+	fek := profile.DeriveKey(password, salt)
+	defer SafeClear(fek)
+
+	aead, aeadErr := profile.NewAEAD(fek)
+	if aeadErr != nil {
+		err = &ErrCrypto{Reason: fmt.Sprintf("NewAEAD: %v", aeadErr)}
+		return
+	}
+
+	// BaseNonce.
+	baseNonce := make([]byte, aead.NonceSize())
+	if _, err = io.ReadFull(tr, baseNonce); err != nil {
+		err = &ErrIO{Path: "input", Reason: "failed to read base nonce"}
+		return
+	}
+
+	// At this point hdrBuf holds all bytes consumed via tr (magic through nonce).
+	headerBytes := hdrBuf.Bytes()
+
+	// HeaderMAC (32 bytes) — read from r directly (not via tr, so it's not in hdrBuf).
+	mac := make([]byte, HeaderMACSize)
+	if _, err = io.ReadFull(r, mac); err != nil {
+		err = &ErrIO{Path: "input", Reason: "failed to read header MAC"}
+		return
+	}
+
+	// Verify header MAC — key commitment check.
+	if !VerifyHeaderMAC(fek, headerBytes, mac) {
+		err = &ErrAuthentication{Reason: "header MAC verification failed: wrong passphrase or tampered header"}
+		return
+	}
+
+	ectx.Emit(EventHandshakeComplete{})
+
+	// Decrypt chunks using the V2 terminator-aware loop.
+	err = streamDecryptV2(r, w, aead, baseNonce, ectx)
+	return
+}
+
+// streamDecryptV2 decrypts V2-format chunks from r to w.
+// Unlike V1, V2 uses a 4-byte 0x00000000 terminator to signal clean end-of-stream,
+// enabling detection of truncation attacks.
+func streamDecryptV2(r io.Reader, w io.Writer, aead cipher.AEAD, baseNonce []byte, ectx *EngineContext) error {
+	if ectx == nil {
+		ectx = &EngineContext{Context: context.Background(), Policy: &HumanPolicy{}}
+	}
+	nonce := make([]byte, aead.NonceSize())
+	nonceTail := len(nonce) - 8
+	chunkIndex := uint64(0)
+	totalProcessed := int64(0)
+
+	for {
+		// Read 4-byte chunk length.
+		var chunkLen uint32
+		if err := binary.Read(r, binary.LittleEndian, &chunkLen); err != nil {
+			if err == io.EOF {
+				return &ErrIO{Path: "input", Reason: "unexpected EOF: missing V2 stream terminator (file may be truncated)"}
+			}
+			return &ErrIO{Path: "input", Reason: fmt.Sprintf("reading chunk length: %v", err)}
+		}
+
+		// 0x00000000 = clean end-of-stream.
+		if chunkLen == 0 {
+			return nil
+		}
+
+		// Guard against unreasonably large chunks (max 1 MB ciphertext = 64 KB + overhead).
+		const maxChunkCipher = (4 * 1024 * 1024) + 64
+		if chunkLen > maxChunkCipher {
+			return &ErrFormat{Reason: fmt.Sprintf("chunk %d: length %d exceeds maximum — file may be corrupt", chunkIndex, chunkLen)}
+		}
+
+		ciphertext := make([]byte, chunkLen)
+		if _, err := io.ReadFull(r, ciphertext); err != nil {
+			return &ErrIO{Path: "input", Reason: fmt.Sprintf("reading chunk %d: %v", chunkIndex, err)}
+		}
+
+		// Derive per-chunk nonce by XOR-ing baseNonce tail with chunk index.
+		copy(nonce, baseNonce)
+		binary.LittleEndian.PutUint64(nonce[nonceTail:], binary.LittleEndian.Uint64(baseNonce[nonceTail:])^chunkIndex)
+
+		plaintext, err := aead.Open(ciphertext[:0], nonce, ciphertext, nil)
+		if err != nil {
+			return &ErrAuthentication{
+				Reason: fmt.Sprintf("chunk %d authentication failed — file is corrupt or truncated", chunkIndex),
+			}
+		}
+
+		if _, err := w.Write(plaintext); err != nil {
+			return &ErrIO{Path: "output", Reason: err.Error()}
+		}
+		totalProcessed += int64(len(plaintext))
+		ectx.Emit(EventChunkProcessed{
+			BytesProcessed: int64(len(plaintext)),
+			TotalProcessed: totalProcessed,
+		})
+		chunkIndex++
+	}
+}
+
 // DecryptStream symmetrically decrypts data from r to w using a passphrase.
 func DecryptStream(r io.Reader, w io.Writer, password []byte, concurrency int, stealth bool) (byte, byte, error) {
 	ectx := &EngineContext{

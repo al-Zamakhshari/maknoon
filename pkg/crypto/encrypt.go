@@ -1,6 +1,7 @@
 package crypto
 
 import (
+	"bytes"
 	"context"
 	"crypto/cipher"
 	"crypto/rand"
@@ -12,6 +13,88 @@ import (
 
 	"github.com/awnumar/memguard"
 )
+
+// EncryptStreamV2 symmetrically encrypts r→w using the V2 (.makn) wire format.
+//
+// V2 improvements over V1:
+//   - Explicit salt length byte (no implicit profile dependency)
+//   - 2-byte flags field (uint16 LE) with room to grow
+//   - TLV extension block for forward-compatible metadata
+//   - Header MAC: HMAC-SHA256(fek, header_bytes) for key commitment
+//   - Stream terminator: 4-byte 0x00000000 after last chunk for truncation detection
+//
+// tlvs may be nil or empty. flags is uint16 to allow future extension;
+// V1 flag bits (Archive, Compress, Signed, Stealth, Threshold) are preserved
+// in the low byte with the same values.
+func EncryptStreamV2(r io.Reader, w io.Writer, password []byte, flags uint16, tlvs []TLVEntry, concurrency int, profileID byte, ectx *EngineContext) error {
+	if ectx == nil {
+		ectx = &EngineContext{Context: context.Background(), Policy: &HumanPolicy{}}
+	}
+	profile := DefaultProfile()
+	if profileID != 0 {
+		var err error
+		profile, err = GetProfile(profileID, nil)
+		if err != nil {
+			return &ErrFormat{Reason: fmt.Sprintf("failed to get profile %d: %v", profileID, err)}
+		}
+	}
+
+	// 1. Generate random salt.
+	salt := make([]byte, profile.SaltSize())
+	if _, err := randFull(salt); err != nil {
+		return &ErrIO{Path: "stream", Reason: "failed to generate salt"}
+	}
+
+	// 2. Derive FEK.
+	fek := profile.DeriveKey(password, salt)
+	defer SafeClear(fek)
+
+	// 3. Setup AEAD + base nonce.
+	aead, err := profile.NewAEAD(fek)
+	if err != nil {
+		return &ErrCrypto{Reason: fmt.Sprintf("NewAEAD: %v", err)}
+	}
+	baseNonce := make([]byte, aead.NonceSize())
+	if _, err := randFull(baseNonce); err != nil {
+		return &ErrIO{Path: "stream", Reason: "failed to generate nonce"}
+	}
+
+	// 4. Encode TLV block.
+	extBytes := EncodeTLVs(tlvs)
+
+	// 5. Build header bytes into a buffer (needed for HeaderMAC).
+	var hdrBuf bytes.Buffer
+	hdrBuf.WriteString(MagicHeaderV2Sym)
+	hdrBuf.WriteByte(FormatVersionV2Sym)
+	hdrBuf.WriteByte(profile.ID())
+	binary.Write(&hdrBuf, binary.LittleEndian, flags)                 //nolint:errcheck
+	binary.Write(&hdrBuf, binary.LittleEndian, uint16(len(extBytes))) //nolint:errcheck
+	hdrBuf.Write(extBytes)
+	hdrBuf.WriteByte(byte(len(salt)))
+	hdrBuf.Write(salt)
+	hdrBuf.Write(baseNonce)
+
+	// 6. Compute header MAC = HMAC-SHA256(fek, header_bytes).
+	mac := ComputeHeaderMAC(fek, hdrBuf.Bytes())
+
+	// 7. Write header + MAC.
+	if _, err := w.Write(hdrBuf.Bytes()); err != nil {
+		return &ErrIO{Path: "output", Reason: err.Error()}
+	}
+	if _, err := w.Write(mac); err != nil {
+		return &ErrIO{Path: "output", Reason: err.Error()}
+	}
+
+	ectx.Emit(EventHandshakeComplete{})
+
+	// 8. Encrypt chunks.
+	if err := streamEncrypt(r, w, aead, baseNonce, concurrency, ectx); err != nil {
+		return err
+	}
+
+	// 9. Write stream terminator.
+	return writeChunkTerminator(w)
+}
 
 // EncryptStream symmetrically encrypts data from r to w using a passphrase and specified profile.
 func EncryptStream(r io.Reader, w io.Writer, password []byte, flags byte, concurrency int, profileID byte) error {
