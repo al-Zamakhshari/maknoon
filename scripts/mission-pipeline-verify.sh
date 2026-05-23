@@ -20,20 +20,19 @@ wait_for_condition "ingestor data ready" 60 \
     docker compose -f "$COMPOSE_FILE" exec -T ingestor \
         ls /home/maknoon/data/large_data.bin
 
-# Step 1: Compressor Stage (Zstd)
-echo "🚀 Stage 1: Compressor (Zstd)..."
+# Step 1: Compressor Stage (Zstd — built into maknoon via --compress flag)
+# Previously this was a no-op `cp`; now it actually compresses+encrypts in one pass.
+echo "🚀 Stage 1: Compressor+Encryptor (Zstd → ML-KEM)..."
 checked_compose_exec "$COMPOSE_FILE" compressor \
-    cp /home/maknoon/data/large_data.bin /home/maknoon/data/large_data.bin.zst
-
-# Step 2: Encryptor Stage (ML-KEM)
-echo "🚀 Stage 2: Encryptor (ML-KEM)..."
-checked_compose_exec "$COMPOSE_FILE" encryptor \
-    maknoon keygen --no-password -o encryptor-id
-checked_compose_exec "$COMPOSE_FILE" encryptor \
-    maknoon encrypt /home/maknoon/data/large_data.bin.zst \
+    maknoon encrypt --compress /home/maknoon/data/large_data.bin \
     -o /home/maknoon/data/large_data.bin.makn -s pipe-pass
 
-# Step 3: Sink Stage (Verification)
+# Step 2: Encryptor Stage — verify the artifact and inspect its header
+echo "🚀 Stage 2: Encryptor (Header Verification)..."
+checked_compose_exec "$COMPOSE_FILE" encryptor \
+    maknoon info /home/maknoon/data/large_data.bin.makn
+
+# Step 3: Sink Stage (Archival Verification)
 echo "🚀 Stage 3: Sink (Archival Verification)..."
 checked_compose_exec "$COMPOSE_FILE" sink \
     ls -l /home/maknoon/data/large_data.bin.makn
