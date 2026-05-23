@@ -3,7 +3,7 @@ services:
   recovery-node:
     build:
       context: ../../
-      dockerfile: Dockerfile.mission
+      dockerfile: deploy/docker/Dockerfile.mission
     environment:
       - MAKNOON_AGENT_MODE=1
       - MAKNOON_PASSPHRASE=quorum-pass
@@ -15,7 +15,7 @@ services:
   guardian-1:
     build:
       context: ../../
-      dockerfile: Dockerfile.mission
+      dockerfile: deploy/docker/Dockerfile.mission
     environment:
       - MAKNOON_AGENT_MODE=1
       - MAKNOON_PASSPHRASE=quorum-pass
@@ -27,7 +27,7 @@ services:
   guardian-2:
     build:
       context: ../../
-      dockerfile: Dockerfile.mission
+      dockerfile: deploy/docker/Dockerfile.mission
     environment:
       - MAKNOON_AGENT_MODE=1
       - MAKNOON_PASSPHRASE=quorum-pass
@@ -39,7 +39,7 @@ services:
   guardian-3:
     build:
       context: ../../
-      dockerfile: Dockerfile.mission
+      dockerfile: deploy/docker/Dockerfile.mission
     environment:
       - MAKNOON_AGENT_MODE=1
       - MAKNOON_PASSPHRASE=quorum-pass
@@ -51,7 +51,7 @@ services:
   guardian-4:
     build:
       context: ../../
-      dockerfile: Dockerfile.mission
+      dockerfile: deploy/docker/Dockerfile.mission
     environment:
       - MAKNOON_AGENT_MODE=1
       - MAKNOON_PASSPHRASE=quorum-pass

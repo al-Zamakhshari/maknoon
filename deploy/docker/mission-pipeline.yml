@@ -3,7 +3,7 @@ services:
   ingestor:
     build:
       context: ../../
-      dockerfile: Dockerfile.mission
+      dockerfile: deploy/docker/Dockerfile.mission
     environment:
       - MAKNOON_AGENT_MODE=1
       - MAKNOON_PASSPHRASE=pipe-pass
@@ -18,7 +18,7 @@ services:
   compressor:
     build:
       context: ../../
-      dockerfile: Dockerfile.mission
+      dockerfile: deploy/docker/Dockerfile.mission
     environment:
       - MAKNOON_AGENT_MODE=1
       - MAKNOON_PASSPHRASE=pipe-pass
@@ -33,7 +33,7 @@ services:
   encryptor:
     build:
       context: ../../
-      dockerfile: Dockerfile.mission
+      dockerfile: deploy/docker/Dockerfile.mission
     environment:
       - MAKNOON_AGENT_MODE=1
       - MAKNOON_PASSPHRASE=pipe-pass
@@ -48,7 +48,7 @@ services:
   sink:
     build:
       context: ../../
-      dockerfile: Dockerfile.mission
+      dockerfile: deploy/docker/Dockerfile.mission
     environment:
       - MAKNOON_AGENT_MODE=1
       - MAKNOON_PASSPHRASE=pipe-pass

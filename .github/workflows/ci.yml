@@ -314,7 +314,7 @@ jobs:
       - name: Download old release binary (${{ matrix.old_version }})
         run: |
           VERSION="${{ matrix.old_version }}"
-          URL="https://github.com/al-Zamakhshari/maknoon/releases/download/${VERSION}/maknoon_${VERSION}_linux_amd64.tar.gz"
+          URL="https://github.com/al-Zamakhshari/maknoon/releases/download/${VERSION}/maknoon_${VERSION#v}_linux_amd64.tar.gz"
           curl -fsSL "$URL" -o /tmp/maknoon-old.tar.gz
           tar -xzf /tmp/maknoon-old.tar.gz -C /tmp
           chmod +x /tmp/maknoon
