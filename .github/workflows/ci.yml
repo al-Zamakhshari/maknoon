@@ -297,7 +297,19 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        old_version: ["v1.3.123", "v1.3.130", "v1.3.138"]
+        # pre_mak2: versions that pre-date the MAK2 default (v1.3.139+).
+        # These test old→current only (current must read V1 files forever).
+        # current→old is intentionally skipped — old binaries cannot read MAK2,
+        # which is expected behaviour for a wire format upgrade.
+        include:
+          - old_version: "v1.3.130"
+            pre_mak2: true
+          - old_version: "v1.3.138"
+            pre_mak2: true
+          - old_version: "v1.3.148"
+            pre_mak2: false
+          - old_version: "v1.3.151"
+            pre_mak2: false
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -322,6 +334,7 @@ jobs:
 
       - name: old→current symmetric encrypt/decrypt
         run: |
+          # All versions: current must always read files produced by older binaries.
           echo "wire format compatibility test payload" > /tmp/plain.txt
           MAKNOON_PASSPHRASE=compat-test /tmp/maknoon encrypt /tmp/plain.txt -o /tmp/old.makn -q
           MAKNOON_PASSPHRASE=compat-test ./maknoon-current decrypt /tmp/old.makn -o /tmp/recovered.txt -q
@@ -329,7 +342,9 @@ jobs:
           echo "✅ old (${{ matrix.old_version }}) → current: OK"
 
       - name: current→old symmetric encrypt/decrypt
+        if: ${{ !matrix.pre_mak2 }}
         run: |
+          # MAK2-era versions only: pre-MAK2 binaries cannot read MAK2 files by design.
           echo "wire format compatibility test payload v2" > /tmp/plain2.txt
           MAKNOON_PASSPHRASE=compat-test ./maknoon-current encrypt /tmp/plain2.txt -o /tmp/new.makn -q
           MAKNOON_PASSPHRASE=compat-test /tmp/maknoon decrypt /tmp/new.makn -o /tmp/recovered2.txt -q
