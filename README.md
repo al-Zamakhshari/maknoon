@@ -197,6 +197,22 @@ maknoon call encrypt_file --addr localhost:8443 \
 | **config** | `config_list/update/init`, `diagnostic`, `audit_export`, `audit_verify` |
 | **profiles** | `profiles_list/gen/rm` |
 
+### Example agent interaction
+
+> **User:** Encrypt all PDF reports in `~/reports/` and send them to alice@corp.com
+
+The agent calls `profiles_list` to confirm available profiles, resolves alice's key via `resolve_identity`, then calls `encrypt_file` with `recursive=true` and `public_keys="@alice@corp.com"`. The user sees the result; the key material stays inside Maknoon.
+
+For bulk operations, a well-behaved agent calls `session_derive` first (~60 ms Argon2id once), then reuses the session key across all `encrypt_file` calls — reducing 1,000-file encryption from ~60 s to ~30 ms of KDF overhead total.
+
+### Security: prompt injection
+
+An agent using Maknoon can be tricked by a malicious document into calling `decrypt_file` on an attacker-controlled path and revealing the result. Mitigations:
+
+- **Agent-mode sandbox**: when launched via MCP, Maknoon constrains file access to `$HOME`, the vault directory, and `/tmp`
+- **Audit trail**: every tool call is logged with SHA-256 chaining and ML-DSA-87 signatures — run `maknoon audit verify` to detect tampering
+- **Passphrase scoping**: set `MAKNOON_PASSPHRASE` only for the specific vault the agent needs; never expose identity private keys
+
 ---
 
 ## Security
